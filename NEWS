@@ -1,0 +1,147 @@
+
+version 0.7.8
+- added bym2 model component
+- in spatial random effect factor, argument poly.df has been replaced by graph
+  which now also accepts neighbours lists, and argument detect.constraints has
+  been deprecated as it is no longer needed
+- AR1 random effect factors used to be limited to fixed autoregressive
+  parameter values, whereas now uniform or truncated normal priors can be
+  assigned
+- prediction for models with offsets did not always work correctly, especially
+  for Poisson family
+- bug fix in blocked Gibbs sampler for models including a measurement model
+  component
+- more control over Metropolis-Hastings proposal distributions for some
+  parameters through new control arguments
+- small documentation updates
+- some code restructuring to facilitate future extensions
+- more tests
+
+
+version 0.7.7
+- fixed a bug introduced in mcmcsae 0.7.5 that affected the outcomes of
+  the blocked Gibbs sampler for non-gaussian models with random effects
+  defined at the data level
+- user-defined equality constraints on regression coefficients or random
+  effects now work again for blocked Gibbs sampler
+- default prior for shape of gamma family has been changed from gamma(1, 1)
+  to gamma(0.1, 0.1)
+- more sensible default start values for gamma shape parameter
+- renamed model component name bart to brt, to avoid name clash with main
+  fitting function of package dbarts
+- prediction now also works for models with a BART model component by
+  specifying keepTrees=TRUE in brt()
+- corrected and updated the still somewhat experimental SBC_test function for
+  simulation-based calibration; it now also supports parallel computation
+
+
+version 0.7.6
+- blocked Gibbs sampler now also works with nonzero prior means of regression
+  effects
+- fully-blocked Gibbs sampler is now the default, and argument block has been
+  moved to sampler_control
+- model components for fixed and random effects now also usable to model
+  log-variance of gaussian multilevel models
+- added support for random effects for log mean of gamma sampling distribution
+- shape parameter now given default gamma(1, 1) prior in gamma multilevel
+  models
+
+
+version 0.7.5
+- added gamma regression (family = "gamma")
+- several improvements to the "softTMVN" truncated multivariate normal sampler
+- added a few more methods to class tabMatrix to prepare for Matrix 1.6.2
+  (thanks to Mikael Jagan)
+- removed a few obsolete arguments from exported functions
+- more consistent prior specification; normal priors can now be specified using
+  function pr_normal; arguments b0, Q0 for prior mean and precision in several
+  model components have been deprecated
+- function pr_fixed for specifying a degenerate prior can now be used in more
+  places
+- global option setting function set_opts has been replaced by several
+  control functions sampler_control and chol_control that can be used
+  to pass computational options to various functions
+
+
+version 0.7.4
+- replaced maptools in Suggests by sf for reading shape files; now both
+  SpatialPolygonsDataframe (for backward compatibility) and sf spatial data
+  frames are supported
+- updated documentation of spatial() (in help topic 'correlation') and added
+  an example of a CAR spatial random effects model
+- fixed a bug so that conjugate gradients algorithm works again
+- added control functions to set computational options for create_sampler
+  and setup_CG_sampler
+- updated a few unit tests to be compatible with upcoming Matrix 1.6.0
+- small documentation and code improvements
+
+
+version 0.7.3
+- improved handling of out-of-sample categories by predict method
+- further improvements to prepare for upcoming version of Matrix package
+  (thanks to Mikael Jagan)
+- clean-up of create_TMVN_sampler, in which now the method for truncated
+  multivariate normal sampling can be specified by means of a method function
+  that allows to pass method-specific options
+- added HMC ZigZag TMVN sampler
+- fixed a bug in soft-TMVN sampler, which did not work in case of a sparse
+  equalities constraint matrix
+- option to add a Bayesian Additive Regression Trees model component to the
+  linear predictor through package dbarts
+
+
+version 0.7.2
+- prediction for new data now handles out-of-sample random effects (at least
+  for iid random effect terms), so that it becomes easier to account for
+  cluster effects from cluster samples, say
+- several other small improvements to predict method
+- small fix in preparation for upcoming Matrix 1.5-4 (thanks to Mikael Jagan)
+- model_matrix: allow single-level factor/character variables if no contrasts
+  are applied
+- bug fix: inequality constraints did not work in combination with blocked
+  Gibbs sampler
+- some parts of truncated multivariate normal samplers have been converted
+  to C++ (using Rcpp and RcppEigen) for better performance
+- argument sampler of computeDesignMatrix has been removed
+- to_draws_array can now also convert an mcdraws object (or a subset of
+  components from it) to a draws_array object for further analysis using
+  R package posterior
+
+
+version 0.7.1
+- compute_WAIC can now run using multiple cores
+- predict method with option ppcheck=TRUE now also works in parallel
+- prepare for coercion deprecations in upcoming version of Matrix package
+
+
+version 0.7.0
+- renamed class 'draws' to 'mcdraws' to avoid name clash with R package
+  posterior
+- added function to_draws_array to convert a draws component to an object of
+  class draws_array, as defined in R package posterior
+- support for multinomial family
+- support for Poisson family, approximately, in terms of negative binomial
+- it is now possible to use weights to specify irregularly spaced AR1 or RW1
+  correlation structures
+- initial support for conjugate gradient coefficient sampler
+- experimental function for simulation-based calibration
+
+
+version 0.6.0
+- measurement in covariates model component mec() added
+- new function pr_gig to specify a Generalized Inverse Gaussian prior
+- new argument logJacobian for create_sampler to allow comparisons of
+  information criteria between model fits based on different transformations
+- added function to set labels of draws component object
+- data is now second argument of create_sampler and generate_data functions,
+  in line with many model fitting functions in R
+- generate_data gains argument linpred, which is convenient for generating
+  both data and latent quantities of interest for area-level models
+- solved a bug in function split_iters
+- print.dc_summary now correctly handles max.lines argument
+- adapted to new version of Matrix package
+- more input checks and small code improvements
+
+
+version 0.5.0
+- initial CRAN release

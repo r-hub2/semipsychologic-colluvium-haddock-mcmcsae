@@ -1,0 +1,160 @@
+---
+title: Linear regression, prediction, and survey weighting
+output: rmarkdown::html_vignette
+bibliography: mcmcsae.bib
+vignette: >
+  %\VignetteIndexEntry{Linear regression, prediction, and survey weighting}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo=FALSE}
+options(width=100)  # width of output
+```
+
+
+We use the `api` dataset from package survey to illustrate estimation of a population mean from a sample using a linear regression model.
+First let's estimate the population mean of the academic performance indicator 2000
+from a simple random sample, `apisrs`. Using package survey's GREG estimator [@Sarndal1992], we find
+
+```{r, message=FALSE}
+library(survey)
+data(api)
+# define the regression model
+model <- api00 ~ ell + meals + stype + hsg + col.grad + grad.sch
+# compute corresponding population totals
+XpopT <- colSums(model.matrix(model, apipop))
+N <- XpopT[["(Intercept)"]]  # population size
+# create the survey design object
+des <- svydesign(ids=~1, data=apisrs, weights=~pw, fpc=~fpc)
+# compute the calibration or GREG estimator
+cal <- calibrate(des, formula=model, population=XpopT)
+svymean(~ api00, des)  # equally weighted estimate
+svymean(~ api00, cal)  # GREG estimate
+```
+
+The true population mean in this case can be obtained from the `apipop` dataset:
+```{r}
+mean(apipop$api00)
+```
+Note that the GREG estimate is more accurate than the simple equally weighted estimate, which is also reflected by the smaller estimated standard error of the former.
+
+We can run the same linear model using package mcmcsae.
+In the next code chunk, function [`create_sampler`](../html/create_sampler.html) sets up a sampler function that is used as input to function
+[`MCMCsim`](../html/MCMCsim.html), which runs a simulation to obtain draws from the posterior distribution of the model parameters. By default three chains with independently
+generated starting values are run over 1250 iterations with the first 250 discarded as burnin.
+As the starting values for the MCMC simulation are randomly generated, we set a random seed for reproducibility.
+
+The results of the simulation are subsequently summarized,
+and the DIC model criterion is computed. The simulation summary shows several statistics for the model parameters,
+including the posterior mean, standard error, quantiles, as
+well as the R-hat convergence diagnostic.
+
+```{r, message=FALSE}
+library(mcmcsae)
+set.seed(1)
+sampler <- create_sampler(model, data=apisrs)
+sim <- MCMCsim(sampler, verbose=FALSE)
+(summ <- summary(sim))
+compute_DIC(sim)
+```
+
+The output of function [`MCMCsim`](../html/MCMCsim.html) is
+an object of class `mcdraws`.
+The package provides methods for the generic functions `summary`, `plot`, `predict`, `residuals` and `fitted` for this class.
+
+
+## Prediction
+
+To compute a model-based estimate of the population mean, we
+need to predict the values of the target variable for the unobserved units.
+Let $U$ denote the set of population units, $s \subset U$ the set of sample (observed) units, and let $y_i$ denote the
+value of the variable of interest taken by the $i$th unit.
+The population mean of the variable of interest is
+$$
+\bar{Y} = \frac{1}{N}\sum_{i=1}^N y_i = \frac{1}{N}\left(\sum_{i\in s} y_i + \sum_{i\in U\setminus s} y_i \right)\,.
+$$
+
+Posterior draws for $\bar{Y}$ can be obtained by generating draws for the non-sampled
+population units, summing them and adding the sample sum.
+This is done in the next code chunk, where method
+[`predict`](../html/predict.mcdraws.html) is used to generate
+draws from the posterior predictive distribution for the new,
+unobserved, units.
+```{r}
+m <- match(apisrs$cds, apipop$cds)  # population units in the sample
+# use only a sample of 250 draws from each chain
+predictions <- predict(sim, newdata=apipop[-m, ], iters=sample(1:1000, 250), show.progress=FALSE)
+str(predictions)
+samplesum <- sum(apisrs$api00)
+summary(transform_dc(predictions, fun = function(x) (samplesum + sum(x))/N))
+```
+The result for the population mean can also be obtained directly (which is more efficient memory wise) by supplying
+the appropriate aggregation function to the prediction method:
+```{r}
+summary(predict(sim, newdata=apipop[-m, ], fun=function(x, p) (samplesum + sum(x))/N,
+                show.progress=FALSE)
+)
+```
+
+For any linear model one can obtain the same result more efficiently by precomputing covariate population totals.
+Posterior draws for $\bar{Y}$ are then computed as
+
+$$
+\bar{Y}_r = \frac{1}{N} \left( n\bar{y} + \beta_r'(X - n\bar{x}) + e_r\right)\,,
+$$
+
+where $e_r \sim {\cal N}(0, (N-n)\sigma_r^2)$, representing the sum of $N-n$ independent normal draws. The code to do this is
+
+```{r}
+n <- nrow(apisrs)
+XsamT <- colSums(model.matrix(model, apisrs))
+XpopR <- matrix(XpopT - XsamT, nrow=1)
+predictions <- predict(sim, X=list(reg1=XpopR), var=N-n, fun=function(x, p) (samplesum + x)/N,
+                       show.progress=FALSE)
+summary(predictions)
+```
+
+
+## Weights
+
+To compute weights corresponding to the population total:
+
+```{r, fig.width=4, fig.height=4, fig.align="center"}
+sampler <- create_sampler(model, data=apisrs,
+                          linpred=list(reg1=matrix(XpopT/N, nrow=1)),
+                          compute.weights=TRUE)
+sim <- MCMCsim(sampler, verbose=FALSE)
+plot(weights(cal)/N, weights(sim)); abline(0, 1)
+sum(weights(sim) * apisrs$api00)
+print(summary(sim, "linpred_"), digits=6)
+```
+
+Note the small difference between the weighted sample sum of the target variable
+and the posterior mean of the linear predictor. This is due to Monte Carlo error;
+the weighted sum is exact for the simple linear regression case.
+
+
+## Outliers
+
+One possible way to deal with outliers is to use a Student-t sampling distribution, which has fatter tails than the normal distribution.
+In the next example, the formula.V argument is used to add local variance parameters with inverse chi-squared distributions.
+The marginal sampling distribution then becomes Student-t. Here the degrees of freedom parameter is modeled, i.e. assigned a
+prior distribution and inferred from the data.
+```{r, fig.width=4, fig.height=4, fig.align="center", message=FALSE}
+sampler <- create_sampler(model, formula.V=~vfac(prior=pr_invchisq(df="modeled")),
+                          linpred=list(reg1=matrix(XpopR/N, nrow=1)),
+                          data=apisrs, compute.weights=TRUE)
+sim <- MCMCsim(sampler, burnin=1000, n.iter=5000, thin=2, verbose=FALSE)
+(summ <- summary(sim))
+plot(sim, "vfac1_df")
+acceptance_rates(sim)
+compute_DIC(sim)
+predictions <- predict(sim, newdata=apipop[-m, ], show.progress=FALSE,
+                       fun=function(x, p) (samplesum + sum(x))/N)
+summary(predictions)
+plot(weights(cal)/N, weights(sim)); abline(0, 1)
+summary(get_means(sim, "Q_")[["Q_"]])
+```
+
+## References

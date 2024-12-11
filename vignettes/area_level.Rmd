@@ -1,0 +1,109 @@
+---
+title: Basic area-level model
+output: rmarkdown::html_vignette
+bibliography: mcmcsae.bib
+vignette: >
+  %\VignetteIndexEntry{Basic area-level model}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo=FALSE}
+options(width=100)  # width of output
+```
+
+
+The basic area-level model [@Fay1979; @rao2015small] is given by
+$$
+y_i | \theta_i \stackrel{\mathrm{iid}}{\sim} {\cal N} (\theta_i, \psi_i) \,, \\
+\theta_i = \beta' x_i  + v_i \,,
+$$
+where $i$ runs from 1 to $m$, the number of areas, $\beta$ is a vector of regression coefficients for given
+covariates $x_i$, and $v_i \stackrel{\mathrm{iid}}{\sim} {\cal N} (0, \sigma_v^2)$ are independent
+random area effects. For each area an observation $y_i$ is available with given variance $\psi_i$.
+
+First we generate some data according to this model:
+```{r}
+m <- 75L  # number of areas
+df <- data.frame(
+  area=1:m,      # area indicator
+  x=runif(m)     # covariate
+)
+v <- rnorm(m, sd=0.5)    # true area effects
+theta <- 1 + 3*df$x + v  # quantity of interest
+psi <- runif(m, 0.5, 2) / sample(1:25, m, replace=TRUE)  # given variances
+df$y <- rnorm(m, theta, sqrt(psi))
+```
+
+
+A sampler function for a model with a regression component and a random intercept is created by
+```{r, message=FALSE}
+library(mcmcsae)
+model <- y ~ reg(~ 1 + x, name="beta") + gen(factor = ~iid(area), name="v")
+sampler <- create_sampler(model, sigma.fixed=TRUE, Q0=1/psi, linpred="fitted", data=df)
+```
+The meaning of the arguments used is as follows:
+
+* the first argument is a formula specifying the response variable and the linear predictor part of the model
+* `sigma.fixed=TRUE` signifies that the observation level variance parameter is fixed at 1. In this case it means that the variances are known and given by `psi`.
+* the function expects precisions rather than variances, and with `Q0=1/psi` the precisions are set to the vector `1/psi`.
+* `linpred="fitted"` indicates that we wish to obtain samples from the posterior distribution for the vector $\theta$ of small area means.
+* `data` is the `data.frame` in which variables used in the model specification are looked up.
+
+An MCMC simulation using this sampler function is then carried out as follows:
+```{r}
+sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
+```
+
+A summary of the results is obtained by
+```{r}
+(summ <- summary(sim))
+```
+
+In this example we can compare the model parameter estimates to the 'true' parameter values that have been used to generate the data.
+In the next plots we compare the estimated and 'true' random effects,
+as well as the model estimates and 'true' estimands. In the latter plot,
+the original 'direct' estimates are added as red triangles.
+```{r, fig.show='hold'}
+plot(v, summ$v[, "Mean"], xlab="true v", ylab="posterior mean"); abline(0, 1)
+plot(theta, summ$linpred_[, "Mean"], xlab="true theta", ylab="estimated"); abline(0, 1)
+points(theta, df$y, col=2, pch=2)
+```
+
+We can compute model selection measures DIC and WAIC by
+```{r}
+compute_DIC(sim)
+compute_WAIC(sim, show.progress=FALSE)
+```
+
+Posterior means of residuals can be extracted from the simulation output
+using method `residuals`. Here is a plot of (posterior means of) residuals
+against covariate $x$:
+```{r, fig.align="center"}
+plot(df$x, residuals(sim, mean.only=TRUE), xlab="x", ylab="residual"); abline(h=0)
+```
+
+A linear predictor in a linear model can be expressed as a weighted sum of the
+response variable. If we set `compute.weights=TRUE` then such weights are computed
+for all linear predictors specified in argument `linpred`. In this case it
+means that a set of weights is computed for each area.
+```{r}
+sampler <- create_sampler(model, sigma.fixed=TRUE, Q0=1/psi,
+             linpred="fitted", data=df, compute.weights=TRUE)
+sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
+```
+Now the `weights` method returns a matrix of weights, in this case a
+`r m` $\times$ `r m` matrix $w_{ij}$ holding the weight of
+direct estimate $i$ in linear predictor $j$. To verify that the weights
+applied to the direct estimates yield the model-based estimates we plot them
+against each other. Also shown is a plot of the weight of the direct estimate
+for each area in the predictor for that same area, against the variance of the
+direct estimate.
+```{r, fig.show='hold'}
+plot(summ$linpred_[, "Mean"], crossprod(weights(sim), df$y),
+     xlab="estimate", ylab="weighted average")
+abline(0, 1)
+plot(psi, diag(weights(sim)), ylab="weight")
+```
+
+## References

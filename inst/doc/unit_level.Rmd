@@ -1,0 +1,105 @@
+---
+title: Basic unit-level models
+output: rmarkdown::html_vignette
+bibliography: mcmcsae.bib
+vignette: >
+  %\VignetteIndexEntry{Basic unit-level models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo=FALSE}
+options(width=100)  # width of output
+```
+
+
+The basic unit-level model [@Battese1988; @rao2015small] is given by
+$$
+y_j = \beta' x_j + v_{i[j]} + \epsilon_j\,,\\
+v_i \stackrel{\mathrm{iid}}{\sim} {\cal N}(0, \sigma_v^2) \qquad \epsilon_j \stackrel{\mathrm{iid}}{\sim} {\cal N}(0, \sigma^2)
+$$
+where $j$ runs from 1 to $n$, the number of unit-level observations, $\beta$ is a vector of regression coefficients for given covariates $x_j$, and $v_i$ are random area intercepts.
+
+We use the `api` dataset included in packages survey.
+
+```{r, message=FALSE}
+library(survey)
+data(api)
+apipop$cname <- as.factor(apipop$cname)
+apisrs$cname <- factor(apisrs$cname, levels=levels(apipop$cname))
+```
+
+The `apipop` data frame contains the complete population whereas `apisrs` is a simple
+random sample from it.
+The variable `cname` is the county name, and we will be interested in estimation
+at the county level. Not all counties in the population are sampled. In order to be
+able to make predictions for out-of-sample areas we make sure that the levels of the
+sample's `cname` variable match those of its population counterpart.
+
+The basic unit-level model
+with county random area effects is fit as follows
+```{r, message=FALSE}
+library(mcmcsae)
+mod <- api00 ~ 
+  reg(~ ell + meals + stype + hsg + col.grad + grad.sch, name="beta") +
+  gen(factor = ~ iid(cname), name="v")
+sampler <- create_sampler(mod, data=apisrs)
+sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
+(summary(sim))
+```
+
+We wish to estimate the area population means
+$$
+\theta_i = \frac{1}{N_i}\sum_{j \in U_i} y_j\,,
+$$
+where $U_i$ is the set of units in area $i$ of size $N_i$.
+The MCMC output in variable `sim` can be used to obtain draws from the posterior distribution for $\theta_i$. The $r$th draw can be expressed as
+$$
+\theta_{i;r} = \frac{1}{N_i} \left(n_i \bar{y}_i + \beta_r'(t_{x;i} - n_i \bar{x}_i) + (N_i - n_i)v_{i;r} + \sum_{j \in U_i\setminus s_i} \epsilon_{j;r} \right)\,,
+$$
+where $\bar{y}_i$ is the sample mean of $y$ in area $i$ and $t_{x;i}$ is a vector of population totals for area $i$.
+
+```{r, fig.width=7, fig.height=7, fig.align="center"}
+N <- table(apipop$cname)
+samplesums <- tapply(apisrs$api00, apisrs$cname, sum)
+samplesums[is.na(samplesums)] <- 0  # substitute 0 for out-of-sample areas
+m <- match(apisrs$cds, apipop$cds)  # population units in the sample
+res <- predict(sim, newdata=apipop, labels=names(N),
+         fun=function(x, p) (samplesums + tapply(x[-m], apipop$cname[-m], sum ))/N,
+         show.progress=FALSE)
+(summ <- summary(res))
+theta <- c(tapply(apipop$api00, apipop$cname, mean))  # true population quantities
+plot_coef(summ, list(est=theta), n.se=2, est.names=c("mcmcsae", "true"), maxrows=30)
+```
+
+
+## Binomial Unit-Level Model
+
+A model with binomial likelihood can also be fit. We now model the target variable `sch.wide`, a binary variable indicating whether a school-wide growth target has been met.
+We use the same mean model structure as above for the linear model, but now using a logistic link function,
+$$
+y_j \stackrel{\mathrm{iid}}{\sim} {\cal Be}(p_j)\,,\\
+\mathrm{logit}(p_j) = \beta' x_j + v_{i[j]}\,,\\
+v_i \stackrel{\mathrm{iid}}{\sim} {\cal N}(0, \sigma_v^2)
+$$
+
+```{r}
+apisrs$target.met <- as.numeric(apisrs$sch.wide == "Yes")
+sampler <- create_sampler(update(mod, target.met ~ .), family="binomial", data=apisrs)
+sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
+summary(sim)
+```
+
+To predict the population fractions of schools that meet the growth target by county,
+```{r, fig.width=7, fig.height=7, fig.align="center"}
+samplesums <- tapply(apisrs$target.met, apisrs$cname, sum)
+samplesums[is.na(samplesums)] <- 0  # substitute 0 for out-of-sample areas
+res <- predict(sim, newdata=apipop, labels=names(N),
+         fun=function(x, p) (samplesums + tapply(x[-m], apipop$cname[-m], sum ))/N,
+         show.progress=FALSE)
+(summ <- summary(res))
+theta <- c(tapply(apipop$sch.wide == "Yes", apipop$cname, mean))  # true population quantities
+plot_coef(summ, list(est=theta), n.se=2, est.names=c("mcmcsae", "true"), maxrows=30)
+```
+
+## References
