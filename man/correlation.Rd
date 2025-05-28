@@ -8,7 +8,7 @@
 \alias{AR1}
 \alias{season}
 \alias{spatial}
-\alias{spline}
+\alias{splines}
 \alias{custom}
 \title{Correlation factor structures in generic model components}
 \usage{
@@ -31,7 +31,7 @@ spatial(
   derive.constraints = FALSE
 )
 
-spline(name, knots, degree)
+splines(name, knots, degree)
 
 custom(name, D = NULL, Q = NULL, R = NULL, derive.constraints = NULL)
 }
@@ -117,7 +117,7 @@ to be imposed on the coefficient vector.
     are passed to \code{\link[spdep]{poly2nb}}, which computes a neighbours list.
     Alternatively, a neighbours list object of class \code{nb} can be passed directly
     as argument \code{graph}.}
-  \item{spline(f, knots, degree)}{P-splines, i.e. penalized B-splines structure over
+  \item{splines(f, knots, degree)}{P-splines, i.e. penalised B-splines structure over
     the domain of a quantitative variable f. Arguments knots and degree are passed to
     \code{\link[splines]{splineDesign}}. If \code{knots} is a single value it is interpreted as
     the number of knots, otherwise as a vector of knot positions. By default 40 equally spaced
@@ -139,7 +139,7 @@ if (requireNamespace("sf")) {
   gd <- generate_data(
     ~ reg(~ AREA + BIR74, prior=pr_normal(precision=1), name="beta") +
       gen(factor = ~ spatial(NAME, graph=nc), name="vs"),
-    sigma.mod = pr_invchisq(df=10, scale=1),
+    family=f_gaussian(var.prior = pr_invchisq(df=10, scale=1)),
     data = nc
   )
   # add the generated target variable and the spatial random effects to the
@@ -153,7 +153,8 @@ if (requireNamespace("sf")) {
     gen(factor = ~ spatial(NAME, graph=nc), name="vs"),
     data=nc
   )
-  sim <- MCMCsim(sampler, store.all=TRUE, n.iter=600, n.chain=2, verbose=FALSE)
+  # increase burnin and n.iter below to improve MCMC convergence
+  sim <- MCMCsim(sampler, store.all=TRUE, burnin=100, n.iter=250, n.chain=2, verbose=FALSE)
   (summ <- summary(sim))
   nc$vs <- summ$vs[, "Mean"]
   plot(nc[c("vs_true", "vs")])
@@ -165,7 +166,7 @@ if (requireNamespace("sf")) {
 \references{
 B. Allevius (2018).
    On the precision matrix of an irregularly sampled AR(1) process.
-   arXiv:1801.03791.
+   arXiv:1801.03791v2.
 
  H. Rue and L. Held (2005).
    Gaussian Markov Random Fields.

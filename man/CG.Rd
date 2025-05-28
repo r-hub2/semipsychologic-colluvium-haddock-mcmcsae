@@ -4,7 +4,15 @@
 \alias{CG}
 \title{Solve Ax=b by preconditioned conjugate gradients}
 \usage{
-CG(b, env, x = NULL, max.it = NULL, e = NULL, verbose = FALSE, ...)
+CG(
+  b,
+  env,
+  x = 0 * b,
+  max.it = length(b),
+  e = 1e+06 * length(b),
+  verbose = FALSE,
+  ...
+)
 }
 \arguments{
 \item{b}{right hand side vector.}

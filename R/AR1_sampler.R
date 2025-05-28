@@ -5,9 +5,9 @@
 #       "RWN" for normal random walk proposal
 AR1_sampler <- function(mc) {
   opts <- mc$info$extra[[mc$AR1.inferred]]
-  if (is.null(opts$control)) {
+  if (is.null(opts[["control"]])) {
     # set default proposal
-    if (is.null(mc$priorA)) {
+    if (is.null(mc[["priorA"]])) {
       # independent truncated normal prior
       MH <- set_MH(type="TN")
     } else {
@@ -15,50 +15,51 @@ AR1_sampler <- function(mc) {
       MH <- set_MH(type="RWTN", scale=0.025, adaptive=TRUE, l=-1, u=1)
     }
   } else {
-    MH <- opts$control
+    MH <- opts[["control"]]
     if (!is.environment(MH)) stop("AR1: 'control' argument must be an environment created with function set_MH")
-    MH$type <- match.arg(MH$type, c("TN", "RWTN", "RWN", "unif"))
-    if (any(MH$type == c("RWTN", "unif"))) {
-      if (is.null(MH$l)) MH$l <- -1
-      if (is.null(MH$u)) MH$u <- 1
-      if (MH$l > MH$u) stop("lower bound of MH truncated proposal exceeds upper bound")
+    MH$type <- match.arg(MH[["type"]], c("TN", "RWTN", "RWN", "unif"))
+    if (any(MH[["type"]] == c("RWTN", "unif"))) {
+      if (is.null(MH[["l"]])) MH$l <- -1
+      if (is.null(MH[["u"]])) MH$u <- 1
+      if (MH[["l"]] > MH[["u"]]) stop("lower bound of MH truncated proposal exceeds upper bound")
     }
   }
 
-  if (MH$type == "TN") {
-    if (is.null(mc$priorA)) {
+  if (MH[["type"]] == "TN") {
+    if (is.null(mc[["priorA"]])) {
       Qv <- mc$generate_Qv()
       Q0.25 <- mc$kron_prod(mc$QA.template$update(0.25), Qv)
       Q0.5 <- mc$kron_prod(mc$QA.template$update(0.5), Qv)
+      rm(Qv)
     } else {
       stop("non-normal random effects, please choose random walk proposal 'RWTN' or 'RWN'")
     }
   }
 
-  if (opts$prior$type == "unif") {
+  if (opts$prior[["type"]] == "unif") {
     tnprior <- FALSE
-    l <- opts$prior$min
-    u <- opts$prior$max
-  } else if (opts$prior$type == "truncnormal") {
+    l <- opts$prior[["min"]]
+    u <- opts$prior[["max"]]
+  } else if (opts$prior[["type"]] == "truncnormal") {
     tnprior <- TRUE
-    mu0 <- opts$prior$mean
-    prec0 <- opts$prior$precision
-    l <- opts$prior$lower
-    u <- opts$prior$upper
+    mu0 <- opts$prior[["mean"]]
+    prec0 <- opts$prior[["precision"]]
+    l <- opts$prior[["lower"]]
+    u <- opts$prior[["upper"]]
   }
 
   AR1.exp <- 0.5 * mc[["q"]] / mc$info$n[mc$AR1.inferred]
 
   name_v <- mc[["name"]]
 
-  if (MH$type == "TN") {
+  if (MH[["type"]] == "TN") {
     # independent truncated normal proposal, no adaptation in this case
     # here we need Q0.25 and Q0.5 to build up a template
     # row indices for -phi:
     ind1 <- which(abs(Q0.25@x - 0.5 * Q0.5@x) < sqrt(.Machine$double.eps))
     # row indices for 1 + phi^2:
     ind2 <- which(abs(Q0.25@x - ((1 + 0.25^2) / (1 + 0.5^2)) * Q0.5@x) < sqrt(.Machine$double.eps))
-    col.ind <- rep(seq_len(ncol(Q0.5)), diff(Q0.5@p))  # col pointer --> col index
+    col.ind <- get_col_ind(Q0.5, zero.based=FALSE)
     # row, col indices of -phi elements
     i1 <- Q0.5@i[ind1] + 1L
     j1 <- col.ind[ind1]
@@ -92,7 +93,7 @@ AR1_sampler <- function(mc) {
         mu <- (prec0*mu0 + prec*mu)/(prec0 + prec)
         prec <- prec0 + prec
       }
-      stdev <- 1/sqrt(prec)
+      stdev <- sqrt(1/prec)
       phi.star <- mu + stdev * Crtuvn((l - mu)/stdev, (u - mu)/stdev)
       log.ar <- AR1.exp * log((1 - phi.star^2) / (1 - phi^2))
       if (log(runif(1L)) < log.ar) phi.star else phi
@@ -103,7 +104,7 @@ AR1_sampler <- function(mc) {
     lb <- max(-1, l)
     ub <- min(1, u)
 
-    if (!is.null(mc$priorA)) name_omega <- mc[["name_omega"]]
+    if (!is.null(mc[["priorA"]])) name_omega <- mc[["name_omega"]]
 
     draw <- function(phi, p) {
       phi.star <- MH$propose(phi)
@@ -112,7 +113,7 @@ AR1_sampler <- function(mc) {
         QA.star <- mc$QA.template$update(phi.star)
       else
         QA.star <- crossprod_sym(mc$DA.template$update(phi.star), 1 / p[[name_omega]])
-      Q.star <- mc$kron_prod(QA.star, p[[mc[["name_Qv"]]]])  # TODO kron_prod only available for components in a block?
+      Q.star <- mc$kron_prod(QA.star, p[[mc[["name_Qv"]]]])
       Q <- Q.star
       attr(Q, "x") <- p[[mc[["name_Q"]]]]
       v <- p[[name_v]]

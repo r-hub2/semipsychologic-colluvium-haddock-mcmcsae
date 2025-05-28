@@ -50,7 +50,7 @@ objects of class \code{dc_summary} and \code{sae}.}
 
 \item{cex.var}{the font size for the variable names, default=0.8.}
 
-\item{mar}{a numerical vector of the form \code{c(bottom, left, top, right)},
+\item{mar}{a numeric vector of the form \code{c(bottom, left, top, right)},
 specifying the number of lines of margin on each of the four sides of the plot.}
 }
 \description{

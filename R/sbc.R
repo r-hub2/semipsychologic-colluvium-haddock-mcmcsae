@@ -7,7 +7,8 @@
 #' n <- 10L
 #' dat <- data.frame(x=runif(n))
 #' ranks <- SBC_test(~ reg(~ 1 + x, prior=pr_normal(mean=c(0.25, 1), precision=1), name="beta"),
-#'   sigma.mod=pr_invchisq(df=1, scale=list(df=1, scale=1)), data=dat,
+#'   family=f_gaussian(var.prior=pr_invchisq(df=1, scale=list(df=1, scale=1))),
+#'   data=dat,
 #'   pars=list(mu="beta[1]", beta_x="beta[2]", sigma="sigma_"),
 #'   n.draw=9L, n.sim=10L*20L, thin=2L, burnin=20L
 #' )
@@ -48,7 +49,7 @@ SBC_test <- function(..., pars, n.draw=25L, n.sim=20L*n.draw, burnin=25L, thin=2
   sampler <- do.call("create_sampler", sampler_args)
   # TODO: in some cases like TMVN prior draws may not be iid; in that case use burnin and thin here as well
   if (names(sampler_args)[1L] == "") names(sampler_args)[1L] <- "formula"
-  sampler_args$formula <- update.formula(sampler_args$formula, y.tilde ~ .)
+  sampler_args$formula <- update.formula(sampler_args[["formula"]], y.tilde ~ .)
 
   n.pars <- length(pars)
 

@@ -3,10 +3,9 @@
 #include <stdlib.h> // for NULL
 #include <R_ext/Rdynload.h>
 
-#include "Matrix.h"
+#include "Matrix/Matrix.h"
 
 cholmod_common c;
-
 
 /* .Call calls */
 extern SEXP _mcmcsae_add_diagC(SEXP, SEXP);
@@ -21,7 +20,6 @@ extern SEXP _mcmcsae_Ccholesky(SEXP);
 extern SEXP _mcmcsae_Ccreate_sparse_crossprod_sym_template(SEXP, SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_Cdense_crossprod_sym(SEXP, SEXP);
 extern SEXP _mcmcsae_Cdense_crossprod_sym0(SEXP);
-extern SEXP _mcmcsae_Cdense_crossprod_sym2(SEXP, SEXP);
 extern SEXP _mcmcsae_Cdense_dense_crossprod(SEXP, SEXP);
 extern SEXP _mcmcsae_Cdense_dense_prod(SEXP, SEXP);
 extern SEXP _mcmcsae_Cdense_diag_crossprod(SEXP, SEXP);
@@ -77,9 +75,12 @@ extern SEXP _mcmcsae_diagC(SEXP);
 extern SEXP _mcmcsae_dotprodC(SEXP, SEXP);
 extern SEXP _mcmcsae_fast_aggrC(SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_inverseSPD(SEXP);
+extern SEXP _mcmcsae_invsqrt(SEXP);
 extern SEXP _mcmcsae_log1pexpC(SEXP);
+extern SEXP _mcmcsae_logSumExpColwiseC(SEXP);
 extern SEXP _mcmcsae_mv_update(SEXP, SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_prec2se_cor(SEXP);
+extern SEXP _mcmcsae_rowVarsC(SEXP);
 extern SEXP _mcmcsae_sparse_sum_x(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_TMVN_HMC_C(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_v_update(SEXP, SEXP, SEXP);
@@ -97,7 +98,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_mcmcsae_Ccreate_sparse_crossprod_sym_template", (DL_FUNC) &_mcmcsae_Ccreate_sparse_crossprod_sym_template,  4},
     {"_mcmcsae_Cdense_crossprod_sym",                  (DL_FUNC) &_mcmcsae_Cdense_crossprod_sym,                   2},
     {"_mcmcsae_Cdense_crossprod_sym0",                 (DL_FUNC) &_mcmcsae_Cdense_crossprod_sym0,                  1},
-    {"_mcmcsae_Cdense_crossprod_sym2",                 (DL_FUNC) &_mcmcsae_Cdense_crossprod_sym2,                  2},
     {"_mcmcsae_Cdense_dense_crossprod",                (DL_FUNC) &_mcmcsae_Cdense_dense_crossprod,                 2},
     {"_mcmcsae_Cdense_dense_prod",                     (DL_FUNC) &_mcmcsae_Cdense_dense_prod,                      2},
     {"_mcmcsae_Cdense_diag_crossprod",                 (DL_FUNC) &_mcmcsae_Cdense_diag_crossprod,                  2},
@@ -153,9 +153,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_mcmcsae_dotprodC",                              (DL_FUNC) &_mcmcsae_dotprodC,                               2},
     {"_mcmcsae_fast_aggrC",                            (DL_FUNC) &_mcmcsae_fast_aggrC,                             3},
     {"_mcmcsae_inverseSPD",                            (DL_FUNC) &_mcmcsae_inverseSPD,                             1},
+    {"_mcmcsae_invsqrt",                               (DL_FUNC) &_mcmcsae_invsqrt,                                1},
     {"_mcmcsae_log1pexpC",                             (DL_FUNC) &_mcmcsae_log1pexpC,                              1},
+    {"_mcmcsae_logSumExpColwiseC",                     (DL_FUNC) &_mcmcsae_logSumExpColwiseC,                      1},
     {"_mcmcsae_mv_update",                             (DL_FUNC) &_mcmcsae_mv_update,                              4},
     {"_mcmcsae_prec2se_cor",                           (DL_FUNC) &_mcmcsae_prec2se_cor,                            1},
+    {"_mcmcsae_rowVarsC",                              (DL_FUNC) &_mcmcsae_rowVarsC,                               1},
     {"_mcmcsae_sparse_sum_x",                          (DL_FUNC) &_mcmcsae_sparse_sum_x,                           9},
     {"_mcmcsae_TMVN_HMC_C",                            (DL_FUNC) &_mcmcsae_TMVN_HMC_C,                            14},
     {"_mcmcsae_v_update",                              (DL_FUNC) &_mcmcsae_v_update,                               3},

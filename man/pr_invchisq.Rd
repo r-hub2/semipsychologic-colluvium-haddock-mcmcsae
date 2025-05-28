@@ -3,7 +3,7 @@
 \name{pr_invchisq}
 \alias{pr_invchisq}
 \title{Create an object representing inverse chi-squared priors
-with possibly modeled degrees of freedom and scale parameters}
+with possibly modelled degrees of freedom and scale parameters}
 \usage{
 pr_invchisq(df = 1, scale = 1)
 }
@@ -31,7 +31,7 @@ chi-squared prior a list can be passed with some of the following components:
 \describe{
   \item{df}{degrees of freedom (scalar or vector)}
   \item{scale}{scale (scalar or vector)}
-  \item{common}{whether the modeled scale parameter of the inverse chi-squared
+  \item{common}{whether the modelled scale parameter of the inverse chi-squared
     distribution is (a scalar parameter) common to all \code{n} parameters.}
 }}
 }
@@ -40,5 +40,5 @@ An environment representing the specified prior, for internal use.
 }
 \description{
 Create an object representing inverse chi-squared priors
-with possibly modeled degrees of freedom and scale parameters
+with possibly modelled degrees of freedom and scale parameters
 }

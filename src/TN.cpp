@@ -66,7 +66,7 @@ double Crtuvn(const double l, const double u) {
 //’ @param v start value.
 //’ @param Ut dense matrix encoding the inequality constrained linear combinations.
 //’ @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
-//’ @param eps small positive value to control the numerical stability of the Gibbs sampler.
+//’ @param eps small numerical value to stabilize the Gibbs sampler.
 //’ @returns A single draw from the standardized multivariate truncated normal distribution.
 //’ @references
 //’  Y. Li and S.K. Ghosh (2015). Efficient sampling methods for truncated multivariate normal
@@ -130,9 +130,10 @@ Eigen::VectorXd Crtmvn_Gibbs_dense(const Eigen::Map<Eigen::VectorXd> & v, const 
 NumericVector Crtmvn_Gibbs_sparse(const NumericVector & v, const SEXP Ut, const NumericVector & ustar, const double eps) {
   double a, b, vi, x, temp;
   if (!Rf_isS4(Ut) || !Rf_inherits(Ut, "dgCMatrix")) stop("Ut is not a dgCMatrix");
-  const IntegerVector Utp(as<S4>(Ut).slot("p"));
-  const IntegerVector Uti(as<S4>(Ut).slot("i"));
-  const NumericVector Utx(as<S4>(Ut).slot("x"));
+  const S4 Ut_S4(Ut);
+  const IntegerVector Utp(Ut_S4.slot("p"));
+  const IntegerVector Uti(Ut_S4.slot("i"));
+  const NumericVector Utx(Ut_S4.slot("x"));
   NumericVector u(clone(ustar));
   int n = v.size();
   NumericVector out = no_init(n);
@@ -250,9 +251,10 @@ Eigen::VectorXd Crtmvn_slice_Gibbs_dense(const Eigen::Map<Eigen::VectorXd> & v, 
 NumericVector Crtmvn_slice_Gibbs_sparse(const NumericVector & v, const SEXP Ut, const NumericVector & ustar, const double eps) {
   double a, b, vi, x, temp;
   if (!Rf_isS4(Ut) || !Rf_inherits(Ut, "dgCMatrix")) stop("Ut is not a dgCMatrix");
-  const IntegerVector Utp(as<S4>(Ut).slot("p"));
-  const IntegerVector Uti(as<S4>(Ut).slot("i"));
-  const NumericVector Utx(as<S4>(Ut).slot("x"));
+  const S4 Ut_S4(Ut);
+  const IntegerVector Utp(Ut_S4.slot("p"));
+  const IntegerVector Uti(Ut_S4.slot("i"));
+  const NumericVector Utx(Ut_S4.slot("x"));
   NumericVector u(clone(ustar));
   int n = v.size();
   // not necessary to recompute xx in every iteration, but may be more numerically stable

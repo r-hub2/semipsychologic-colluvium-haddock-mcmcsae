@@ -84,20 +84,27 @@ unobserved, units.
 ```{r}
 m <- match(apisrs$cds, apipop$cds)  # population units in the sample
 # use only a sample of 250 draws from each chain
-predictions <- predict(sim, newdata=apipop[-m, ], iters=sample(1:1000, 250), show.progress=FALSE)
+predictions <- predict(
+  sim, newdata=apipop[-m, ], iters=sample(1:1000, 250),
+  show.progress=FALSE
+)
 str(predictions)
 samplesum <- sum(apisrs$api00)
-summary(transform_dc(predictions, fun = function(x) (samplesum + sum(x))/N))
+summary(transform_dc(
+  predictions, fun = function(x) (samplesum + sum(x))/N
+))
 ```
-The result for the population mean can also be obtained directly (which is more efficient memory wise) by supplying
+The result for the population mean can also be obtained directly (and more efficient memory-wise) by supplying
 the appropriate aggregation function to the prediction method:
 ```{r}
-summary(predict(sim, newdata=apipop[-m, ], fun=function(x, p) (samplesum + sum(x))/N,
-                show.progress=FALSE)
-)
+summary(predict(
+  sim, newdata=apipop[-m, ],
+  fun=function(x, p) (samplesum + sum(x))/N,
+  show.progress=FALSE
+))
 ```
 
-For any linear model one can obtain the same result more efficiently by precomputing covariate population totals.
+For any linear model one can obtain the same result more efficiently by precomputing covariate population aggregates.
 Posterior draws for $\bar{Y}$ are then computed as
 
 $$
@@ -109,9 +116,12 @@ where $e_r \sim {\cal N}(0, (N-n)\sigma_r^2)$, representing the sum of $N-n$ ind
 ```{r}
 n <- nrow(apisrs)
 XsamT <- colSums(model.matrix(model, apisrs))
-XpopR <- matrix(XpopT - XsamT, nrow=1)
-predictions <- predict(sim, X=list(reg1=XpopR), var=N-n, fun=function(x, p) (samplesum + x)/N,
-                       show.progress=FALSE)
+XpopR <- matrix(XpopT - XsamT, nrow=1) / (N - n)
+predictions <- predict(
+  sim, X=list(reg1=XpopR), weights = N-n,
+  fun=function(x, p) (samplesum + x)/N,
+  show.progress=FALSE
+)
 summary(predictions)
 ```
 
@@ -138,13 +148,17 @@ the weighted sum is exact for the simple linear regression case.
 ## Outliers
 
 One possible way to deal with outliers is to use a Student-t sampling distribution, which has fatter tails than the normal distribution.
-In the next example, the formula.V argument is used to add local variance parameters with inverse chi-squared distributions.
-The marginal sampling distribution then becomes Student-t. Here the degrees of freedom parameter is modeled, i.e. assigned a
+In the next example, the `var.model` argument of `f_gaussian` is used
+to add local variance parameters with inverse chi-squared distributions.
+The marginal sampling distribution then becomes Student-t. Here the degrees of freedom parameter is modelled, i.e. assigned a
 prior distribution and inferred from the data.
 ```{r, fig.width=4, fig.height=4, fig.align="center", message=FALSE}
-sampler <- create_sampler(model, formula.V=~vfac(prior=pr_invchisq(df="modeled")),
-                          linpred=list(reg1=matrix(XpopR/N, nrow=1)),
-                          data=apisrs, compute.weights=TRUE)
+sampler <- create_sampler(
+  model,
+  family = f_gaussian(var.model = ~vfac(prior=pr_invchisq(df="modeled"))),
+  linpred=list(reg1=matrix(XpopR, nrow=1)),
+  data=apisrs, compute.weights=TRUE
+)
 sim <- MCMCsim(sampler, burnin=1000, n.iter=5000, thin=2, verbose=FALSE)
 (summ <- summary(sim))
 plot(sim, "vfac1_df")

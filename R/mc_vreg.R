@@ -14,8 +14,10 @@
 #'  The default is determined by a simple heuristic based on storage size.
 #' @param X a (possibly sparse) design matrix can be specified directly, as an alternative to the
 #'  creation of one based on \code{formula}. If \code{X} is specified \code{formula} is ignored.
-#' @param prior prior specification for the coefficients. Currently only
-#'  normal priors are supported, specified using function \code{\link{pr_normal}}.
+#' @param prior prior specification for the coefficients. A normal prior can be
+#'  specified using function \code{\link{pr_normal}}. Alternatively, fixed values for
+#'  the coefficients can be specified using \code{\link{pr_fixed}}, e.g. to generate
+#'  data with given coefficients.
 #' @param Q0 prior precision matrix for the regression effects. The default is a
 #'  zero matrix corresponding to a noninformative improper prior.
 #'  DEPRECATED, please use argument \code{prior} instead, i.e.
@@ -45,44 +47,50 @@ vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
   type <- "vreg"
   if (name == "") stop("missing model component name")
 
-  if (e$Q0.type == "symm") stop("TBI: vreg component with (compatible) non-diagonal sampling variance matrix")
+  if (e[["Q0.type"]] == "symm") stop("TBI: vreg component with (compatible) non-diagonal sampling variance matrix")
 
   if (is.null(X)) {
     X <- model_matrix(formula, e[["data"]], sparse=sparse)
     if (remove.redundant) X <- remove_redundancy(X)
   } else {
-    if (is.null(colnames(X))) colnames(X) <- seq_len(ncol(X))
+    if (is.null(dimnames(X)[[2L]])) colnames(X) <- seq_len(ncol(X))
   }
   if (nrow(X) != e[["n"]]) stop("design matrix with incompatible number of rows")
-  e$coef.names[[name]] <- colnames(X)
+  e$coef.names[[name]] <- dimnames(X)[[2L]]
   X <- economizeMatrix(X, sparse=sparse, strip.names=FALSE, check=TRUE)
   q <- ncol(X)
 
   if (!is.null(b0) || !is.null(Q0)) {
     warn("arguments 'b0' and 'Q0' are deprecated; please use argument 'prior' instead")
-    if (is.null(prior)) prior <- pr_normal(mean = if (is.null(b0)) 0 else b0, precision = if (is.null(Q0)) 0 else Q0)
+    if (is.null(prior))
+      prior <- pr_normal(mean = if (is.null(b0)) 0 else b0, precision = if (is.null(Q0)) 0 else Q0)
   } else {
-    if (is.null(prior)) prior <- pr_normal(mean=0, precision=0)
+    if (is.null(prior))
+      prior <- pr_normal(mean=0, precision=0)
   }
-  if (prior$type != "normal") stop("only a normal prior is currently supported for 'vreg' model component effects")
-  prior$init(q, e$coef.names[[name]])
-  informative.prior <- prior$informative
-  Q0 <- prior$precision
-  zero.mean <- !informative.prior || all(prior$mean == 0)
-  if (zero.mean) {
-    prior$mean <- 0
-    Q0b0 <- 0
-  } else {
-    if (length(prior$mean) == 1L)
-      Q0b0 <- Q0 %m*v% rep.int(prior$mean, q)
-    else
-      Q0b0 <- Q0 %m*v% prior$mean
-  }
-  rprior <- function(p) prior$rprior(p)
-
-  sumX <- 0.5 * colSums(X) - Q0b0
-
-  MVNsampler <- create_TMVN_sampler(Q=0.5*crossprod(X) + Q0, name=name)
+  switch(prior[["type"]],
+    fixed = {
+      prior$init(q)
+      rprior <- function(p) prior$rprior()
+    },
+    normal = {
+      prior$init(q, e$coef.names[[name]])
+      informative.prior <- prior[["informative"]]
+      Q0 <- prior[["precision"]]
+      zero.mean <- !informative.prior || allv(prior[["mean"]], 0)
+      if (zero.mean) {
+        prior$mean <- 0
+        Q0b0 <- 0
+      } else {
+        if (length(prior[["mean"]]) == 1L)
+          Q0b0 <- Q0 %m*v% rep.int(prior[["mean"]], q)
+        else
+          Q0b0 <- Q0 %m*v% prior[["mean"]]
+      }
+      rprior <- function(p) prior$rprior(p)
+    },
+    stop("'vreg' priors must be specified using one of pr_normal and pr_fixed functions")
+  )
 
   if (is_ind_matrix(X) && q < e[["n"]])
     compute_Qfactor <- function(p) X %m*v% exp(-p[[name]])
@@ -95,12 +103,27 @@ vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
     # TODO remove columns not corresponding to columns in X
     Xnew <- unname(Xnew)
     rm(newdata)
-    function(p) exp(Xnew %m*v% p[[name]])
+    if (is_ind_matrix(Xnew) && q < nrow(Xnew))
+      function(p) Xnew %m*v% exp(p[[name]])
+    else
+      function(p) exp(Xnew %m*v% p[[name]])
   }
 
-  if (e$prior.only) return(environment())
+  if (e[["prior.only"]]) {
+    rm(e)
+    return(environment())
+  }
 
-  sigma.fixed <- e$sigma.fixed
+  if (prior[["type"]] == "fixed") {
+    start <- draw <- prior[["rprior"]]
+    rm(e)
+    environment()
+  }
+
+  sumX <- 0.5 * colSums(X) - Q0b0
+  MVNsampler <- create_TMVN_sampler(Q=0.5*crossprod(X) + Q0, name=name)
+
+  sigma.fixed <- e[["sigma.fixed"]]
 
   proposal_scale <- 2.4/sqrt(q)
   draw <- function(p) {

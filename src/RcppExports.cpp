@@ -269,6 +269,16 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// invsqrt
+Eigen::VectorXd invsqrt(const Eigen::Map<Eigen::VectorXd>& x);
+RcppExport SEXP _mcmcsae_invsqrt(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd>& >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(invsqrt(x));
+    return rcpp_result_gen;
+END_RCPP
+}
 // inverseSPD
 Eigen::MatrixXd inverseSPD(const Eigen::Map<Eigen::MatrixXd>& M);
 RcppExport SEXP _mcmcsae_inverseSPD(SEXP MSEXP) {
@@ -614,17 +624,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// Cdense_crossprod_sym2
-NumericMatrix Cdense_crossprod_sym2(const NumericMatrix& A, const NumericMatrix& B);
-RcppExport SEXP _mcmcsae_Cdense_crossprod_sym2(SEXP ASEXP, SEXP BSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::traits::input_parameter< const NumericMatrix& >::type A(ASEXP);
-    Rcpp::traits::input_parameter< const NumericMatrix& >::type B(BSEXP);
-    rcpp_result_gen = Rcpp::wrap(Cdense_crossprod_sym2(A, B));
-    return rcpp_result_gen;
-END_RCPP
-}
 // CdiagU
 SEXP CdiagU(const int n);
 RcppExport SEXP _mcmcsae_CdiagU(SEXP nSEXP) {
@@ -731,6 +730,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// logSumExpColwiseC
+Eigen::VectorXd logSumExpColwiseC(const Eigen::MatrixXd& M);
+RcppExport SEXP _mcmcsae_logSumExpColwiseC(SEXP MSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< const Eigen::MatrixXd& >::type M(MSEXP);
+    rcpp_result_gen = Rcpp::wrap(logSumExpColwiseC(M));
+    return rcpp_result_gen;
+END_RCPP
+}
 // Cdense_kron
 Eigen::MatrixXd Cdense_kron(const Eigen::Map<Eigen::MatrixXd>& M1, const Eigen::Map<Eigen::MatrixXd>& M2);
 RcppExport SEXP _mcmcsae_Cdense_kron(SEXP M1SEXP, SEXP M2SEXP) {
@@ -779,6 +788,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// rowVarsC
+Eigen::VectorXd rowVarsC(const Eigen::Map<Eigen::MatrixXd>& M);
+RcppExport SEXP _mcmcsae_rowVarsC(SEXP MSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd>& >::type M(MSEXP);
+    rcpp_result_gen = Rcpp::wrap(rowVarsC(M));
+    return rcpp_result_gen;
+END_RCPP
+}
 // Ctab
 SEXP Ctab(const IntegerVector& Dim, const bool reduced, const IntegerVector& perm, const bool num, const NumericVector& x);
 RcppExport SEXP _mcmcsae_Ctab(SEXP DimSEXP, SEXP reducedSEXP, SEXP permSEXP, SEXP numSEXP, SEXP xSEXP) {
@@ -794,7 +813,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // Ctab_numeric_prod
-NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector& y, const bool ignore_x);
+Rcpp::NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector& y, const bool ignore_x);
 RcppExport SEXP _mcmcsae_Ctab_numeric_prod(SEXP ASEXP, SEXP ySEXP, SEXP ignore_xSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;

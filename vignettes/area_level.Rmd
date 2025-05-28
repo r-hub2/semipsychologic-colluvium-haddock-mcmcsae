@@ -40,13 +40,16 @@ A sampler function for a model with a regression component and a random intercep
 ```{r, message=FALSE}
 library(mcmcsae)
 model <- y ~ reg(~ 1 + x, name="beta") + gen(factor = ~iid(area), name="v")
-sampler <- create_sampler(model, sigma.fixed=TRUE, Q0=1/psi, linpred="fitted", data=df)
+sampler <- create_sampler(
+  model,
+  family=f_gaussian(var.prior=pr_fixed(1), var.vec = ~ psi),
+  linpred="fitted", data=df
+)
 ```
 The meaning of the arguments used is as follows:
 
-* the first argument is a formula specifying the response variable and the linear predictor part of the model
-* `sigma.fixed=TRUE` signifies that the observation level variance parameter is fixed at 1. In this case it means that the variances are known and given by `psi`.
-* the function expects precisions rather than variances, and with `Q0=1/psi` the precisions are set to the vector `1/psi`.
+* the first argument is a formula specifying the response variable and the linear predictor to model the mean of the sampling distribution
+* the `family` argument allows to set one of a number of sampling distributions and possibly pass additional family-dependent arguments. In this case the scalar observation level variance parameter is set to a fixed value 1, and unequal variances are set to the vector `psi`.
 * `linpred="fitted"` indicates that we wish to obtain samples from the posterior distribution for the vector $\theta$ of small area means.
 * `data` is the `data.frame` in which variables used in the model specification are looked up.
 
@@ -88,8 +91,11 @@ response variable. If we set `compute.weights=TRUE` then such weights are comput
 for all linear predictors specified in argument `linpred`. In this case it
 means that a set of weights is computed for each area.
 ```{r}
-sampler <- create_sampler(model, sigma.fixed=TRUE, Q0=1/psi,
-             linpred="fitted", data=df, compute.weights=TRUE)
+sampler <- create_sampler(
+  model,
+  family=f_gaussian(var.prior=pr_fixed(1), var.vec = ~ psi),
+  linpred="fitted", data=df, compute.weights=TRUE
+)
 sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
 ```
 Now the `weights` method returns a matrix of weights, in this case a

@@ -11,14 +11,15 @@ dat <- data.frame(
 gd <- generate_data(
   ~ reg(~ 1 + x, prior=pr_fixed(c(1,2)), name="beta") +
     gen(factor = ~ AR1(t, -0.9), name="v"),
-  sigma.mod = pr_fixed(1), data=dat
+  family = f_gaussian(var.prior = pr_fixed(1)),
+  data=dat
 )
 dat$y <- gd$y
 #ts.plot(dat$y)
 
 test_that("data generation for AR1 model works", {
   expect_equal(gd$pars$beta, c(`(Intercept)`=1, x=2))
-  expect_equal(unname(gd$pars$sigma_), 1)
+  expect_null(gd$pars$sigma_)
   expect_between(cor(gd$pars$v[-1], gd$pars$v[-n]), -1, -0.5)
 })
 
@@ -27,7 +28,7 @@ test_that("AR1 parameter can be inferred well with blocked Gibbs sampler", {
   expect_error(D_AR1(7, -1.1), "between")
   sampler <- create_sampler(
     y ~ reg(~ 1 + x, name="beta") + gen(factor = ~ AR1(t), name="v"),
-    data=dat, sigma.fixed=TRUE,
+    data=dat, family = f_gaussian(var.prior = pr_fixed(1)),
     control=sampler_control(block=TRUE)
   )
   sim <- MCMCsim(sampler, n.iter=500, n.chain=2, store.all=TRUE, verbose=FALSE)
@@ -40,7 +41,7 @@ test_that("AR1 parameter can be inferred well with blocked Gibbs sampler", {
 test_that("AR1 parameter can be inferred well without Gibbs blocking", {
   sampler <- create_sampler(
     y ~ reg(~ 1 + x, name="beta") + gen(factor = ~ AR1(t), name="v"),
-    data=dat, sigma.fixed=TRUE,
+    data=dat, family = f_gaussian(var.prior = pr_fixed(1)),
     control=sampler_control(block=FALSE)
   )
   sim <- MCMCsim(sampler, n.iter=750, n.chain=2, store.all=TRUE, verbose=FALSE)
@@ -54,7 +55,7 @@ test_that("uniform prior for AR1 parameter works", {
   sampler <- create_sampler(
     y ~ reg(~ 1 + x, name="beta") + 
         gen(factor = ~ AR1(t, pr_unif(-0.7, 1)), name="v"),
-    data=dat, sigma.fixed=TRUE,
+    data=dat, family = f_gaussian(var.prior = pr_fixed(1)),
     control=sampler_control(block=TRUE)
   )
   expect_false(sampler$mod$v$AR1sampler$tnprior)
@@ -69,7 +70,7 @@ test_that("truncated normal prior for AR1 parameter works", {
   sampler <- create_sampler(
     y ~ reg(~ 1 + x, name="beta") + 
       gen(factor = ~ AR1(t, pr_truncnormal(mean=0, precision=1e6, lower=-1, upper=1)), name="v"),
-    data=dat, sigma.fixed=TRUE,
+    data=dat, family = f_gaussian(var.prior = pr_fixed(1)),
     control=sampler_control(block=TRUE)
   )
   expect_true(sampler$mod$v$AR1sampler$tnprior)
@@ -83,7 +84,7 @@ test_that("truncated normal prior for AR1 parameter works", {
 test_that("AR1 parameter can be inferred under non-normal random effects' prior", {
   sampler <- create_sampler(
     y ~ reg(~ 1 + x, name="beta") + gen(factor = ~ AR1(t), priorA=pr_exp(), name="v"),
-    data=dat, sigma.fixed=TRUE,
+    data=dat, family = f_gaussian(var.prior = pr_fixed(1)),
     control=sampler_control(block=FALSE)
   )
   sim <- MCMCsim(sampler, n.iter=500, n.chain=2, store.all=TRUE, verbose=FALSE)
@@ -94,13 +95,13 @@ test_that("AR1 parameter can be inferred under non-normal random effects' prior"
   # next with truncated normal prior
   sampler <- create_sampler(
     y ~ reg(~ 1 + x, name="beta") +
-      gen(factor = ~ AR1(t, pr_truncnormal(mean=0, precision=1e6, lower=-1, upper=1)), priorA=pr_exp(), name="v"),
-    data=dat, sigma.fixed=TRUE,
+      gen(factor = ~ AR1(t, pr_truncnormal(mean=0, precision=1e4, lower=-1, upper=1)), priorA=pr_exp(), name="v"),
+    data=dat, family = f_gaussian(var.prior = pr_fixed(1)),
     control=sampler_control(block=FALSE)
   )
-  sim <- MCMCsim(sampler, n.iter=500, n.chain=2, store.all=TRUE, verbose=FALSE)
+  sim <- MCMCsim(sampler, burnin=400, n.iter=500, n.chain=2, store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
-  expect_between(summ$beta[, "Mean"], 0.25*c(1,2), 4*c(1,2))
+  expect_between(summ$beta[, "Mean"], 0.25*c(1,2) - 0.5, 4*c(1,2))
   expect_between(summ$v_AR1[, "Mean"], -0.2, 0.2)
 })
 

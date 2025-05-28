@@ -3,8 +3,10 @@
 // --> probably two cholmod workspaces; how (memory-)inefficient is this?
 
 #include <R_ext/RS.h>
-#include <cholmod.h>
-#include <Matrix_stubs.c>
+#include <Matrix/alloca.h>
+#include <Matrix/cholmod.h>
+#define R_MATRIX_INLINE inline
+#include <Matrix/stubs.c>
 
 
 extern cholmod_common c;  // see mcmcsae_init.c
@@ -12,7 +14,7 @@ extern cholmod_common c;  // see mcmcsae_init.c
 
 // make sure mcmcsae_init.c includes this:
 /*
-#include "Matrix.h"
+#include "Matrix/Matrix.h"
 
 cholmod_common c;
 
@@ -83,7 +85,7 @@ SEXP CHM_dsC_Cholesky(SEXP a, SEXP perm, SEXP super, SEXP Imult, SEXP m, SEXP LD
   int ok = (L->minor == L->n);
   if (ok) {
     //Rprintf("ok, c.final_ll = %d \n", c.final_ll);
-    SEXP out = PROTECT(M_chm_factor_to_SEXP(L, 0 /* do not free */));
+    SEXP out = PROTECT(M_cholmod_factor_as_sexp(L, 0 /* do not free */));
     M_cholmod_free_factor(&L, &c);
     UNPROTECT(1);
     return out;
@@ -150,7 +152,7 @@ SEXP CHMf_spsolve(SEXP a, SEXP b, SEXP system) {
 
   if (!(sys--)) error("invalid system argument");
 
-  SEXP ans = M_chm_sparse_to_SEXP(
+  SEXP ans = M_cholmod_sparse_as_sexp(
     M_cholmod_spsolve(sys, L, B, &c), 1, 0, 0, "", R_NilValue);
   return ans;
 }
@@ -160,6 +162,6 @@ SEXP CHM_update_inplace(SEXP object, SEXP parent, SEXP mult) {
   CHM_FR L = AS_CHM_FR(object);
   CHM_SP A = AS_CHM_SP__(parent);
 
-  M_chm_factor_update(L, A, asReal(mult));
+  M_cholmod_factor_update(L, A, asReal(mult));
   return R_NilValue;
 }

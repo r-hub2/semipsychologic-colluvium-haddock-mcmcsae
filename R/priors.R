@@ -42,7 +42,7 @@ pr_normal <- function(mean=0, precision=0, labels=NULL) {
       }
     } else {
       if (length(coefnames) != n) stop("'coefnames' must have length 'n'")
-      m <- match(labels, coefnames)
+      m <- fmatch(labels, coefnames)
       if (anyNA(m)) stop("non-matching labels: ", paste0(labels[is.na(m)], collapse=", "))
       temp <- numeric(n)
       temp[m] <- mean
@@ -125,7 +125,7 @@ pr_MLiG <- function(mean=0, precision=0, labels=NULL, a=1000) {
     } else {
       if (all(length(mean) != c(1L, length(labels)))) stop("parameter 'mean' has wrong length")
       if (all(length(precision) != c(1L, length(labels)))) stop("parameter 'precision' has wrong length")
-      m <- match(labels, coefnames)
+      m <- fmatch(labels, coefnames)
       if (anyNA(m)) stop("non-matching coefficient names: ", paste0(labels[is.na(m)], collapse=", "))
       temp <- numeric(n)
       temp[m] <- mean
@@ -150,13 +150,11 @@ pr_fixed <- function(value=1) {
   value <- as.numeric(value)
   n <- NULL
   rprior <- function() stop("please call method 'init' first")
-  #draw <- function() stop("please call method 'init' first")
   init <- function(n=1L) {
     n <<- as.integer(n)
     if (all(length(value) != c(1L, n))) stop("value parameter has wrong length")
     if (n > length(value)) value <- rep.int(value, n)
     rprior <<- function() value
-    #if (post) draw <<- function() value
   }
   type <- "fixed"
   environment()
@@ -230,7 +228,7 @@ pr_truncnormal <- function(mean=0, precision=1, lower=0, upper=Inf) {
     if (all(length(precision) != c(1L, n))) stop("precision parameter has wrong length")
     if (all(length(lower) != c(1L, n))) stop("lower parameter has wrong length")
     if (all(length(upper) != c(1L, n))) stop("upper parameter has wrong length")
-    stdev <- 1/sqrt(precision)
+    stdev <- sqrt(1/precision)
     rprior <<- function() mean + stdev * Crtuvn((lower - mean)/stdev, (upper - mean)/stdev)
   }
   type <- "truncnormal"
@@ -248,17 +246,11 @@ pr_truncnormal <- function(mean=0, precision=1, lower=0, upper=Inf) {
 pr_exp <- function(scale=1) {
   if (!all(scale > 0)) stop("scale parameter must be positive")
   n <- NULL
-  draw <- NULL
   rprior <- function() stop("please call method 'init' first")
-  init <- function(n=1L, post=FALSE) {
+  init <- function(n=1L) {
     n <<- as.integer(n)
     if (all(length(scale) != c(1L, n))) stop("scale parameter has wrong length")
     rprior <<- function() scale * rexp(n)
-    if (post) {
-      # TODO set a=2/scale here, and default p=-1/2
-      # b is typically updated
-      draw <<- function(p, a, b) Crgig(n, p, a, b)
-    }
   }
   type <- "exp"
   environment()
@@ -270,7 +262,6 @@ pr_exp <- function(scale=1) {
 #' @param shape scalar or vector shape parameter.
 #' @param rate scalar or vector rate, i.e. inverse scale, parameter.
 #' @returns An environment representing the specified prior, for internal use.
-# TODO pr_exp as special case
 pr_gamma <- function(shape=1, rate=1) {
   if (!all(shape > 0 & rate > 0)) stop("shape and rate parameters must be positive")
   n <- NULL
@@ -284,7 +275,7 @@ pr_gamma <- function(shape=1, rate=1) {
   environment()
 }
 
-#' Create an object representing Generalized Inverse Gaussian (GIG) prior distributions
+#' Create an object representing Generalised Inverse Gaussian (GIG) prior distributions
 #'
 #' @export
 #' @param a scalar or vector parameter.
@@ -297,22 +288,20 @@ pr_gig <- function(a, b, p) {
   if (any(a[p >= 0] == 0)) stop("parameter 'a' should not be 0 when p >= 0")
   if (any(b[p <= 0] == 0)) stop("parameter 'b' should not be 0 when p <= 0")
   n <- NULL
-  draw <- NULL
   rprior <- function() stop("please call method 'init' first")
-  init <- function(n=1L, post=FALSE) {
+  init <- function(n=1L) {
     n <<- as.integer(n)
     if (all(length(a) != c(1L, n))) stop("parameter 'a' has wrong length")
     if (all(length(b) != c(1L, n))) stop("parameter 'b' has wrong length")
     if (all(length(p) != c(1L, n))) stop("parameter 'p' has wrong length")
     rprior <<- function() Crgig(n, p, a, b)
-    if (post) draw <<- function(p, a, b) Crgig(n, p, a, b)
   }
   type <- "gig"
   environment()
 }
 
 #' Create an object representing inverse chi-squared priors
-#' with possibly modeled degrees of freedom and scale parameters
+#' with possibly modelled degrees of freedom and scale parameters
 #'
 #' @export
 #' @param df degrees of freedom parameter. This can be a numeric scalar or
@@ -338,7 +327,7 @@ pr_gig <- function(a, b, p) {
 #'  \describe{
 #'    \item{df}{degrees of freedom (scalar or vector)}
 #'    \item{scale}{scale (scalar or vector)}
-#'    \item{common}{whether the modeled scale parameter of the inverse chi-squared
+#'    \item{common}{whether the modelled scale parameter of the inverse chi-squared
 #'      distribution is (a scalar parameter) common to all \code{n} parameters.}
 #'  }
 #' @returns An environment representing the specified prior, for internal use.
@@ -348,69 +337,44 @@ pr_invchisq <- function(df=1, scale=1) {
   if (is.character(scale) && any(scale == c("modeled", "modelled"))) scale <- list()
   n <- rprior <- draw <- NULL
   if (is.list(df)) {
-    if (is.null(df$alpha0)) df$alpha0 <- 2  # default in prior Gamma(alpha0, beta0)
-    if (is.null(df$beta0)) df$beta0 <- 0.1  # default in prior Gamma(alpha0, beta0)
+    if (is.null(df[["alpha0"]])) df$alpha0 <- 2  # default in prior Gamma(alpha0, beta0)
+    if (is.null(df[["beta0"]])) df$beta0 <- 0.1  # default in prior Gamma(alpha0, beta0)
     # TODO tau, proposal, adapt: move to another object
-    if (is.null(df$tau)) df$tau <- 1  # (starting) scale of MH update
-    if (is.null(df$proposal)) df$proposal <- "RW"
-    if (is.null(df$adapt)) df$adapt <- TRUE
+    if (is.null(df[["tau"]])) df$tau <- 1  # (starting) scale of MH update
+    if (is.null(df[["proposal"]])) df$proposal <- "RW"
+    if (is.null(df[["adapt"]])) df$adapt <- TRUE
     rprior_df <- draw_df <- NULL
   }
   if (is.list(scale)) {
-    defaults <- list(df=1, scale=1, common=FALSE)
-    if (!all(names(scale) %in% names(defaults))) stop("invalid 'scale' options list")
-    scale <- modifyList(defaults, scale)
-    rm(defaults)
+    scale <- local({
+      defaults <- list(df=1, scale=1, common=FALSE)
+      if (!all(names(scale) %in% names(defaults))) stop("invalid 'scale' options list")
+      modifyList(defaults, scale)
+    })
   }
   if (is.list(scale) || (!is.list(scale) && !is.list(df))) psi0 <- NULL
-  init <- function(n=1L, post=FALSE) {
+  init <- function(n=1L) {
     n <<- as.integer(n)
     rprior <<- function() {}
-    if (post) {
-      # function draw to sample from full conditional posterior
-      # assumes the invchisq prior is for variance parameters of a gaussian distribution
-      draw <<- function(df.data, SSR) {}
-    }
     if (is.list(df)) {
-      rprior_df <<- function() rgamma(1L, df$alpha0, df$beta0)
+      rprior_df <<- function() rgamma(1L, df[["alpha0"]], df[["beta0"]])
       formals(rprior) <<- c(alist(df=), formals(rprior))  # different signature without check NOTE
-      if (post) {
-        draw_df <<- function(df.current, Q.current) {}  # Q.current is current precision parameter (vector)
-        switch(df$proposal,
-          RW = draw_df <<- add(draw_df, bquote(draw_df_MH_RW(.(as.numeric(n)), df.current, Q.current, df))),
-          mala = draw_df <<- add(draw_df, bquote(draw_df_MH_mala(.(as.numeric(n)), df.current, Q.current, df)))
-        )
-        formals(draw) <<- c(alist(df=), formals(draw))
-      }
     } else {
       if (all(length(df) != c(1L, n))) stop("degrees of freedom parameter has wrong length")
       # do not enforce df > 0 to allow improper prior for data scale variance
     }
     if (is.list(scale)) {
-      if (all(length(scale$df) != c(1L, n))) stop("degrees of freedom parameter has wrong length")
-      if (all(length(scale$scale) != c(1L, n))) stop("scale parameter has wrong length")
-      if (scale$common && n == 1L) scale$common <<- FALSE
-      psi0 <<- scale$df / scale$scale
-      if (scale$common) {
-        if (length(scale$df) != 1L || length(scale$scale) != 1L) stop("scalar 'df' and 'scale' expected in common scale model")
+      if (all(length(scale[["df"]]) != c(1L, n))) stop("degrees of freedom parameter has wrong length")
+      if (all(length(scale[["scale"]]) != c(1L, n))) stop("scale parameter has wrong length")
+      if (scale[["common"]] && n == 1L) scale$common <<- FALSE
+      psi0 <<- scale[["df"]] / scale[["scale"]]
+      if (scale[["common"]]) {
+        if (length(scale[["df"]]) != 1L || length(scale[["scale"]]) != 1L) stop("scalar 'df' and 'scale' expected in common scale model")
         rprior <<- rprior |>
-          add(quote(scale <- rchisq_scaled(1L, scale$df, psi=psi0))) |>
+          add(quote(scale <- rchisq_scaled(1L, scale[["df"]], psi=psi0))) |>
           add(bquote(1 / rchisq_scaled(.(n), df, scale)))
       } else {
-        rprior <<- add(rprior, bquote(draw_betaprime(.(n), 0.5*scale$df, 0.5*df, df/psi0)))
-      }
-      if (post) {
-        formals(draw) <<- c(formals(draw), alist(Q=))
-        # draw 1/kappa from its full conditional posterior
-        if (scale$common) {
-          if (is.list(df) || length(df) == 1L)
-            draw <<- add(draw, bquote(kappa_inv <- rchisq_scaled(1L, .(n) * df + scale$df, psi = psi0 + sum(df * Q))))
-          else
-            draw <<- add(draw, quote(kappa_inv <- rchisq_scaled(1L, sum(df) + scale$df, psi = psi0 + sum(df * Q))))
-        } else {
-          draw <<- add(draw, bquote(kappa_inv <- rchisq_scaled(.(n), df + scale$df, psi = psi0 + df * Q)))
-        }
-        draw <<- add(draw, quote(psi <- df * kappa_inv))
+        rprior <<- add(rprior, bquote(draw_betaprime(.(n), 0.5*scale[["df"]], 0.5*df, df/psi0)))
       }
     } else {
       if (all(length(scale) != c(1L, n))) stop("scale parameter has wrong length")
@@ -420,20 +384,43 @@ pr_invchisq <- function(df=1, scale=1) {
         psi0 <<- df * scale
         rprior <<- add(rprior, bquote(1 / rchisq_scaled(.(n), df, psi=psi0)))
       }
-      if (post) {
-        draw <<- add(draw, quote(psi <- df * scale))
+    }
+  }
+  make_draw <- function() {
+    # function draw to sample from full conditional posterior
+    # assumes the invchisq prior is for variance parameters of a gaussian distribution
+    draw <<- function(df.data, SSR) {}
+    if (is.list(df)) {
+      draw_df <<- function(df.current, Q.current) {}  # Q.current is current precision parameter (vector)
+      switch(df[["proposal"]],
+        RW = draw_df <<- add(draw_df, bquote(draw_df_MH_RW(.(as.numeric(n)), df.current, Q.current, df))),
+        mala = draw_df <<- add(draw_df, bquote(draw_df_MH_mala(.(as.numeric(n)), df.current, Q.current, df)))
+      )
+      formals(draw) <<- c(alist(df=), formals(draw))
+    }
+    if (is.list(scale)) {
+      formals(draw) <<- c(formals(draw), alist(Q=))
+      # draw 1/kappa from its full conditional posterior
+      if (scale[["common"]]) {
+        if (is.list(df) || length(df) == 1L)
+          draw <<- add(draw, bquote(kappa_inv <- rchisq_scaled(1L, .(n) * df + scale$df, psi = psi0 + sum(df * Q))))
+        else
+          draw <<- add(draw, quote(kappa_inv <- rchisq_scaled(1L, sum(df) + scale$df, psi = psi0 + sum(df * Q))))
+      } else {
+        draw <<- add(draw, bquote(kappa_inv <- rchisq_scaled(.(n), df + scale$df, psi = psi0 + df * Q)))
       }
+      draw <<- add(draw, quote(psi <- df * kappa_inv))
+    } else {
+      draw <<- add(draw, quote(psi <- df * scale))
     }
-    if (post) {
-      draw <<- add(draw, bquote(1 / rchisq_scaled(.(n), df + df.data, psi=psi + SSR)))
-    }
+    draw <<- add(draw, bquote(1 / rchisq_scaled(.(n), df + df.data, psi=psi + SSR)))
   }
   type <- "invchisq"
   environment()
 }
 
 #' Create an object representing an inverse Wishart prior,
-#' possibly with modeled scale matrix
+#' possibly with modelled scale matrix
 #'
 #' @export
 #' @param df Degrees of freedom parameter. This should be a scalar numeric value.
@@ -446,7 +433,7 @@ pr_invchisq <- function(df=1, scale=1) {
 #'  \describe{
 #'    \item{df}{degrees of freedom (scalar or vector) of the chi-squared distribution(s)}
 #'    \item{scale}{scale parameter(s) of the chi-squared distribution(s)}
-#'    \item{common}{whether the modeled scale parameter of the inverse chi-squared
+#'    \item{common}{whether the modelled scale parameter of the inverse chi-squared
 #'      distribution is (a scalar parameter) common to all \code{n} diagonal elements.}
 #'  }
 #' @returns An environment representing the specified prior, for internal use.

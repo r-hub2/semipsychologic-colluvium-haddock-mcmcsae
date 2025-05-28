@@ -328,3 +328,18 @@ test_that("economizeMatrix works", {
   expect_is(economizeMatrix(M, sparse=TRUE), "ddiMatrix")
   expect_equal(colnames(economizeMatrix(M, sparse=TRUE, strip.names=FALSE)), colnames(M))
 })
+
+test_that("prec2se_cor works", {
+  n <- 7
+  Q <- crossprod(matrix(rnorm(n*n), n, n)) + diag(n)
+  sc <- prec2se_cor(Q)
+  V <- solve(Q)
+  expect_equal(sqrt(diag(V)), sc$se)
+  expect_equal(cov2cor(V)[row(V) < col(V)], sc$cor)
+})
+
+test_that("rowVarsC works", {
+  n <- 20; m <- 14
+  M <- matrix(runif(n*m), n, m)
+  expect_equal(rowVarsC(M), apply(M, 1L, var))
+})

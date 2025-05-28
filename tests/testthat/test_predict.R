@@ -66,6 +66,13 @@ test_that("predict with on-the-fly aggregation works", {
   ppp <- attr(pred, "ppp")
   expect_length(ppp, 4L)
   expect_between(ppp, 0, 1)
+  # check that simple aggregation functions mean, sum also work
+  pred <- predict(sim, newdata=dat, fun.=mean, show.progress=FALSE, verbose=FALSE)
+  summpred <- summary(pred)
+  expect_between(summpred[, "Mean"], 0.5, 2)
+  pred <- predict(sim, newdata=dat, fun.=sum, show.progress=FALSE, verbose=FALSE)
+  summpred <- summary(pred)
+  expect_between(summpred[, "Mean"], 0.5*n, 2*n)
 })
 
 test_that("predict generates out-of-sample random effects", {

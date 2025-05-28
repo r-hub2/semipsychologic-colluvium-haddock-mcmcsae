@@ -6,7 +6,7 @@ get_response <- function(formula, data=NULL) {
   ind <- attr(tf, "response")
   if (ind > 0L) {
     vars <- as.list(attr(tf, "variables"))[-1L]
-    eval(vars[[ind]], data, environment(formula))
+    eval(vars[[ind]], if (is_integer_scalar(data)) NULL else data, environment(formula))
   } else {
     NULL
   }
@@ -14,7 +14,7 @@ get_response <- function(formula, data=NULL) {
 
 get_types <- function(mod) {
   if (length(mod))
-    s_apply(mod, function(x) match.arg(as.character(x[[1L]]), .mod.specials), USE.NAMES=TRUE)
+    s_apply(mod, \(x) match.arg(as.character(x[[1L]]), .mod.specials), USE.NAMES=TRUE)
   else
     NULL
 }
@@ -71,9 +71,10 @@ standardize_formula <- function(formula, default="reg", data=NULL, internal.offs
     # the internal offset is set later in samplers.R
   }
   if (attr(tf, "response") > 0L) {
-    as.formula(paste0(deparse(attr(tf, "variables")[[attr(tf, "response") + 1L]]), " ~ ", out), env=e)
+    as.formula(paste0(deparse(attr(tf, "variables")[[attr(tf, "response") + 1L]]),
+      " ~ ", if (is.null(out)) "0" else out), env=e)
   } else {
-    as.formula(paste0("~ ", out), env=e)
+    as.formula(paste0("~ ", if (is.null(out)) "0" else out), env=e)
   }
 }
 
@@ -91,17 +92,26 @@ get_vars <- function(formula, rhs.only=TRUE) {
   vars
 }
 
+get_var_from_formula <- function(f, data) {
+  tf <- terms(f, data=data)
+  vars <- as.list(attr(tf, "variables"))[-1L]
+  if (length(vars) != 1L) stop("formula with single variable expected, but found ", length(vars))
+  out <- unclass(eval(vars[[1L]], if (is_integer_scalar(data)) NULL else data, environment(f)))
+  if (!all(is.finite(out))) stop("total of ", sum(!is.finite(out)), " NA/NaN/Inf in variable ", vars)
+  out
+}
+
 # use prefix to prevent duplicate names in automatic naming of
 # model components in different model parts, e.g. mean and variance model
 to_mclist <- function(formula, prefix="") {
   vars <- get_vars(formula)
   if (length(vars)) {
-    parnames <- s_apply(vars, function(x) if (is.null(x$name)) NA_character_ else x$name)
+    parnames <- s_apply(vars, \(x) if (is.null(x[["name"]])) NA_character_ else x[["name"]])
     types <- get_types(vars)
     if (prefix == "v") {  # backward compatible naming for vfac, vreg components
       prefix <- ifelse(any(types[is.na(parnames)] == c("reg", "gen")), "v", "")
     }
-    parnames[is.na(parnames)] <- paste0(prefix, types[is.na(parnames)], which(is.na(parnames)))
+    parnames[is.na(parnames)] <- paste0(prefix, types[is.na(parnames)], whichNA(parnames))
     check_mod_names(parnames)
   }
   mod <- list()

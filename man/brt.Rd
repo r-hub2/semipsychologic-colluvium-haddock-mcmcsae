@@ -67,10 +67,11 @@ test <- gendat(n=25)
 # keep trees for later prediction based on new data
 sampler <- create_sampler(
   y ~ brt(~ . - y, name="bart", keepTrees=TRUE),
-  sigma.mod=pr_invchisq(df=3,  scale=var(train$y)),
+  family = f_gaussian(var.prior=pr_invchisq(df=3, scale=var(train$y))),
   data = train
 )
-sim <- MCMCsim(sampler, n.chain=2, n.iter=700, thin=2,
+# increase burnin and n.iter below to improve MCMC convergence
+sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=500, thin=2,
   store.all=TRUE, verbose=FALSE)
 (summ <- summary(sim))
 plot(train$mu, summ$bart[, "Mean"]); abline(0, 1)

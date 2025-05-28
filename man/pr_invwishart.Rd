@@ -3,7 +3,7 @@
 \name{pr_invwishart}
 \alias{pr_invwishart}
 \title{Create an object representing an inverse Wishart prior,
-possibly with modeled scale matrix}
+possibly with modelled scale matrix}
 \usage{
 pr_invwishart(df = NULL, scale = NULL)
 }
@@ -19,7 +19,7 @@ following components:
 \describe{
   \item{df}{degrees of freedom (scalar or vector) of the chi-squared distribution(s)}
   \item{scale}{scale parameter(s) of the chi-squared distribution(s)}
-  \item{common}{whether the modeled scale parameter of the inverse chi-squared
+  \item{common}{whether the modelled scale parameter of the inverse chi-squared
     distribution is (a scalar parameter) common to all \code{n} diagonal elements.}
 }}
 }
@@ -28,7 +28,7 @@ An environment representing the specified prior, for internal use.
 }
 \description{
 Create an object representing an inverse Wishart prior,
-possibly with modeled scale matrix
+possibly with modelled scale matrix
 }
 \references{
 A. Huang and M.P. Wand (2013).

@@ -252,11 +252,11 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
   # derive names and ranges of variables to trace
   trace.convergence <- lapply(trace.convergence, get_name_range)
   plot.trace <- lapply(plot.trace, get_name_range)
-  if (any(b_apply(plot.trace, function(x) length(x$range) > 1L))) stop("for plots only single elements of vector parameters may be specified")
-  
+  if (any(b_apply(plot.trace, \(x) length(x[["range"]]) > 1L))) stop("for plots only single elements of vector parameters may be specified")
+
   # remove components to trace or plot that are not in the sampler's output
-  trace.convergence <- Filter(function(x) any(x$name == names(test_draw)), trace.convergence)
-  plot.trace <- Filter(function(x) any(x$name == names(test_draw)), plot.trace)
+  trace.convergence <- Filter(\(x) any(x[["name"]] == names(test_draw)), trace.convergence)
+  plot.trace <- Filter(\(x) any(x[["name"]] == names(test_draw)), plot.trace)
   if (length(plot.trace)) {
     oldpar <- par(no.readonly=TRUE)
     on.exit(par(oldpar))
@@ -264,11 +264,11 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
   }
   # check that ranges, if specified, are allowed
   for (v in trace.convergence)
-    if (!all(v$range %in% seq_along(test_draw[[v$name]]))) stop("illegal range in trace.convergence for parameter ", v$name)
+    if (!all(v[["range"]] %in% seq_along(test_draw[[v$name]]))) stop("illegal range in trace.convergence for parameter ", v$name)
   for (v in plot.trace)
-    if (!all(v$range %in% seq_along(test_draw[[v$name]]))) stop("illegal range in plot.trace for parameter ", v$name)
-  trace.convergence.names <- unlst(lapply(trace.convergence, function(v) if (length(test_draw[[v$name]]) == 1L) v$name else paste0(v$name, "[", v$range, "]")))
-  plot.trace.names <- unlst(lapply(plot.trace, function(v) if (length(test_draw[[v$name]]) == 1L) v$name else paste0(v$name, "[", v$range, "]")))
+    if (!all(v[["range"]] %in% seq_along(test_draw[[v$name]]))) stop("illegal range in plot.trace for parameter ", v$name)
+  trace.convergence.names <- unlst(lapply(trace.convergence, \(v) if (length(test_draw[[v$name]]) == 1L) v$name else paste0(v$name, "[", v$range, "]")))
+  plot.trace.names <- unlst(lapply(plot.trace, \(v) if (length(test_draw[[v$name]]) == 1L) v$name else paste0(v$name, "[", v$range, "]")))
   if (missing(store.mean)) {  # set parameters whose mean is stored by default
     if (is.null(sampler$store_mean_default))
       store.mean <- NULL
@@ -282,7 +282,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
     else
       store <- sampler$store_default(from.prior)
     if (store.all)
-      store <- union(store, Filter(function(x) !endsWith(x, "_") && all(x != store.mean), names(test_draw)))
+      store <- union(store, Filter(\(x) !endsWith(x, "_") && all(x != store.mean), names(test_draw)))
   }
   # always store derived quantities and 'diagnostic' parameters
   if (do.pred) store <- union(store, names(pred))
@@ -378,13 +378,13 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
   # MH parameters are assumed to be scalar parameters
   MH <- length(sampler$MHpars) >= 1L
   if (MH) {
-    MHpars <- sampler$MHpars
+    MHpars <- sampler[["MHpars"]]
     acc.rates <- rep.int(list(0), length(MHpars))
     names(acc.rates) <- MHpars
     out[["_accept"]] <- rep.int(list(rep.int(list(0L), n.chain)), length(MHpars))
     names(out[["_accept"]]) <- MHpars
     previous.values <- rep.int(list(rep.int(list(0), n.chain)), length(MHpars))
-    adapt <- is.function(sampler$adapt)
+    adapt <- is.function(sampler[["adapt"]])
   } else {
     adapt <- FALSE
   }
@@ -456,7 +456,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
     if (i %% 10L == 0L && verbose) cat("\riteration", i)
     if (i %% n.progress == 0L) {  # show progress
       if (length(trace.convergence) && (n.chain > 1L) && (index > 1L)) {
-        diagnostic <- unlst(lapply(trace.convergence, function(v) R_hat(get_from(out[[v$name]], v$range, draws=seq_len(index)))))
+        diagnostic <- unlst(lapply(trace.convergence, \(v) R_hat(get_from(out[[v$name]], v$range, draws=seq_len(index)))))
         names(diagnostic) <- trace.convergence.names
         if (verbose) {
           cat("\n")
@@ -508,15 +508,15 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
   # finalize output
   if (MH) {
     for (a in seq_along(MHpars))
-      out[["_accept"]][[a]] <- lapply(out[["_accept"]][[a]], function(x) x / n.iter)
+      out[["_accept"]][[a]] <- lapply(out[["_accept"]][[a]], \(x) x / n.iter)
   }
   if (write.to.file) for (v in to.file) close(outfile[[v]])
   tryCatch({
     out[["_state"]] <- p  # store the final state(s) p
     if (!is.null(store.mean)) {
-      out[["_means"]] <- lapply(out[["_means"]], function(x) lapply(x, function(y) y / n.draw))
+      out[["_means"]] <- lapply(out[["_means"]], \(x) lapply(x, function(y) y / n.draw))
       if (store.sds) {
-        out[["_sds"]] <- lapply(out[["_sds"]], function(x) lapply(x, function(y) y / n.draw))
+        out[["_sds"]] <- lapply(out[["_sds"]], \(x) lapply(x, function(y) y / n.draw))
         for (v in store.mean) {
           for (ch in seq_along(out[["_sds"]][[v]]))
             out[["_sds"]][[v]][[ch]] <- sqrt(out[["_sds"]][[v]][[ch]] - out[["_means"]][[v]][[ch]]^2)
@@ -564,7 +564,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
 #' \donttest{
 #' data(iris)
 #' sampler <- create_sampler(Sepal.Length ~ reg(~ Petal.Length + Species, name="beta"), data=iris)
-#' sim <- MCMCsim(sampler, burnin=100, n.chain=2, n.iter=400)
+#' sim <- MCMCsim(sampler, burnin=100, n.chain=2, n.iter=300)
 #' summary(sim)
 #' if (require("coda", quietly=TRUE)) {
 #'   mcbeta <- to_mcmc(sim$beta)
@@ -585,7 +585,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
 #' gd <- generate_data(~ reg(~ x + f, prior=pr_normal(precision=1), name="beta"), data=dat)
 #' dat$y <- gd$y
 #' sampler <- create_sampler(y ~ reg(~ x + f, name="beta"), data=dat)
-#' sim <- MCMCsim(sampler, n.chain=2, n.iter=400)
+#' sim <- MCMCsim(sampler, n.chain=2, n.iter=300)
 #' str(sim$beta)
 #' str(as.array(sim$beta))
 #' bayesplot::mcmc_hist(as.array(sim$beta))
@@ -597,7 +597,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
 #' ex <- mcmcsae_example()
 #' plot(ex$dat$fT, ex$dat$y)
 #' sampler <- create_sampler(ex$model, data=ex$dat)
-#' sim <- MCMCsim(sampler, n.chain=2, n.iter=400, store.all=TRUE)
+#' sim <- MCMCsim(sampler, n.chain=2, n.iter=300, store.all=TRUE)
 #' str(sim$beta)
 #' str(as.matrix(sim$beta))
 #' # fake data simulation check:
@@ -632,6 +632,8 @@ to_mcmc <- function(x) {
 #' @export
 #' @rdname MCMC-object-conversion
 to_draws_array <- function(x, components=NULL) {
+  if (!requireNamespace("posterior", quietly=TRUE))
+    stop("package posterior required for conversion to a draws_array object")
   if (inherits(x, "mcdraws")) {
     f <- function(x, name) {
       out <- x[[name]]
@@ -752,19 +754,19 @@ get_from <- function(dc, vars=NULL, chains=NULL, draws=NULL) {
       dc[chains]
   } else if (is.null(vars)) {
     if (is.null(chains))
-      lapply(dc, function(x) x[draws, , drop=FALSE])
+      lapply(dc, \(x) x[draws, , drop=FALSE])
     else
-      lapply(dc[chains], function(x) x[draws, , drop=FALSE])
+      lapply(dc[chains], \(x) x[draws, , drop=FALSE])
   } else if (is.null(draws)) {
     if (is.null(chains))
-      lapply(dc, function(x) x[, vars, drop=FALSE])
+      lapply(dc, \(x) x[, vars, drop=FALSE])
     else
-      lapply(dc[chains], function(x) x[, vars, drop=FALSE])
+      lapply(dc[chains], \(x) x[, vars, drop=FALSE])
   } else {
     if (is.null(chains))
-      lapply(dc, function(x) x[draws, vars, drop=FALSE])
+      lapply(dc, \(x) x[draws, vars, drop=FALSE])
     else
-      lapply(dc[chains], function(x) x[draws, vars, drop=FALSE])
+      lapply(dc[chains], \(x) x[draws, vars, drop=FALSE])
   }
 }
 
@@ -813,7 +815,7 @@ get_name_range <- function(composite.name, default.first=TRUE) {
   list(name=spl[1L], range=range)
 }
 
-#' Summarize a draws component (dc) object
+#' Summarise a draws component (dc) object
 #'
 #' @examples
 #' \donttest{
@@ -830,7 +832,7 @@ get_name_range <- function(composite.name, default.first=TRUE) {
 #' @param na.rm whether to remove NA/NaN draws in computing the summaries.
 # TODO allow removing NA/NaNs also from n_eff and R-hat computation
 #' @param time MCMC computation time; if specified the effective sample size per unit of time
-#'  is returned in an extra column labeled 'efficiency'.
+#'  is returned in an extra column labelled 'efficiency'.
 #' @param abbr if \code{TRUE} abbreviate the labels in the output.
 #' @param batch.size number of parameter columns to process simultaneously. A larger batch size may speed things up a little,
 #'  but if an out of memory error occurs it may be a good idea to use a smaller number and try again. The default is 100.
@@ -860,9 +862,9 @@ summary.dc <- function(object, probs=c(0.05, 0.5, 0.95), na.rm=FALSE, time=NULL,
     out[ind, "n_eff"] <- n_eff(sim, ...)
     if (any("R_hat" == col_names)) out[ind, "R_hat"] <- R_hat(sim)
     sim <- as.matrix.dc(sim, colnames=FALSE)
-    out[ind, "Mean"] <- .colMeans(sim, nrow(sim), ncol(sim), na.rm=na.rm)
-    out[ind, "SD"] <- colSds(sim, na.rm=na.rm)
-    out[ind, paste0("q", probs)] <- colQuantiles(sim, probs=probs, na.rm=na.rm)
+    out[ind, "Mean"] <- fmean.matrix(sim, na.rm=na.rm)
+    out[ind, "SD"] <- fsd.matrix(sim, na.rm=na.rm)
+    out[ind, paste0("q", probs)] <- t.default(dapply(sim, fquantile, probs=probs, na.rm=na.rm))
   }
   out[, "t-value"] <- out[, "Mean"] / out[, "SD"]
   out[, "MCSE"] <- out[, "SD"] / sqrt(out[, "n_eff"])
@@ -871,7 +873,7 @@ summary.dc <- function(object, probs=c(0.05, 0.5, 0.95), na.rm=FALSE, time=NULL,
   out
 }
 
-#' Summarize an mcdraws object
+#' Summarise an mcdraws object
 #'
 #' @examples
 #' \donttest{
@@ -954,7 +956,7 @@ print.dc_summary <- function(x, digits=3L, max.lines=1000L, tail=FALSE, sort=NUL
     z <- x[order(x[, sort])[rows], , drop=FALSE]
   }
   if (!is.null(max.label.length))
-    dimnames(z)[[1L]] <- abbreviate(rownames(z), minlength=max.label.length, strict=TRUE)
+    dimnames(z)[[1L]] <- abbreviate(dimnames(z)[[1L]], minlength=max.label.length, strict=TRUE)
   print(z, digits=digits, ...)
   suppressed <- nrow(x) - nlines
   if (suppressed > 0L) cat("...", suppressed, "elements suppressed ...\n")
@@ -1095,7 +1097,7 @@ n_vars <- function(dc) dim(dc[[1L]])[2L]
 #' @param useFFT whether to use the Fast Fourier Transform algorithm. Default is \code{TRUE} as this is typically faster.
 #' @param lag.max the lag up to which autocorrelations are computed in case \code{useFFT=FALSE}.
 #' @param cl a cluster for parallel computation.
-#' @returns In case of \code{R_hat} the split-R-hat convergence diagnostic for each
+#' @returns In case of \code{R_hat} the split R-hat convergence diagnostic for each
 #'  component of the vector parameter, and in case of \code{n_eff} the effective
 #'  number of independent samples for each component of the vector parameter.
 #' @references
@@ -1115,23 +1117,31 @@ NULL
 R_hat <- function(dc) {
   n.var <- n_vars(dc)
   n.draw <- n_draws(dc)
-  if (n.draw < 1L) stop("no draws in simulation object")
   n.chain <- n_chains(dc)
-  if (n.chain < 2L) stop("at least 2 chains required for R_hat diagnostic")
-  split <- n.draw %/% 2L  # split in two halves
-  part1 <- seq_len(split)
-  part2 <- (split + 1L):n.draw
-  split_chain_means <- split_chain_vars <- matrix(NA_real_, 2L * n.chain, n.var)
-  for (i in seq_len(n.chain)) {
-    split_chain_means[i,] <- .colMeans(dc[[i]][part1, ,drop=FALSE], split, n.var)
-    split_chain_vars[i,] <- colVars(dc[[i]][part1, ,drop=FALSE])
-    split_chain_means[n.chain + i,] <- .colMeans(dc[[i]][part2, ,drop=FALSE], length(part2), n.var)
-    split_chain_vars[n.chain + i,] <- colVars(dc[[i]][part2, ,drop=FALSE])
+  if (n.draw < 4L) {
+    # too short to use split-R-hat
+    if (n.draw < 1L) stop("no draws in simulation object")
+    if (n.chain < 2L) stop("at least 4 draws or 2 chains required for split R-hat diagnostic")
+    chain.means <- chain.vars <- matrix(NA_real_, n.chain, n.var)
+    for (i in seq_len(n.chain)) {
+      chain.means[i,] <- fmean.matrix(dc[[i]], na.rm=FALSE)
+      chain.vars[i,] <- fvar.matrix(dc[[i]], na.rm=FALSE)
+    }
+  } else {
+    split <- n.draw %/% 2L  # split in two halves
+    part1 <- seq_len(split)
+    part2 <- (split + 1L):n.draw
+    chain.means <- chain.vars <- matrix(NA_real_, 2L * n.chain, n.var)
+    for (i in seq_len(n.chain)) {
+      chain.means[i,] <- fmean.matrix(dc[[i]][part1, ,drop=FALSE], na.rm=FALSE)
+      chain.vars[i,] <- fvar.matrix(dc[[i]][part1, ,drop=FALSE], na.rm=FALSE)
+      chain.means[n.chain + i,] <- fmean.matrix(dc[[i]][part2, ,drop=FALSE], na.rm=FALSE)
+      chain.vars[n.chain + i,] <- fvar.matrix(dc[[i]][part2, ,drop=FALSE], na.rm=FALSE)
+    }
   }
-  var_between <- split * colVars(split_chain_means)
-  var_within <- .colMeans(split_chain_vars, 2L * n.chain, n.var)
-  # need to set names as colVars drops them
-  setNames(sqrt((var_between / var_within + split - 1) / split), labels.dc(dc))
+  var.between <- fvar.matrix(chain.means, na.rm=FALSE)
+  var.within <- fmean.matrix(chain.vars, na.rm=FALSE)
+  setNames(sqrt(var.between/var.within + if (n.draw < 4L) (n.draw-1)/n.draw else (split-1)/split), labels.dc(dc))
 }
 
 #' @export
@@ -1161,9 +1171,10 @@ n_eff <- function(dc, useFFT=TRUE, lag.max, cl=NULL) {
       if (useFFT) {
         acov <- acov + ac_fft(dc[[ch]])
       } else {
-        acov <- acov + apply(dc[[ch]], 2L, function(x) {
-          acf(x, lag.max=lag.max, plot=FALSE, type="covariance")$acf[, , 1L]
-        })
+        acov <- acov + dapply(dc[[ch]],
+          \(x) acf(x, lag.max=lag.max, plot=FALSE, type="covariance")$acf[, , 1L],
+          MARGIN=2L
+        )
       }
     }
     acov
@@ -1172,17 +1183,17 @@ n_eff <- function(dc, useFFT=TRUE, lag.max, cl=NULL) {
     acov <- compute_acov_sum(dc) / n.chain
   else
     acov <- Reduce(`+`, parallel::parLapply(cl, split_chains(dc, length(cl)), compute_acov_sum)) / n.chain
-  chain_means <- vapply(dc, .colMeans, numeric(n.var), n.draw, n.var)  # n.var x n.chain matrix
-  if (n.var == 1L) chain_means <- matrix(chain_means, ncol=n.chain)
-  var_plus <- acov[1L, ]
-  mean_var <- var_plus * n.draw / (n.draw - 1L)
-  if (n.chain > 1L) var_plus <- var_plus + rowVars(chain_means)
-  rho_hat <- 1 - (mean_var - t.default(acov[-1L, , drop=FALSE])) / var_plus
-  rho_hat[is.nan(rho_hat)] <- 0
+  chain.means <- vapply(dc, fmean.matrix, numeric(n.var), na.rm=FALSE)  # n.var x n.chain matrix
+  if (n.var == 1L) chain.means <- matrix(chain.means, ncol=n.chain)
+  var.plus <- acov[1L, ]
+  mean.var <- var.plus * n.draw / (n.draw - 1L)
+  if (n.chain > 1L) var.plus <- var.plus + rowVarsC(chain.means)
+  rho.hat <- 1 - (mean.var - t.default(acov[-1L, , drop=FALSE])) / var.plus
+  rho.hat[is.nan(rho.hat)] <- 0
   # TODO check criterion until what lag to sum correlations (BDA3, or Geyer)
-  rho_hat_sum <- apply(rho_hat, 1L, function(x) sum(x * !cumsum(x < 0)))
+  rho.hat.sum <- dapply(rho.hat, \(x) sum(x * !cumsum(x < 0)), MARGIN=1L)
   ess <- n.chain * n.draw
-  ess <- ess / (1 + 2 * rho_hat_sum)
+  ess <- ess / (1 + 2 * rho.hat.sum)
   ess
 }
 
@@ -1196,9 +1207,9 @@ n_eff <- function(dc, useFFT=TRUE, lag.max, cl=NULL) {
 # TODO check whether zero-padding to (approx.) a power of 2 is possible (should be faster); use nextn()?
 ac_fft <- function(x, demean=TRUE) {
   nr <- nrow(x)
-  if (demean) x <- x - rep_each(.colMeans(x, nr, ncol(x)), nr)
-  Fx <- mvfft(rbind(x, 0*x)) / sqrt(2*nr)  # zero-pad and FFT
-  Re(mvfft(Fx * Conj(Fx), inverse=TRUE))[seq_len(nr), , drop=FALSE] / nr
+  if (demean) x <- x - rep_each(fmean.matrix(x, na.rm=FALSE), nr)
+  Fx <- mvfft(rbind(sqrt(0.5/nr) * x, 0*x))  # zero-pad and FFT
+  Re(mvfft(Fx * Conj(Fx), inverse=TRUE))[seq_len(nr), , drop=FALSE] * (1/nr)
 }
 
 #' Return Metropolis-Hastings acceptance rates
@@ -1206,10 +1217,11 @@ ac_fft <- function(x, demean=TRUE) {
 #' @examples
 #' \donttest{
 #' ex <- mcmcsae_example()
-#' # specify a model that requires MH sampling (in this case for a modeled
+#' # specify a model that requires MH sampling (in this case for a modelled
 #' #   degrees of freedom parameter in the variance part of the model)
-#' sampler <- create_sampler(ex$model, data=ex$dat, formula.V=~vfac(factor="fA",
-#'   prior=pr_invchisq(df="modeled")))
+#' sampler <- create_sampler(ex$model, data=ex$dat,
+#'   family = f_gaussian(var.model = ~vfac(factor="fA", prior=pr_invchisq(df="modeled")))
+#' )
 #' sim <- MCMCsim(sampler, burnin=100, n.iter=300, thin=2, n.chain=4, store.all=TRUE)
 #' (summary(sim))
 #' acceptance_rates(sim)
@@ -1221,7 +1233,7 @@ ac_fft <- function(x, demean=TRUE) {
 #' @returns A list of acceptance rates.
 acceptance_rates <- function(obj, aggregate.chains=FALSE) {
   if (aggregate.chains)
-    lapply(obj[["_accept"]], function(x) Reduce("+", x)/length(x))
+    lapply(obj[["_accept"]], \(x) Reduce("+", x)/length(x))
   else 
     obj[["_accept"]]
 }
@@ -1265,7 +1277,7 @@ get_means <- function(obj, vnames=NULL) {
   if (is.null(vnames)) vnames <- par_names(obj)
   vnames <- vnames[!(vnames %in% names(out)) & vnames %in% par_names(obj)]
   ni <- n_draws(obj)  # draws per chain
-  c(out, lapply(obj[vnames], function(x) Reduce(`+`, lapply(x, function(ch) .colMeans(ch, ni, ncol(ch)))) / nc))
+  c(out, lapply(obj[vnames], \(x) Reduce(`+`, lapply(x, \(ch) fmean.matrix(ch, na.rm=FALSE))) / nc))
 }
 
 #' @export
@@ -1283,7 +1295,7 @@ get_sds <- function(obj, vnames=NULL) {
   # append posterior sds of draws components
   if (is.null(vnames)) vnames <- par_names(obj)
   vnames <- vnames[!(vnames %in% names(out)) & vnames %in% par_names(obj)]
-  c(out, lapply(obj[vnames], function(x) unname(colSds(as.matrix.dc(x, colnames=FALSE)))))
+  c(out, lapply(obj[vnames], \(x) unname(fsd.matrix(as.matrix.dc(x, colnames=FALSE), na.rm=FALSE))))
 }
 
 #' Extract a list of parameter values for a single draw
@@ -1339,7 +1351,7 @@ transform_dc <- function(..., fun, to.matrix=FALSE, labels=NULL) {
   fun <- match.fun(fun)
   if (length(formals(args(fun))) != nobj) stop("'fun' must have as many arguments as there are input objects")
   # TODO check that all objs have same number of chains, draws
-  test <- do.call(fun, lapply(objs, function(x) x[[1L]][1L, ]))
+  test <- do.call(fun, lapply(objs, \(x) x[[1L]][1L, ]))
   if (!is.vector(test)) stop("'fun' should return a vector")
   no <- length(test)
   if (!is.null(labels) && length(labels) != no) stop("length of 'labels' does not match dimension of 'fun'")
@@ -1351,14 +1363,14 @@ transform_dc <- function(..., fun, to.matrix=FALSE, labels=NULL) {
     k <- 1L
     for (ch in seq_len(nc))
       for (i in seq_len(ni)) {
-        out[k, ] <- do.call(fun, lapply(objs, function(x) x[[ch]][i, ]))
+        out[k, ] <- do.call(fun, lapply(objs, \(x) x[[ch]][i, ]))
         k <- k + 1L
       }
   } else {
     out <- list()
     for (ch in seq_len(nc)) {
       out[[ch]] <- matrix(NA_real_, ni, no)
-      for (i in seq_len(ni)) out[[ch]][i, ] <- do.call(fun, lapply(objs, function(x) x[[ch]][i, ]))
+      for (i in seq_len(ni)) out[[ch]][i, ] <- do.call(fun, lapply(objs, \(x) x[[ch]][i, ]))
     }
     if (!is.null(labels)) attr(out, "labels") <- labels
     class(out) <- "dc"

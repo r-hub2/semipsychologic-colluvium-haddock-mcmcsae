@@ -8,8 +8,8 @@ intercept_only <- function(formula) {
   #isTRUE(all.equal(formula, ~ 1))
 }
 
-# if data is a scalar integer it is interpreted as sample size
-n_row <- function(data) if (is.integer(data) && length(data) == 1L) data else nrow(data)
+# if data is a (scalar) integer it is interpreted as sample size
+n_row <- function(data) if (is.integer(data)) data else nrow(data)
 
 # set up binary file for writing and write header
 write_header <- function(con, n.iter, n.chain, n.par, parnames=NULL, single.prec=FALSE) {
@@ -66,16 +66,16 @@ mcmcsae_example <- function(n=100L, family="gaussian") {
   nT <- max(3L, as.integer(sqrt(n)))
   dat <- data.frame(
     x=rnorm(n),
-    fA=factor(sample(seq_len(nA), n, replace=TRUE)),
-    fT=factor(sample(seq_len(nT), n, replace=TRUE))
+    fA=qF(sample.int(nA, n, replace=TRUE)),
+    fT=qF(sample.int(nT, n, replace=TRUE))
   )
   # fake data simulation
   model <- ~ reg(~x, prior=pr_normal(precision=1), name="beta") +
              gen(formula=~x, factor=~fA, name="v") +
              gen(factor=~RW2(fT), name="u")
   gd <- generate_data(model, data=dat, family=family)
-  dat$y <- gd$y
-  list(dat=dat, pars=gd$pars, model=update.formula(model, y ~ .), family=family)
+  dat$y <- gd[["y"]]
+  list(dat=dat, pars=gd[["pars"]], model=update.formula(model, y ~ .), family=family)
 }
 
 # extend a function by appending a line to its body
@@ -91,7 +91,7 @@ add <- function(f, expr) {
 #' @param names character vector of labels of the categories of an interaction term.
 #' @returns Names with each component alphabetically ordered by factor label separated by ':'.
 order_interactions <- function(names)
-  s_apply(strsplit(names, ":", fixed=TRUE), function(s) paste0(sort.int(s), collapse=":"))
+  s_apply(strsplit(names, ":", fixed=TRUE), \(s) paste0(sort.int(s), collapse=":"))
 
 warn <- function(..., immediate. = TRUE) warning(..., call. = FALSE, immediate. = immediate.)
 
@@ -102,7 +102,9 @@ copy_objects <- function(from, to, names=ls(from, all.names=TRUE)) {
   invisible(NULL)
 }
 
+is_integer_scalar <- function(x) is.integer(x) && length(x) == 1L
 is_numeric_scalar <- function(x) any(typeof(x) == c("integer", "double")) && length(x) == 1L
+is_character_scalar <- function(x) is.character(x) && length(x) == 1L
 
 unlst <- function(x, recursive=TRUE) unlist(x, recursive, FALSE)
 

@@ -7,7 +7,7 @@
 #' @param sd scalar standard deviation factor passed to \code{rnorm}.
 #' @returns A draw from the multivariate normal distribution N(Q^{-1} xy, sd^2 Q^{-1}).
 drawMVN_cholQ <- function(ch, xy=NULL, sd=1) {
-  z <- Crnorm(ch$size, sd=sd)  # NB sd must be scalar in Crnorm
+  z <- Crnorm(ch[["size"]], sd=sd)  # NB sd must be scalar in Crnorm
   if (is.null(xy))
     ch$solve(z, system="Lt")
   else  # draw from multivariate normal N(Q^-1 xy, sd^2 Q^-1)
@@ -64,7 +64,7 @@ binomial_coef <- function(n, y, log=TRUE) {
 #' Compute binomial coefficients for negative binomial distribution
 #' 
 #' @noRd
-#' @param r vector of dispersion parameters.
+#' @param r vector of dispersion shape parameters.
 #' @param y vector of numbers of successes.
 #' @param log whether to compute the log binomial coefficient (default).
 #' @returns Vector of negative binomial coefficients 'y+r-1 over y'.

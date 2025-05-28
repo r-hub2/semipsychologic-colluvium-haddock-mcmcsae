@@ -10,7 +10,7 @@ create_sampler(
   family = "gaussian",
   ny = NULL,
   ry = NULL,
-  r.mod,
+  r.mod = NULL,
   sigma.fixed = NULL,
   sigma.mod = NULL,
   Q0 = NULL,
@@ -37,62 +37,60 @@ treated in the same way as a \code{reg(...)} term, but without the option to cha
 
 \item{family}{character string describing the data distribution. The default is 'gaussian'.
 Other options are 'binomial', 'multinomial', 'negbinomial' for the negative binomial distribution,
-'poisson', and 'gamma'. See \link{mcmcsae-family} for the related functions
-that can be used to specify \code{family} and associated parameters and controls.
-For the binomial distribution logistic and probit link functions are supported, the latter only
-for binary data. For the negative binomial, Poisson and gamma sampling distributions
-a log link function is assumed.
-For categorical or multinomial data, \code{family = "multinomial"} can be used. The implementation
-is based on a stick-breaking representation of the multinomial distribution, and the logistic link
-function relates each category except the last to a linear predictor. The categories can be
-referenced in the model specification formula by 'cat_'.}
+'poisson', and 'gamma'. Alternatively, functions starting with 'f_' followed
+by the family name can be used to specify the sampling distribution and possibly
+further options. See \code{\link{f_gaussian}}, \code{\link{f_binomial}},
+\code{\link{f_multinomial}}, \code{\link{f_negbinomial}}, \code{\link{f_poisson}},
+\code{\link{f_gamma}} and \code{\link{f_gaussian_gamma}}.
+For categorical or multinomial data, use \code{family="multinomial"} or \code{family=f_multinomial()}
+where the second form allows to additionally specify the number of trials (if not equal to 1).
+A stick-breaking representation of the multinomial distribution is used for model fitting,
+and the logistic link function relates each category except the last to a linear predictor.
+The categories can be referenced in the model specification formula by 'cat_'.}
 
-\item{ny}{in case \code{family="binomial"} the (vector of) numbers of trials.
-It can be either a numeric vector or the name of a variable in \code{data}.
-Defaults to a vector of 1s.}
+\item{ny}{NO LONGER USED. Please use \code{\link{f_binomial}} to specify the numbers of trials.}
 
-\item{ry}{in case \code{family="negbinomial"} the known, i.e. fixed part of the (reciprocal)
-dispersion parameter. It can be specified either as a numeric vector or the name of a
-numeric variable in \code{data}. The overall dispersion parameter is the product of \code{ry}
-with a positive scalar factor modelled as specified by argument \code{r.mod}. By default
-\code{ry} is taken to be 1.}
+\item{ry}{NO LONGER USED. Please use \code{\link{f_negbinomial}} to specify
+further options for the negative binomial sampling distribution.}
 
-\item{r.mod}{prior specification for a scalar (reciprocal) dispersion parameter
-of the negative binomial distribution. The prior can be specified by a call to a prior
-specification function. Currently \code{\link{pr_invchisq}}, \code{\link{pr_gig}} and
-\code{\link{pr_fixed}} are supported. The default is a chi-squared prior with 1 degree
-of freedom. To set the overall dispersion parameter to the value(s) specified by \code{ry},
-use \code{r.mod = pr_fixed(value=1)}.}
+\item{r.mod}{NO LONGER USED. Please use \code{\link{f_negbinomial}} to specify
+further options for the negative binomial sampling distribution.}
 
 \item{sigma.fixed}{for Gaussian models, if \code{TRUE} the residual standard deviation parameter 'sigma_' is fixed at 1. In that case
 argument \code{sigma.mod} is ignored. This is convenient for Fay-Herriot type models with (sampling) variances assumed to be known.
-Default is \code{FALSE}.}
+Default is \code{FALSE}. DEPRECATED, please use \code{\link{f_gaussian}} to specify
+variance options. In particular, a fixed scalar variance parameter with value 1 can be
+specified with \code{var.prior=pr_fixed(value=1)}.}
 
 \item{sigma.mod}{prior for the variance parameter of a gaussian sampling distribution.
 This can be specified by a call to one of the prior specification functions
 \code{\link{pr_invchisq}}, \code{\link{pr_exp}}, \code{\link{pr_gig}} or \code{\link{pr_fixed}} for
-inverse chi-squared, exponential, generalized inverse gaussian or degenerate prior distribution,
+inverse chi-squared, exponential, generalised inverse gaussian or degenerate prior distribution,
 respectively. The default is an improper prior \code{pr_invchisq(df=0, scale=1)}. A half-t prior on the
 standard deviation can be specified using \code{\link{pr_invchisq}} with a chi-squared distributed scale
-parameter.}
+parameter. DEPRECATED, please use \code{\link{f_gaussian}} to specify variance options.
+In particular, to change the default prior for the scalar variance parameter use argument \code{var.prior}.}
 
 \item{Q0}{n x n data-level precision matrix for a Gaussian model. It defaults to the unit matrix.
 If an n-vector is provided it will be expanded to a (sparse) diagonal matrix with Q0 on its diagonal.
-If a name is supplied it will be looked up in \code{data} and subsequently expanded to a diagonal matrix.}
+If a name is supplied it will be looked up in \code{data} and subsequently expanded to a diagonal matrix.
+DEPRECATED, please use \code{\link{f_gaussian}}, in particular its \code{precision} argument,
+to specify unequal variances, or a non-diagonal precision matrix.}
 
 \item{formula.V}{a formula specifying the terms of a variance model in the case of a Gaussian likelihood.
 Currently two types of terms are supported: a regression term for the log-variance
-specified with \code{\link{vreg}(...)}, and a term \code{\link{vfac}(...)} for multiplicative modeled factors
+specified with \code{\link{vreg}(...)}, and a term \code{\link{vfac}(...)} for multiplicative modelled factors
 at a certain level specified by a factor variable. By using unit-level inverse-chi-squared factors the marginal
 sampling distribution becomes a Student-t distribution, and by using unit-level exponential factors it becomes
-a Laplace or double exponential distribution.}
+a Laplace or double exponential distribution. DEPRECATED, please use \code{\link{f_gaussian}},
+in particular its \code{var.model} argument, to specify a variance model.}
 
 \item{logJacobian}{if the data are transformed the logarithm of the Jacobian can be supplied so that it
 is incorporated in all log-likelihood computations. This can be useful for comparing information criteria
 for different transformations. It should be supplied as a vector of the same size as the response variable,
 and is currently only supported if \code{family="gaussian"}.
 For example, when a log-transformation is used on response vector \code{y}, the vector \code{-log(y)}
-should be supplied.}
+should be supplied. DEPRECATED, this argument has moved to \code{\link{f_gaussian}}.}
 
 \item{linpred}{a list of matrices defining (possibly out-of-sample) linear predictors to be simulated.
 This allows inference on e.g. (sub)population totals or means. The list must be of the form
@@ -141,8 +139,8 @@ for a Bayesian additive regression trees component. Note that an offset can be a
 separately, in the usual way using \code{\link{offset}(...)}.
 
 For gaussian models, \code{formula.V} can be used to specify the variance structure of the model.
-Currently two specialized variance model components are supported, \code{\link{vreg}(...)} for regression
-effects predicting the log-variance and \code{\link{vfac}(...)} for modeled variance factors.
+Currently two specialised variance model components are supported, \code{\link{vreg}(...)} for regression
+effects predicting the log-variance and \code{\link{vfac}(...)} for modelled variance factors.
 }
 \examples{
 # first generate some data
@@ -174,9 +172,9 @@ J.H. Albert and S. Chib (1993).
    Dependent multinomial models made easy: Stick-breaking with the Polya-Gamma augmentation.
    Advances in Neural Information Processing Systems, 3456-3464.
 
- P.A. Parker, S.H. Holan and R. Janicki (2023).
+ P.A. Parker, S.H. Holan and R. Janicki (2024).
    Conjugate Modeling Approaches for Small Area Estimation with Heteroscedastic Structure.
-   Journal of Survey Statistics and Methodology, smad002.
+   Journal of Survey Statistics and Methodology 12(4), 1061-1080.
 
  N. Polson, J.G. Scott and J. Windle (2013).
    Bayesian Inference for Logistic Models Using Polya-Gamma Latent Variables.
@@ -185,8 +183,4 @@ J.H. Albert and S. Chib (1993).
  H. Rue and L. Held (2005).
    Gaussian Markov Random Fields.
    Chapman & Hall/CRC.
-
- M. Zhou and L. Carin (2015).
-   Negative Binomial Process Count and Mixture Modeling.
-   IEEE Transactions on Pattern Analysis and Machine Intelligence 37(2), 307-320.
 }

@@ -6,6 +6,8 @@
 \usage{
 sampler_control(
   add.outer.R = TRUE,
+  add.eps.I = FALSE,
+  eps = sqrt(.Machine$double.eps),
   recompute.e = TRUE,
   expanded.cMVN.sampler = FALSE,
   CG = NULL,
@@ -15,23 +17,37 @@ sampler_control(
   chol.control = chol_control(),
   max.size.cps.template = 100,
   PG.approx = TRUE,
-  PG.approx.m = -2L,
-  CRT.approx.m = 20L
+  PG.approx.m = -2L
 )
 }
 \arguments{
-\item{add.outer.R}{whether to add the outer product of a constraint matrix for a better conditioned 
-linear system of equations, typically for coefficients sampled in a Gibbs-block. Default is \code{TRUE}.
-If \code{NULL}, a simple heuristic is used to decide whether to add the outer product
-of possibly a submatrix of the constraint matrix.}
+\item{add.outer.R}{whether to add the outer product of a constraint matrix to the
+conditional posterior precision matrix of coefficients sampled in a block. This is used
+to resolve singularity due to intrinsic GMRF components.
+By default, \code{add.outer.R=NULL}, a simple heuristic is used to decide whether
+to add the outer product of possibly a submatrix of the constraint matrix.}
+
+\item{add.eps.I}{whether to add a small positive multiple of the identity matrix
+to the conditional posterior precision matrix of coefficients sampled in a block.
+If needed, this can resolve singularity as an alternative to \code{add.outer.R=TRUE}.
+The advantage of \code{add.eps.I=TRUE} is that a sparse conditional posterior precision
+matrix remains sparse so that sampling is faster, at the cost of slightly deviating
+from the target posterior distribution, depending on the value of \code{eps}.
+If \code{add.eps.I=TRUE} \code{add.outer.R} will be set to FALSE.}
+
+\item{eps}{a positive scalar value, used only in case \code{add.eps.I=TRUE}. This
+should be a small value to ensure that one is not deviating too much from the
+desired posterior distribution of coefficients sampled in a block. On the other
+hand, if it is chosen too small it may not resolve the singularity of the conditional
+posterior precision matrix of coefficients sampled in a block.}
 
 \item{recompute.e}{when \code{FALSE}, residuals or linear predictors are only computed at the start of the simulation.
-This may give a modest speedup but in some cases may be less accurate due to round-off error accumulation.
+This may give a modest speed-up but in some cases may be less accurate due to round-off error accumulation.
 Default is \code{TRUE}.}
 
 \item{expanded.cMVN.sampler}{whether an expanded linear system including dual variables is used
 for equality constrained multivariate normal sampling. If set to \code{TRUE} this may
-improve the performance of the blocked Gibbs sampler in case of a large number of equality
+improve the performance of the blocked Gibbs sampler, especially in case of a large number of equality
 constraints, typically GMRF identifiability constraints.}
 
 \item{CG}{use a conjugate gradient iterative algorithm instead of Cholesky updates for sampling
@@ -41,8 +57,10 @@ See the help for function \code{\link{CG_control}}, which can be used to specify
 Conjugate gradient sampling is currently an experimental feature that can be used for
 blocked Gibbs sampling but with some limitations.}
 
-\item{block}{if \code{TRUE}, the default, all coefficients are sampled in a single block. Alternatively, a list of
-character vectors with names of model components whose coefficients should be sampled together in blocks.}
+\item{block}{if \code{TRUE}, the default, all coefficients are sampled in a single Gibbs block.
+If \code{FALSE}, the coefficients of each model component are sampled separately in sequence.
+Alternatively, a list of character vectors with names of model components can be passed to
+specify a grouping of model components whose coefficients should be sampled together in blocks.}
 
 \item{block.V}{if \code{TRUE}, the default, all coefficients of \code{reg} and \code{gen} components
 in a variance model formula are sampled in a single block. Alternatively, a list of
@@ -68,10 +86,6 @@ convolution is approximated by a single moment-matching gamma draw. Special valu
 \code{-2L} for a default choice depending on the value of the shape parameter
 balancing performance and accuracy, \code{-1L} for a moment-matching normal approximation,
 and \code{0L} for a moment-matching gamma approximation.}
-
-\item{CRT.approx.m}{scalar integer specifying the degree of approximation to sampling
-from a Chinese Restaurant Table distribution. The approximation is based on Le Cam's theorem.
-Larger values yield a slower but more accurate sampler.}
 }
 \value{
 A list with specified computational options used by various sampling functions.
@@ -83,7 +97,7 @@ Set computational options for the sampling algorithms
 D. Bates, M. Maechler, B. Bolker and S.C. Walker (2015).
    Fitting Linear Mixed-Effects Models Using lme4.
    Journal of Statistical Software 67(1), 1-48.
-   
+
  Y. Chen, T.A. Davis, W.W. Hager and S. Rajamanickam (2008).
    Algorithm 887: CHOLMOD, supernodal sparse Cholesky factorization and update/downdate.
    ACM Transactions on Mathematical Software 35(3), 1-14.

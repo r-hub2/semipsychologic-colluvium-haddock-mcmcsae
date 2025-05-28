@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{pr_gig}
 \alias{pr_gig}
-\title{Create an object representing Generalized Inverse Gaussian (GIG) prior distributions}
+\title{Create an object representing Generalised Inverse Gaussian (GIG) prior distributions}
 \usage{
 pr_gig(a, b, p)
 }
@@ -17,5 +17,5 @@ pr_gig(a, b, p)
 An environment representing the specified prior, for internal use.
 }
 \description{
-Create an object representing Generalized Inverse Gaussian (GIG) prior distributions
+Create an object representing Generalised Inverse Gaussian (GIG) prior distributions
 }

@@ -43,7 +43,7 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
   if (is.null(data)) {
     trms <- terms(formula)
     if (!NROW(attr(trms, "factors"))) stop("cannot determine the sample size")
-    n <- NROW(eval_in(rownames(attr(trms, "factors"))[1L], data, enclos))
+    n <- NROW(eval_in(dimnames(attr(trms, "factors"))[[1L]][1L], data, enclos))
   } else if (is.integer(data) && length(data) == 1L) {
     # data is interpreted as sample size
     trms <- terms(formula)
@@ -76,8 +76,8 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
         return(matrix(0, nrow=if (is.null(by)) n else ncol(by), ncol=0L))
     }
   }
-  tnames <- colnames(tmat)
-  vnames <- rownames(tmat)
+  tnames <- dimnames(tmat)[[2L]]
+  vnames <- dimnames(tmat)[[1L]]
   # 1. analyse
   # which variables are quantitative
   qvar <- !catvars(trms, data)
@@ -103,8 +103,9 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
         else
           stop("variable '", v, "' has different size ", NROW(qv))
       }
-      if (anyNA(qv)) stop("missing(s) in variable ", v)
-      if (is.matrix(qv) || inherits(qv, "data.frame")) nc <- nc * ncol(qv)
+      if (inherits(qv, "data.frame")) qv <- as.matrix(qv)
+      if (!all(is.finite(qv))) stop("total of ", sum(!is.finite(qv)), " NA/NaN/Inf in variable ", v)
+      if (is.matrix(qv)) nc <- nc * ncol(qv)
     }
     qd <- qd + nc
     rmlevs <- NULL
@@ -112,7 +113,11 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
     for (v in setdiff(vnames[tmat[, k] > 0L], qvar)) {
       fac <- eval_in(v, data, enclos)
       if (length(fac) != n) stop("variable '", v, "' has different length ", length(fac))
-      if (!is.factor(fac) || drop.unused.levels) fac <- factor(fac)
+      if (is.factor(fac)) {
+        if (drop.unused.levels) fac <- fdroplevels(fac)
+      } else {
+        fac <- qF(fac)
+      }
       if (anyNA(fac)) stop("missing(s) in variable ", v)
       levs <- attr(fac, "levels")
       ncat <- length(levs)
@@ -189,14 +194,14 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
       xk <- eval_in(countvars[1L], data, enclos)
       if (inherits(xk, "data.frame")) xk <- as.matrix(xk)
       if (is.matrix(xk))
-        labk <- paste(countvars[1L], if (is.null(colnames(xk))) seq_len(ncol(xk)) else colnames(xk), sep=catsep)
+        labk <- paste(countvars[1L], if (is.null(dimnames(xk)[[2L]])) seq_len(ncol(xk)) else dimnames(xk)[[2L]], sep=catsep)
       else
         labk <- countvars[1L]
       for (v in countvars[-1L]) {
         temp <- eval_in(v, data, enclos)
         if (is.matrix(temp)) {
           xk <- t(KhatriRao(t(xk), t(temp)))
-          labk <- outer(labk, paste(v, colnames(xk), sep=catsep), paste, sep=":")
+          labk <- outer(labk, paste(v, dimnames(xk)[[2L]], sep=catsep), paste, sep=":")
         } else {
           xk <- xk * temp
           labk <- paste(labk, v, sep=":")
@@ -215,10 +220,10 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
         fk <- fac2tabM(facvars, data, enclos, drop.unused.levels=drop.unused.levels, contrasts=contr.list[[tnames[k]]], catsep=catsep)
       }
       if (is.matrix(xk)) {
-        lab[col:(col + ncol(fk)*ncol(xk) - 1L)] <- outer(colnames(fk), labk, paste, sep=":")
+        lab[col:(col + ncol(fk)*ncol(xk) - 1L)] <- outer(dimnames(fk)[[2L]], labk, paste, sep=":")
         fk <- t(KhatriRao(t(xk), t(fk)))  # col-index of fk runs fastest
       } else {
-        lab[col:(col + ncol(fk) - 1L)] <- paste0(labk, if (!is.null(labk)) ":" else "", colnames(fk))
+        lab[col:(col + ncol(fk) - 1L)] <- paste0(labk, if (!is.null(labk)) ":" else "", dimnames(fk)[[2L]])
       }
       if (!is.null(by)) {
         fk <- crossprod(Maggr, fk)
@@ -291,7 +296,7 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
 #   the model terms object whether it is categorical
 catvars <- function(trms, data) {
   enclos <- environment(trms)
-  vnames <- rownames(terms_matrix(trms))
+  vnames <- dimnames(terms_matrix(trms))[[1L]]
   vapply(vnames, function(x) {
       temp <- eval_in(x, data, enclos)
       is.factor(temp) || is.character(temp)
@@ -303,7 +308,7 @@ catvars <- function(trms, data) {
 terms_matrix <- function(trms) {
   tmat <- attr(trms, "factor")
   if (attr(trms, "response")) {
-    w <- which(rowSums(tmat) == 0)
+    w <- whichv(rowSums(tmat), 0)
     if (length(w)) tmat <- tmat[-w, , drop=FALSE]
   }
   tmat

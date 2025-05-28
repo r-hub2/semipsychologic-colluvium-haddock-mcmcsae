@@ -76,3 +76,31 @@ test_that("Cholesky for dsCMatrix works", {
   expect_equal(ch$solve(y1, system="L"), array(solve(cholM, solve(cholM, y1, system="P"), system="L")@x, dim(y1)))
   expect_equal(ch$solve(y2, system="L"), solve(cholM, solve(cholM, y2, system="P"), system="L"))
 })
+
+test_that("Determinants are computed correctly", {
+  n <- 30
+  M <- Diagonal(x=runif(n, 0.1, 1))
+  ch <- build_chol(M)
+  expect_equal(ch$logdet(), 0.5*c(determinant(M, logarithm = TRUE)$modulus))
+  M <- as.matrix(crossprod(matrix(rnorm(n^2), n, n)) + 10*CdiagU(n))
+  ch <- build_chol(M)
+  expect_equal(ch$logdet(), 0.5*c(determinant(M, logarithm = TRUE)$modulus))
+  M <- rsparsematrix(n, n, 0.1, symmetric=TRUE) + 10*Diagonal(n)
+  ch <- build_chol(M)
+  expect_equal(ch$logdet(), 0.5*c(determinant(M, logarithm = TRUE)$modulus))
+  # determinant templates
+  n <- 999  # for n < 1000 an approach based on eigen decomposition is used
+  QA <- Q_RW1(n)
+  Q <- 0.5 * QA + 0.5 * CdiagU(n)
+  detchol <- make_det(Q)
+  L <- runif(1L)
+  w1 <- 2*L; w2 <- 1 - 2*L
+  expect_equal(detchol(w1, w2), c(determinant(L * Q_RW1(n) + (1 - L) * CdiagU(n), logarithm=TRUE)$modulus))
+  n <- 1001  # for n > 1000 (sparse) Cholesky updates are used
+  QA <- Q_RW1(n)
+  Q <- 0.5 * QA + 0.5 * CdiagU(n)
+  detchol <- make_det(Q)
+  L <- runif(1L)
+  w1 <- 2*L; w2 <- 1 - 2*L
+  expect_equal(detchol(w1, w2), c(determinant(L * Q_RW1(n) + (1 - L) * CdiagU(n), logarithm=TRUE)$modulus))
+})

@@ -46,7 +46,7 @@ as defined in package \pkg{posterior}.
 \donttest{
 data(iris)
 sampler <- create_sampler(Sepal.Length ~ reg(~ Petal.Length + Species, name="beta"), data=iris)
-sim <- MCMCsim(sampler, burnin=100, n.chain=2, n.iter=400)
+sim <- MCMCsim(sampler, burnin=100, n.chain=2, n.iter=300)
 summary(sim)
 if (require("coda", quietly=TRUE)) {
   mcbeta <- to_mcmc(sim$beta)
@@ -67,7 +67,7 @@ dat <- data.frame(x=runif(n), f=as.factor(sample(1:5, n, replace=TRUE)))
 gd <- generate_data(~ reg(~ x + f, prior=pr_normal(precision=1), name="beta"), data=dat)
 dat$y <- gd$y
 sampler <- create_sampler(y ~ reg(~ x + f, name="beta"), data=dat)
-sim <- MCMCsim(sampler, n.chain=2, n.iter=400)
+sim <- MCMCsim(sampler, n.chain=2, n.iter=300)
 str(sim$beta)
 str(as.array(sim$beta))
 bayesplot::mcmc_hist(as.array(sim$beta))
@@ -79,7 +79,7 @@ bayesplot::mcmc_recover_hist(as.array(sim$beta), gd$pars$beta)
 ex <- mcmcsae_example()
 plot(ex$dat$fT, ex$dat$y)
 sampler <- create_sampler(ex$model, data=ex$dat)
-sim <- MCMCsim(sampler, n.chain=2, n.iter=400, store.all=TRUE)
+sim <- MCMCsim(sampler, n.chain=2, n.iter=300, store.all=TRUE)
 str(sim$beta)
 str(as.matrix(sim$beta))
 # fake data simulation check:

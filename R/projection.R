@@ -56,9 +56,10 @@ create_projector <- function(cholQ=NULL, V=NULL, update.Q=FALSE, R) {
     }
   } else {
     # NB for large problems VR.RVRinv (often dense) might become too large
-    VR <- if (is.null(V)) cholQ$solve(R) else economizeMatrix(V %*% R, allow.tabMatrix=FALSE)
-    VR.RVRinv <- economizeMatrix(VR %*% solve(crossprod_sym2(R, VR)), drop.zeros=TRUE)
-    rm(VR)
+    VR.RVRinv <- local({
+      VR <- if (is.null(V)) cholQ$solve(R) else economizeMatrix(V %*% R, allow.tabMatrix=FALSE)
+      economizeMatrix(VR %*% solve(crossprod_sym2(R, VR)), drop.zeros=TRUE)
+    })
     project <- function(x, cholQ, r=NULL) {
       if (is.vector(x)) {
         if (is.null(r))
@@ -74,18 +75,18 @@ create_projector <- function(cholQ=NULL, V=NULL, update.Q=FALSE, R) {
 }
 
 
-eliminate_equalities <- function(R, r, Q, mu=NULL, keep.Q=FALSE, chol.control=chol_control()) {
+eliminate_equalities <- function(R, r=NULL, Q, mu=NULL, keep.Q=FALSE, chol.control=chol_control()) {
 
   QRofR <- qr(economizeMatrix(R, sparse=FALSE))  # check the rank
   # transformation z = Q'x where Q is the orthogonal Q matrix of QRofR
-  z1 <- solve(t(qr.R(QRofR, complete=FALSE)), r)  # first, fixed part of z
+  z1 <- if (is.null(r)) NULL else solve(t(qr.R(QRofR, complete=FALSE)), r)  # first, fixed part of z
   QofR <- economizeMatrix(qr.Q(QRofR, complete=TRUE))
   n1 <- ncol(R)  # nr of equality constraints, n1 >= 1
   n2 <- nrow(R) - n1
   if (n2 < 1L) stop("degenerate case: as many equality restrictions as variables")
   Q1 <- QofR[, seq_len(n1), drop=FALSE]
   Q2 <- QofR[, n1 + seq_len(n2), drop=FALSE]
-  zero.x0 <- is.null(mu) || all(mu == 0)
+  zero.x0 <- is.null(mu) || allv(mu, 0)
   if (!zero.x0) {
     mu_z1 <- crossprod_mv(Q1, mu)
     mu_z2 <- crossprod_mv(Q2, mu)
@@ -94,11 +95,14 @@ eliminate_equalities <- function(R, r, Q, mu=NULL, keep.Q=FALSE, chol.control=ch
   # NB cholQ will now refer to z2 subspace
   cholQ <- build_chol(crossprod_sym(Q2, Q), control=chol.control)  # chol factor L
   if (!zero.x0) {
-    mu_z2_given_z1 <- mu_z2 - cholQ$solve(crossprod_mv(Q2, (Q %m*v% (Q1 %m*v% (z1 - mu_z1)))))
-    # fixed part of x: backtransform mu_z2_given_z1
-    x0 <- Q1 %m*v% z1 + Q2 %m*v% mu_z2_given_z1
-    rm(mu_z1, mu_z2, mu_z2_given_z1)
-    zero.x0 <- all(x0 == 0)
+    if (is.null(z1)) {
+      x0 <- Q2 %m*v% (mu_z2 + cholQ$solve(crossprod_mv(Q2, (Q %m*v% (Q1 %m*v% mu_z1)))))
+    } else {
+      # fixed part of x: backtransform mu_z2_given_z1
+      Q1 %m*v% z1 + Q2 %m*v% (mu_z2 - cholQ$solve(crossprod_mv(Q2, (Q %m*v% (Q1 %m*v% (z1 - mu_z1))))))
+    }
+    rm(mu_z1, mu_z2)
+    zero.x0 <- allv(x0, 0)
     if (zero.x0) rm(x0)
   }
   if (keep.Q)
@@ -127,12 +131,9 @@ eliminate_equalities <- function(R, r, Q, mu=NULL, keep.Q=FALSE, chol.control=ch
     transform_restriction_rhs <- function(S, s) s
   } else {
     # NB here S is the untransformed restriction matrix
-    transform_restriction_rhs <- function(S, s) s - crossprod_mv(S, x0)
+    transform_restriction_rhs <- function(S, s) if (is.null(s)) -crossprod_mv(S, x0) else s - crossprod_mv(S, x0)
   }
-  transform_restriction_matrix <- function(S) {
-    economizeMatrix(crossprod(Q2, S), drop.zeros=TRUE, allow.tabMatrix=FALSE)
-  }
+  transform_restriction_matrix <- function(S) economizeMatrix(crossprod(Q2, S), drop.zeros=TRUE, allow.tabMatrix=FALSE)
 
   environment()
 }
-

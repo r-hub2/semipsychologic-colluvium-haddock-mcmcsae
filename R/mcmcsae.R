@@ -5,8 +5,8 @@
 #' Functions to fit multi-level models with Gaussian, binomial, multinomial,
 #' negative binomial or Poisson likelihoods using MCMC. Models with a linear predictor
 #' consisting of various possibly correlated random effects are supported, allowing
-#' flexible modeling of temporal, spatial or other kinds of dependence structures.
-#' For Gaussian models the variance can be modeled too. By modeling variances
+#' flexible modelling of temporal, spatial or other kinds of dependence structures.
+#' For Gaussian models the variance can be modelled too. By modelling variances
 #' at the unit level the marginal distribution can be changed to a Student-t or Laplace
 #' distribution, which may account better for outliers.
 #' The package has been developed with applications to small area estimation
@@ -25,10 +25,9 @@ NULL
 NULL
 
 # other namespace imports
-# .m2sparse
-#' @importFrom Matrix .updateCHMfactor bandSparse bdiag coerce
-#'  diag Diagonal drop0 forceSymmetric invPerm isDiagonal KhatriRao Matrix
-#'  nnzero rsparsematrix sparseMatrix
+#' @importFrom Matrix .m2sparse .updateCHMfactor bandSparse bdiag coerce
+#'  diag Diagonal drop0 expand1 forceSymmetric invertPerm isDiagonal KhatriRao
+#'  Matrix nnzero rsparsematrix sparseMatrix
 #' @importClassesFrom Matrix CHMfactor dCHMsimpl ddiMatrix CsparseMatrix
 #'  dgCMatrix dsCMatrix generalMatrix sparseMatrix
 #' @importMethodsFrom Matrix %*% as.matrix as.vector Cholesky colSums crossprod
@@ -36,11 +35,13 @@ NULL
 ## do not import which() S4 generic from Matrix package as it slows down normal use of which
 ## @rawNamespace import(Matrix, except = which)
 #' @import GIGrvg
-#' @importFrom matrixStats colLogSumExps colQuantiles colSds colVars rowCumsums
-#'  rowVars
+#' @importFrom collapse allNA allv any_duplicated anyv dapply fdroplevels fmatch
+#'  fmean.default fmean.matrix fquantile fsd.matrix fsum.matrix fvar.matrix qF
+#'  whichNA whichv
 #' @importFrom graphics abline axis legend lines matplot pairs par plot
 #'  plot.new points segments
-#' @importFrom methods as cbind2 new rbind2 setMethod show
+#' @importFrom methods as cbind2 new rbind2 setAs setClass setMethod signature
+#'  show
 #' @importFrom stats acf as.formula density fitted make.link mvfft optim
 #'  pnorm predict rbeta rbinom rchisq residuals rexp rgamma rnbinom rnorm
 #'  rpois runif rWishart sd setNames terms update.formula var weights

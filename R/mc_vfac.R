@@ -12,6 +12,7 @@
 #'  is a Laplace or double exponential distribution.
 #' @param prior the prior assigned to the variance factors. Currently the prior can be inverse chi-squared
 #'  or exponential, specified by a call to \code{\link{pr_invchisq}} or \code{\link{pr_exp}}, respectively.
+#'  Alternatively, the variance factors can be set to fixed values using \code{\link{pr_fixed}}.
 #'  The default priors are inverse chi-squared with 1 degree of freedom. See the help pages of the
 #'  prior specification functions for details on how to set non-default priors.
 #' @param name The name of the variance model component. This name is used in the output of the MCMC simulation
@@ -38,7 +39,7 @@ vfac <- function(factor="local_",
     },
     global_ = {
       X <- aggrMatrix(rep.int(1L, e[["n"]]))
-      nh <- e[["n"]]
+      nh <- as.numeric(e[["n"]])
     },
     {
       X <- aggrMatrix(e$data[[factor]])
@@ -48,14 +49,22 @@ vfac <- function(factor="local_",
   )
   q <- ncol(X)
 
-  if (e$Q0.type == "symm") {
+  if (e[["Q0.type"]] == "symm") {
     # check that scale factor is compatible with block-diagonal structure of Q0
     if (sum(abs(commutator(e[["Q0"]], Cdiag(X %m*v% sin(1.23*seq_len(q)))))) > sqrt(.Machine$double.eps)) stop("'formula.V' incompatible with 'Q0'")
   }
 
-  switch(prior$type,
-    invchisq = prior$init(q, !e$prior.only),
-    exp = prior$init(q, !e$prior.only)
+  switch(prior[["type"]],
+    fixed = {
+      prior$init(q)
+      if (any(prior[["value"]] <= 0)) stop("prior variances must be strictly positive")
+    },
+    invchisq = {
+      prior$init(q)
+      if (!e[["prior.only"]]) prior$make_draw()
+    },
+    exp = prior$init(q),
+    stop("'vfac' priors must be specified using one of pr_invchisq, pr_exp and pr_fixed functions")
   )
 
   compute_Qfactor <- function(p) X %m*v% (1 / p[[name]])
@@ -72,23 +81,26 @@ vfac <- function(factor="local_",
     rm(newdata)
     pred <- function(p) {}
     if (factor == "local_") {
-      switch(prior$type,
+      # NB this assumes that all hyperparameters are scalar! TODO check this
+      switch(prior[["type"]],
+        fixed = {
+          pred <- add(pred, bquote(rep.int(prior[["value"]], .(qnew))))
+        },
         invchisq = {
-          # NB this assumes that all hyperparameters are scalar! TODO check this
           # Student t marginal sampling distribution, provided scale is fixed
-          if (is.list(prior$df))
+          if (is.list(prior[["df"]]))
             pred <- add(pred, bquote(df <- p[[.(name_df)]]))
           else
-            pred <- add(pred, quote(df <- prior$df))
-          if (is.list(prior$scale)) {
-            if (prior$scale$common) {
+            pred <- add(pred, quote(df <- prior[["df"]]))
+          if (is.list(prior[["scale"]])) {
+            if (prior$scale[["common"]]) {
               # for this case we need to store the common scale parameter!
               stop("TBI: oos prediction for common scale")
             } else {
-              pred <- add(pred, bquote(draw_betaprime(.(qnew), 0.5*prior$scale$df, 0.5*df, df/prior$psi0)))
+              pred <- add(pred, bquote(draw_betaprime(.(qnew), 0.5*prior$scale[["df"]], 0.5*df, df/prior[["psi0"]])))
             }
           } else {
-            pred <- add(pred, bquote(1 / rchisq_scaled(.(qnew), df, prior$scale)))
+            pred <- add(pred, bquote(1 / rchisq_scaled(.(qnew), df, prior[["scale"]])))
           }
         },
         exp = {  # Laplace marginal sampling distribution
@@ -102,9 +114,9 @@ vfac <- function(factor="local_",
   }
 
   rprior <- function(p) {}
-  switch(prior$type,
+  switch(prior[["type"]],
     invchisq = {
-      if (is.list(prior$df)) {
+      if (is.list(prior[["df"]])) {
         name_df <- paste0(name, "_df")
         rprior <- rprior |>
           add(bquote(p[[.(name_df)]] <- prior$rprior_df())) |>
@@ -113,28 +125,28 @@ vfac <- function(factor="local_",
         rprior <- add(rprior, bquote(p[[.(name)]] <- prior$rprior()))
       }
     },
-    exp = {
+    fixed=, exp = {
       rprior <- add(rprior, bquote(p[[.(name)]] <- prior$rprior()))
     }
   )
   rprior <- add(rprior, quote(p))
 
-  if (e$prior.only) return(environment())
+  if (e[["prior.only"]]) return(environment())
 
   # BEGIN draw function
   draw <- if (debug) function(p) {browser()} else function(p) {}
 
   # define function to compute partial variance factors (cf. partial residuals)
-  if (e$single.V.block) {
-    switch(e$Q0.type,
+  if (e[["single.V.block"]]) {
+    switch(e[["Q0.type"]],
       unit = {
-        if (e$sigma.fixed)
+        if (e[["sigma.fixed"]])
           get_partial_factor <- function(p) crossprod_mv(X, p[["e_"]]^2)
         else
           get_partial_factor <- function(p) crossprod_mv(X, p[["e_"]]^2) * (1 / p[["sigma_"]]^2)
       },
       diag = {
-        if (e$sigma.fixed)
+        if (e[["sigma.fixed"]])
           get_partial_factor <- function(p) crossprod_mv(X, e[["Q0"]]@x * p[["e_"]]^2)
         else
           get_partial_factor <- function(p) crossprod_mv(X, e[["Q0"]]@x * p[["e_"]]^2) * (1 / p[["sigma_"]]^2)
@@ -154,13 +166,13 @@ vfac <- function(factor="local_",
             fac[i] <- dotprodC(res, Q0.list[[i]] %m*v% res)
           }
         }
-        get_partial_factor <- add(get_partial_factor, bquote(.(if (e$sigma.fixed) quote(fac) else quote(fac * (1 / p[["sigma_"]]^2)))))
+        get_partial_factor <- add(get_partial_factor, bquote(.(if (e[["sigma.fixed"]]) quote(fac) else quote(fac * (1 / p[["sigma_"]]^2)))))
       }
     )
   } else {
-    switch(e$Q0.type,
+    switch(e[["Q0.type"]],
       unit=, diag = {
-        if (e$sigma.fixed)
+        if (e[["sigma.fixed"]])
           get_partial_factor <- function(p) crossprod_mv(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]]
         else
           get_partial_factor <- function(p) crossprod_mv(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]] * (1 / p[["sigma_"]]^2)
@@ -169,16 +181,19 @@ vfac <- function(factor="local_",
     )
   }
 
-  switch(prior$type,
+  switch(prior[["type"]],
+    fixed = {
+      draw <- add(draw, quote(lambda <- prior[["value"]]))
+    },
     invchisq = {
-      if (is.list(prior$df)) {
+      if (is.list(prior[["df"]])) {
         draw <- add(draw, bquote(p[[.(name_df)]] <- prior$draw_df(p[[.(name_df)]], 1 / p[[.(name)]])))
-        if (is.list(prior$scale))
+        if (is.list(prior[["scale"]]))
           draw <- add(draw, bquote(lambda <- prior$draw(p[[.(name_df)]], nh, get_partial_factor(p), 1 / p[[.(name)]])))
         else
           draw <- add(draw, bquote(lambda <- prior$draw(p[[.(name_df)]], nh, get_partial_factor(p))))
       } else {
-        if (is.list(prior$scale))
+        if (is.list(prior[["scale"]]))
           draw <- add(draw, bquote(lambda <- prior$draw(nh, get_partial_factor(p), 1 / p[[.(name)]])))
         else
           draw <- add(draw, bquote(lambda <- prior$draw(nh, get_partial_factor(p))))
@@ -186,13 +201,13 @@ vfac <- function(factor="local_",
     },
     exp = {
       ph <- 1 - nh/2
-      ah <- 2 / prior$scale
-      draw <- add(draw, quote(lambda <- prior$draw(ph, ah, get_partial_factor(p))))
+      ah <- 2 / prior[["scale"]]
+      draw <- add(draw, quote(lambda <- Crgig(q, ph, ah, get_partial_factor(p))))
     }
   )
 
-  if (e$single.V.block) {
-    switch(e$Q0.type,
+  if (e[["single.V.block"]]) {
+    switch(e[["Q0.type"]],
       unit = {
         draw <- add(draw, quote(p$Q_ <- X %m*v% (1 / lambda)))
       },
@@ -206,7 +221,7 @@ vfac <- function(factor="local_",
       }
     )
   } else {
-    switch(e$Q0.type,
+    switch(e[["Q0.type"]],
       unit=, diag = {
         draw <- add(draw, bquote(p$Q_ <- p[["Q_"]] * (X %m*v% (p[[.(name)]] / lambda))))
       },
@@ -219,18 +234,18 @@ vfac <- function(factor="local_",
     add(quote(p))
   # END draw function
 
-  if (prior$type == "invchisq" && is.list(prior$df) && prior$df$adapt) {
+  if (prior[["type"]] == "invchisq" && is.list(prior[["df"]]) && prior$df[["adapt"]]) {
     # adaptation function that tunes MH proposal based on acceptance rates
     adapt <- function(ar) {
       if (ar[[name_df]] < .2)
-        prior$df$tau <<- prior$df$tau * runif(1L, 0.6, 0.9)
+        prior$df$tau <<- prior$df[["tau"]] * runif(1L, 0.6, 0.9)
       else if (ar[[name_df]] > .7)
-        prior$df$tau <<- prior$df$tau * runif(1L, 1.1, 1.5)
+        prior$df$tau <<- prior$df[["tau"]] * runif(1L, 1.1, 1.5)
     }
   }
 
   start <- function(p) {}
-  if (prior$type == "invchisq" && is.list(prior$df)) {
+  if (prior[["type"]] == "invchisq" && is.list(prior[["df"]])) {
     start <- start |>
       add(bquote(if (is.null(p[[.(name_df)]])) p[[.(name_df)]] <- rgamma(1L, prior$df$alpha0, prior$df$beta0))) |>
       add(bquote(if (length(p[[.(name_df)]]) != 1L) stop("wrong length for start value '", name_df, "'")))
@@ -241,6 +256,6 @@ vfac <- function(factor="local_",
     add(bquote(if (length(p[[.(name)]]) != .(q)) stop("wrong length for start value '", name, "'"))) |>
     add(quote(p))
 
-  if (!e$single.V.block || e$Q0.type == "unit") rm(e)
+  if (!e[["single.V.block"]] || e[["Q0.type"]] == "unit") rm(e)
   environment()
 }

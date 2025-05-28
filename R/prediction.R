@@ -29,21 +29,30 @@
 #'  If \code{type="link"} only the linear predictor for the mean is generated, and
 #'  in case \code{type="response"} the linear predictor is transformed to the response scale.
 #'  For Gaussian models \code{type="link"} and \code{type="response"} are equivalent.
-#'  For binomial and negative binomial models \code{type="response"} returns the simulations
-#'  of the latent probabilities. For multinomial models \code{type="link"} generates
+#'  For binomial models \code{type="response"} returns the simulations
+#'  of the latent probabilities, and for negative binomial models the exponentiated
+#'  linear predictor, which differs from the mean by a factor equal to the shape parameter.
+#'  For multinomial models \code{type="link"} generates
 #'  the linear predictor for all categories except the last, and \code{type="response"} transforms
 #'  this vector to the probability scale, and \code{type="data"} generates the multinomial data,
 #'  all in long vector format, where the output for all categories (except the last) are stacked.
 #'  For multinomial models and single trials, a further option is \code{type="data_cat"},
 #'  which generates the data as a categorical vector, with integer coded levels.
-#' @param var variance(s) used for out-of-sample prediction. By default 1.
-#' @param ny number of trials used for out-of-sample prediction in case of a binomial model. By default 1.
-#' @param ry fixed part of the (reciprocal) dispersion parameter in case of a negative binomial model.
+#' @param weights an optional formula specifying a vector of nonnegative weights.
+#'  Weights are only used for data-generating prediction (\code{type = "data"}).
+#'  A weight \eqn{w_i} means that the \emph{sum} of \eqn{w_i} individual
+#'  predictions is generated for each unit $i$. For example, for the poststratification
+#'  step of Multilevel Regression and Poststratification (MRP) the weights
+#'  are the population counts and the units are the unique combinations of
+#'  all auxiliary variables used in the model, typically stored in a single \code{data.frame}.
+# @param var variance(s) used for out-of-sample prediction. By default 1.
+# @param ny number of trials used for out-of-sample prediction in case of a binomial model. By default 1.
 # use fun. instead of fun to avoid argument name clash with parLapply
 #' @param fun. function applied to the vector of posterior predictions to compute one or multiple summaries
 #'  or test statistics. The function can have one or two arguments. The first argument is always the vector
-#'  of posterior predictions. The optional second argument represents a list of model parameters, needed only
-#'  when a test statistic depends on them. The function must return an integer or numeric vector.
+#'  of posterior predictions. The optional second argument must be named 'p' and represents a list of model
+#'  parameters, needed only when a test statistic depends on them. The function must return an integer or
+#'  numeric vector.
 #' @param labels optional names for the output object. Must be a vector of the same length as the result of \code{fun.}.
 #' @param ppcheck if \code{TRUE}, function \code{fun.} is also applied to the observed data and
 #'  an MCMC approximation is computed of the posterior predictive probability that the test statistic for
@@ -71,7 +80,9 @@
 # TODO: pp check only, i.e. without storing predictions either in an object or a file
 predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-sample" else NULL,
                           type=c("data", "link", "response", "data_cat"),
-                          var=NULL, ny=NULL, ry=NULL,
+                          weights=NULL,
+                          #var=NULL,  # DEPRECATED
+                          #ny=NULL, ry=NULL,  # DEPRECATED
                           fun.=identity, labels=NULL, ppcheck=FALSE, iters=NULL,
                           to.file=FALSE, filename, write.single.prec=FALSE,
                           show.progress=TRUE, verbose=TRUE,
@@ -79,7 +90,10 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
   type <- match.arg(type)
   if (ppcheck && type != "data") stop("posterior predictive checks only possible with type = 'data'")
   model <- object[["_model"]]
-  fam <- model$family
+  fam <- model[["family"]]
+  if (fam[["family"]] == "negbinomial") {
+    if (!is.null(list(...)[["ry"]])) stop("argument 'ry' is no longer supported")
+  }
   par.names <- par_names(object)
   if (is.null(iters))
     iters <- seq_len(object[["_info"]]$n.draw)
@@ -90,46 +104,30 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
   fun. <- match.fun(fun.)
   arg1 <- length(formals(args(fun.)))
   if (arg1 < 1L || arg1 > 2L) stop("'fun.' must be a function of 1 or 2 arguments")
-  arg1 <- arg1 == 1L  # flag for single argument function, i.e. function of prediction x only
+  # arg1 is flag for single argument function, i.e. function of prediction x only, otherwise function of prediction x and state p
+  arg1 <- arg1 == 1L || names(formals(args(fun.)))[2L] != "p"
 
-  cholQ <- NULL
-  V <- NULL
   if (is.null(newdata)) {
     if (is.null(X.)) stop("one of 'newdata' and 'X.' must be supplied")
     if (identical(X., "in-sample")) {
-      use.linpred_ <- any("linpred_" == par.names) && model$do.linpred && is.null(model$linpred)
-      if (!use.linpred_ && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", model[["mod"]])) %in% par.names))
+      use.linpred_ <- any("linpred_" == par.names) && model[["do.linpred"]] && is.null(model[["linpred"]])
+      if (!use.linpred_ && !all(names(Filter(\(mc) mc[["type"]] != "mc_offset", model[["mod"]])) %in% par.names))
         stop("for prediction all coefficients must be stored in 'object' (use 'store.all=TRUE' in MCMCsim)")
       X. <- list()
-      for (mc in model$mod) X.[[mc$name]] <- mc$make_predict(verbose=verbose)
-      n <- model[["n"]]
-      if (!is.null(var)) {
-        warn("argument 'var' ignored for in-sample prediction")
-        var <- NULL
-      }
-      if (model$modeled.Q) {
-        cholQ <- build_chol(
-          switch(model$Q0.type,
-            unit = rep.int(1, model$n),
-            diag = model$Q0@x,
-            symm = model$Q0
-          )
-        )
-      } else {
-        cholQ <- build_chol(model$Q0)
-      }
-      if (!is.null(ny)) {
-        warn("argument 'ny' ignored for in-sample prediction")
-        ny <- NULL
-      }
-      # BayesLogit::rpg flags ny=0, so we have set ny to a tiny value > 0 in sampler; need to undo it here as rbinom yields NA for non-integral ny
-      if (fam$family == "binomial" || fam$family == "multinomial") ny <- as.integer(round(model$ny))
-      if (fam$family == "multinomial" && type == "data_cat") n <- n %/% model$Km1
-      if (fam$family == "negbinomial") ry <- model$ry
+      for (mc in model[["mod"]]) X.[[mc[["name"]]]] <- mc$make_predict(verbose=verbose)
+      if (fam[["family"]] == "multinomial" && type == "data_cat")
+        n <- model[["n0"]]
+      else
+        n <- model[["n"]]
     } else {
-      if (fam$family == "gamma") {
-        # currently disallow vector shape parameter for X.="linpred" and custom X.
-        if (!fam$alpha.scalar) stop("cannot derive vector shape")
+      if (type == "data") {
+        if (fam[["family"]] == "gamma") {
+          # currently disallow vector shape parameter for X.="linpred" and custom X.
+          if (!fam[["alpha.scalar"]]) stop("cannot derive vector shape")
+        }
+        if (any(fam[["family"]] == c("gaussian", "gaussian_gamma"))) {
+          if (fam[["modeled.Q"]] || fam[["Q0.type"]] != "unit") stop("for prediction based on a model with non-trivial variance structure, please use argument 'newdata'")
+        }
       }
       if (identical(X., "linpred")) {
         if (all("linpred_" != par.names))
@@ -139,36 +137,22 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
         X. <- NULL
       } else {
         if (!is.list(X.) || length(X.) == 0L) stop("'X.' must be a non-empty list")
-        if (!all(names(X.) %in% names(model$mod)))
-          stop("X. names not corresponding to a model component: ", paste0(setdiff(names(X.), names(model$mod)), collapse=", "))
+        if (!all(names(X.) %in% names(model[["mod"]])))
+          stop("X. names not corresponding to a model component: ", paste0(setdiff(names(X.), names(model[["mod"]])), collapse=", "))
         n <- nrow(X.[[1L]])
-        if (!all(i_apply(X., NROW) == n)) stop("not all matrices in 'X.' have the same number of rows")
+        if (!allv(i_apply(X., NROW), n)) stop("not all matrices in 'X.' have the same number of rows")
         for (k in names(X.)) {
           X.[[k]] <- model$mod[[k]]$make_predict(Xnew=X.[[k]], verbose=verbose)
         }
         use.linpred_ <- FALSE
       }
-      # by default use unit variances for new (oos) predictions, but warn if in-sample variance matrix is not unit diagonal
-      if (is.null(var)) {
-        if (type == "data" && model$Q0.type != "unit") warn("no 'var' specified; unit variances assumed for prediction")
-        var <- 1
-      }
-      if (all(length(var) != c(1L, n))) stop("'var' should be either a scalar value or a vector of length 'nrow(newdata)'")
-      if (model$modeled.Q && fam$family == "gaussian") stop("please use argument 'newdata' instead of 'X.' to also supply information about the factors determining the (modeled) sampling variances")
-      if (any(fam$family == c("binomial", "multinomial")) && type == "data") {
-        if (is.null(ny)) ny <- model$ny.input
-        if (is.character(ny)) stop("please supply number of binomial trials 'ny' as a vector")
-        ny <- check_ny(ny, n)
-      } else if (fam$family == "negbinomial" && type == "data") {
-        if (is.null(ry)) ry <- model$ry.input
-        if (is.character(ry)) stop("please supply 'ry' as a vector")
-        ry <- check_ry(ry, n)
-      }
     }
     if (!use.linpred_) {
       # check that for mec components name_X is stored
-      name_Xs <- unlst(lapply(model$mod, `[[`, "name_X"))
-      if (!is.null(X.)) name_Xs <- name_Xs[names(X.)]
+      if (is.null(X.))
+        name_Xs <- unlst(lapply(model[["mod"]], `[[`, "name_X"))
+      else
+        name_Xs <- unlst(lapply(model[["mod"]][names(X.)], `[[`, "name_X"))
       if (!all(name_Xs %in% par.names))
         stop("(in-sample) prediction for a model with measurement error components requires ",
           "the samples of the corresponding covariates; use 'store.all=TRUE' in MCMCsim"
@@ -179,46 +163,28 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
     use.linpred_ <- FALSE
     X. <- list()
     if (verbose && nrow(newdata) > 5e4L) message("setting up model design matrices for 'newdata'")
-    for (mc in model$mod) X.[[mc$name]] <- mc$make_predict(newdata, verbose=verbose)
-    if (!is.null(X.) && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", model[["mod"]])) %in% par.names))
+    for (mc in model[["mod"]]) X.[[mc$name]] <- mc$make_predict(newdata, verbose=verbose)
+    if (!is.null(X.) && !all(names(Filter(\(mc) mc[["type"]] != "mc_offset", model[["mod"]])) %in% par.names))
       stop("for prediction all coefficients must be stored in 'object' (use 'store.all=TRUE' in MCMCsim)")
-    if (fam$family == "multinomial")
-      n <- nrow(newdata) * model$Km1
+    if (fam[["family"]] == "multinomial")
+      n <- nrow(newdata) * model[["Km1"]]
     else
       n <- nrow(newdata)
-    if (is.null(var)) {
-      if (type == "data" && model$Q0.type != "unit") warn("no 'var' specified, so unit variances are assumed for prediction")
-      var <- 1
-    }
-    if (all(length(var) != c(1L, n))) stop("'var' should be either a scalar value or a vector of length 'nrow(newdata)'")
-    if (model$modeled.Q && fam$family == "gaussian") {
-      V <- list()
-      for (Vmc in model$Vmod) V[[Vmc$name]] <- Vmc$make_predict_Vfactor(newdata)
-    }
-    if (any(fam$family == c("binomial", "multinomial")) && any(type == c("data", "data_cat"))) {
-      if (is.null(ny) && fam$family == "binomial") ny <- model$ny.input
-      ny <- check_ny(ny, newdata)
-    } else if (fam$family == "negbinomial" && type == "data") {
-      if (is.null(ry)) ry <- model$ry.input
-      ry <- check_ry(ry, newdata)
-    }
   }
 
   # determine dimension and mode (integer/double) of test statistic
-  if ((type == "data" && fam$family != "gaussian") || type == "data_cat") {
+  if ((type == "data" && any(fam[["family"]] == c("binomial", "negbinomial", "poisson", "multinomial"))) || type == "data_cat") {
     # x argument of fun. is integer
-    if (arg1) {
+    if (arg1)
       temp <- fun.(rep.int(1L, n))
-    } else {
-      temp <- fun.(rep.int(1L, n), get_draw(object, 1L, 1L))
-    }
+    else
+      temp <- fun.(rep.int(1L, n), p=get_draw(object, 1L, 1L))
   } else {
     # x argument of fun. is double
-    if (arg1) {
-      temp <- fun.(rep.int(0.1, n))  
-    } else {
-      temp <- fun.(rep.int(0.1, n), get_draw(object, 1L, 1L))
-    }
+    if (arg1)
+      temp <- fun.(rep.int(0.1, n))
+    else
+      temp <- fun.(rep.int(0.1, n), p=get_draw(object, 1L, 1L))
   }
   d <- length(temp)
   out_type <- storage.mode(temp)
@@ -226,16 +192,17 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
   rm(temp)
 
   if (!is.null(labels) && length(labels) != d) stop("incompatible 'labels' vector")
-  if (fam$family == "multinomial") {
+  if (fam[["family"]] == "multinomial") {
     if (is.null(labels) && isTRUE(all.equal(fun., identity)) && type != "data_cat")
-      labels <- paste(rep_each(model$cats[-length(model$cats)], n %/% model$Km1), rep.int(seq_len(n %/% model$Km1), model$Km1), sep="_")
+      labels <- paste(rep_each(model$cats[-length(model$cats)], n %/% model[["Km1"]]), rep.int(seq_len(n %/% model[["Km1"]]), model[["Km1"]]), sep="_")
     if (type == "response") {  # undo stick-breaking transformation
+      n0 <- n %/% model[["Km1"]]
+      ind <- seq_len(n0)
       linkinv <- function(eta) {
         p <- fam$linkinv(eta)
-        ind <- seq_len(model$n0)
         pleft <- 1 - p[ind]
-        for (k in 2:model$Km1) {
-          ind <- ind + model$n0
+        for (k in seq_len(model[["Km1"]] - 1L)) {
+          ind <- ind + n0
           p[ind] <- p[ind] * pleft
           pleft <- pleft - p[ind]
         }
@@ -243,16 +210,23 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
       }
     }
   } else {
-    if (type == "response") linkinv <- fam$linkinv
+    if (type == "response") linkinv <- fam[["linkinv"]]
   }
 
-  if (type %in% c("data", "data_cat")) {
-    if (any(fam$family == c("gamma", "poisson"))) {
-      rpred <- fam$make_rpredictive(newdata)
-      rpredictive <- function(p, lp, cholQ=NULL, var=NULL, V=NULL, ny, ry)
-        rpred(p, lp)
-    } else
-      rpredictive <- if (type == "data") model$rpredictive else model$rpredictive_cat
+  if (type == "data" || type == "data_cat") {
+    if (!is.null(weights)) {
+      if (!is.null(newdata) && inherits(weights, "formula")) {
+        weights <- get_var_from_formula(weights, newdata)
+      } else {
+        if (all(length(weights) != c(1L, n))) stop("incompatible length of weights")
+      }
+    }
+    if (type == "data_cat")
+      rpredictive <- fam$make_rpredictive_cat(if (is.null(newdata)) n else newdata, weights)
+    else
+      rpredictive <- fam$make_rpredictive(if (is.null(newdata)) n else newdata, weights)
+  } else {
+    if (!is.null(weights)) warn("argument 'weights' is ignored when type is 'link' or 'response'")
   }
 
   if (is.null(cl))
@@ -283,9 +257,9 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
       if (ppcheck) {
         ppp <- numeric(d)
         if (arg1)
-          fy <- fun.(model$y)
+          fy <- fun.(model[["y"]])
         else
-          y <- model$y
+          y <- model[["y"]]
       }
       for (i in iters) {
         for (ch in chains) {
@@ -295,11 +269,11 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
           else
             ystar <- model$lin_predict(p, X.)
           switch(type,
-            data=, data_cat = ystar <- rpredictive(p, ystar, cholQ, var, V, ny, ry),
+            data=, data_cat = ystar <- rpredictive(p, ystar),
             response = ystar <- linkinv(ystar)
           )
-          out[[ch]][i, ] <- if (arg1) fun.(ystar) else fun.(ystar, p)
-          if (ppcheck) ppp <- ppp + (out[[ch]][i, ] >= if (arg1) fy else fun.(y, p))
+          out[[ch]][i, ] <- if (arg1) fun.(ystar) else fun.(ystar, p=p)
+          if (ppcheck) ppp <- ppp + (out[[ch]][i, ] >= if (arg1) fy else fun.(y, p=p))
         }
       }
       if (ppcheck) attr(out, "ppp") <- ppp
@@ -324,9 +298,9 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
     if (ppcheck) {
       ppp <- numeric(d)
       if (arg1)
-        fy <- fun.(model$y)
+        fy <- fun.(model[["y"]])
       else
-        y <- model$y
+        y <- model[["y"]]
     }
     r <- 1L
     show.progress <- show.progress && n.it > 1L
@@ -339,14 +313,14 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
         else
           ystar <- model$lin_predict(p, X.)
         switch(type,
-          data=, data_cat = ystar <- rpredictive(p, ystar, cholQ, var, V, ny, ry),
+          data=, data_cat = ystar <- rpredictive(p, ystar),
           response = ystar <- linkinv(ystar)
         )
         if (to.file)
-          writeBin(if (arg1) fun.(ystar) else fun.(ystar, p), con=outfile, size=write.size)
+          writeBin(if (arg1) fun.(ystar) else fun.(ystar, p=p), con=outfile, size=write.size)
         else
-          out[[ch]][r, ] <- if (arg1) fun.(ystar) else fun.(ystar, p)
-        if (ppcheck) ppp <- ppp + (out[[ch]][r, ] >= if (arg1) fy else fun.(y, p))
+          out[[ch]][r, ] <- if (arg1) fun.(ystar) else fun.(ystar, p=p)
+        if (ppcheck) ppp <- ppp + (out[[ch]][r, ] >= if (arg1) fy else fun.(y, p=p))
       }
       if (show.progress) setTxtProgressBar(pb, r)
       r <- r + 1L
@@ -380,7 +354,7 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
 #' gd <- generate_data(
 #'   ~ reg(~ 1 + x, prior=pr_normal(precision=10, mean=c(0, 1)), name="beta") +
 #'     gen(factor = ~ g, name="v"),
-#'   family="binomial", ny="ny", data=dat
+#'   family=f_binomial(n.trial = ~ ny), data=dat
 #' )
 #' gd
 #' plot(dat$x, gd$y)
@@ -388,45 +362,47 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
 #'
 #' @export
 #' @param formula A model formula, see \code{\link{create_sampler}}.
-#'  Any left-hand-side of the formula is ignored.
+#'  Any left-hand side of the formula is ignored.
 #' @param data see \code{\link{create_sampler}}.
 #' @param family sampling distribution family, see \code{\link{create_sampler}}.
-#' @param ny see \code{\link{create_sampler}}.
-#' @param ry see \code{\link{create_sampler}}.
-#' @param r.mod see \code{\link{create_sampler}}.
-#' @param sigma.fixed see \code{\link{create_sampler}}.
-#' @param sigma.mod see \code{\link{create_sampler}}.
-#' @param Q0 see \code{\link{create_sampler}}.
-#' @param formula.V see \code{\link{create_sampler}}.
+#' @param ny NO LONGER USED; see \code{\link{create_sampler}}.
+#' @param ry NO LONGER USED; see \code{\link{create_sampler}}.
+#' @param r.mod NO LONGER USED; see \code{\link{create_sampler}}.
+#' @param sigma.fixed DEPRECATED; see \code{\link{create_sampler}}.
+#' @param sigma.mod DEPRECATED; see \code{\link{create_sampler}}.
+#' @param Q0 DEPRECATED; see \code{\link{create_sampler}}.
+#' @param formula.V DEPRECATED; see \code{\link{create_sampler}}.
 #' @param linpred see \code{\link{create_sampler}}.
 #' @returns A list with a generated data vector and a list of prior means of the
 #'  parameters. The parameters are drawn from their priors.
 generate_data <- function(formula, data=NULL, family="gaussian",
-                          ny=NULL, ry=NULL, r.mod,
-                          sigma.fixed=NULL, sigma.mod=NULL, Q0=NULL, formula.V=NULL,
+                          ny=NULL, ry=NULL, r.mod=NULL,  # DEPRECATED
+                          sigma.fixed=NULL, sigma.mod=NULL, Q0=NULL, formula.V=NULL,  # DEPRECATED
                           linpred=NULL) {
-  if (identical(family, "gaussian") || (is.environment(family) && family$family == "gaussian")) {
-    if (is.null(sigma.fixed)) sigma.fixed <- FALSE
-    if (!sigma.fixed && is.null(sigma.mod)) {
-      # use a proper prior for sigma by default
-      sigma.mod <- pr_invchisq(df=1, scale=1)
-      sigma.mod$init(n=1L)
-    }
+  if (is.function(family)) {
+    family <- as.character(substitute(family))
+    if (startsWith(family, "f_")) family <- substring(family, 3L)
   }
-  sampler <- create_sampler(formula=formula, data=data, family=family, ny=ny, ry=ry, r.mod=r.mod,
-                            sigma.fixed=sigma.fixed, sigma.mod=sigma.mod, Q0=Q0, formula.V=formula.V,
-                            linpred=linpred, prior.only=TRUE)
+  if (identical(family, "gaussian")) {
+    # use a proper prior for sigma by default
+    family <- f_gaussian(var.prior = pr_invchisq(df=1, scale=1))
+  }
+  sampler <- create_sampler(formula=formula, data=data, family=family,
+    ny=ny, ry=ry, r.mod=r.mod,  # DEPRECATED
+    sigma.fixed=sigma.fixed, sigma.mod=sigma.mod, Q0=Q0, formula.V=formula.V,  # DEPRECATED
+    linpred=linpred, prior.only=TRUE
+  )
   sim <- MCMCsim(sampler, n.iter=1L, n.chain=1L, store.all=TRUE, from.prior=TRUE, verbose=FALSE)
-  pars <- lapply(sim[par_names(sim)], function(x) setNames(x[[1L]][1L, ], attr(x, "labels")))
-  if (sampler$family$family == "multinomial") {
-    if (is.null(ny) || all(ny == 1)) {
-      y <- as.vector(predict(sim, type="data_cat")[[1L]])
+  pars <- lapply(sim[par_names(sim)], \(x) setNames(x[[1L]][1L, ], attr(x, "labels")))
+  if (sampler$family[["family"]] == "multinomial") {
+    if (allv(sampler$family[["ny0"]], 1)) {
+      y <- drop(predict(sim, type="data_cat")[[1L]])
     } else {
-      y <- matrix(predict(sim)[[1L]], sampler$n0, sampler$Km1)
-      y <- cbind(y, sampler$ny - apply(y, 1L, sum))
+      y <- matrix(predict(sim)[[1L]], sampler[["n0"]], sampler[["Km1"]])
+      y <- cbind(y, sampler$family[["ny0"]] - dapply(y, sum, MARGIN=1L))  # NB rowSums does not preserve integer type
     }
   } else {
-    y <- as.vector(predict(sim)[[1L]])
+    y <- drop(predict(sim)[[1L]])
   }
   list(y=y, pars=pars)
 }

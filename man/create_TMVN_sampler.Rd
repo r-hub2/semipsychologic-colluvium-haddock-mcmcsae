@@ -12,12 +12,7 @@ create_TMVN_sampler(
   update.mu = update.Q,
   name = "x",
   coef.names = NULL,
-  R = NULL,
-  r = NULL,
-  S = NULL,
-  s = NULL,
-  lower = NULL,
-  upper = NULL,
+  constraints = NULL,
   check.constraints = FALSE,
   method = NULL,
   reduce = NULL,
@@ -42,17 +37,9 @@ Currently only supported by methods 'direct' and 'HMC'.}
 
 \item{coef.names}{optional labels for the components of the vector parameter.}
 
-\item{R}{equality restriction matrix.}
-
-\item{r}{rhs vector for equality constraints \eqn{R'x = r}, where \eqn{R'} denotes the transpose of R.}
-
-\item{S}{inequality restriction matrix.}
-
-\item{s}{rhs vector for inequality constraints \eqn{S'x >= s}, where \eqn{S'} denotes the transpose of S.}
-
-\item{lower}{alternative to \code{s} for two-sided inequality restrictions \eqn{\code{lower} <= S'x <= \code{upper}}.}
-
-\item{upper}{alternative to \code{s} for two-sided inequality restrictions \eqn{\code{lower} <= S'x <= \code{upper}}.}
+\item{constraints}{optional linear equality and/or inequality constraints.
+Use function \code{\link{set_constraints}} to specify the constraint matrices
+and right-hand sides.}
 
 \item{check.constraints}{if \code{TRUE} check whether the starting values satisfy all constraints.}
 
@@ -97,24 +84,25 @@ but here translated to C++ for an additional speed-up.
 \donttest{
 S <- cbind(diag(2), c(-1, 1), c(1.1, -1))  # inequality matrix
 # S'x >= 0 represents the wedge x1 <= x2 <= 1.1 x1
+C <- set_constraints(S=S)  # create a constraints object
 # example taken from Pakman and Paninski (2014)
 # 1. exact Hamiltonian Monte Carlo (Pakman and Paninski, 2014)
-sampler <- create_TMVN_sampler(Q=diag(2), mu=c(4, 4), S=S, method="HMC")
+sampler <- create_TMVN_sampler(Q=diag(2), mu=c(4, 4), constraints=C, method="HMC")
 sim <- MCMCsim(sampler, n.iter=600, verbose=FALSE)
 summary(sim)
 plot(as.matrix(sim$x), pch=".")
 # 2. exact Hamiltonian Monte Carlo with Laplace momentum (Nishimura et al., 2021)
-sampler <- create_TMVN_sampler(Q=diag(2), mu=c(4, 4), S=S, method="HMCZigZag")
+sampler <- create_TMVN_sampler(Q=diag(2), mu=c(4, 4), constraints=C, method="HMCZigZag")
 sim <- MCMCsim(sampler, n.iter=600, verbose=FALSE)
 summary(sim)
 plot(as.matrix(sim$x), pch=".")
 # 3. Gibbs sampling approach (Rodriguez-Yam et al., 2004)
-sampler <- create_TMVN_sampler(Q=diag(2), mu=c(4, 4), S=S, method="Gibbs")
+sampler <- create_TMVN_sampler(Q=diag(2), mu=c(4, 4), constraints=C, method="Gibbs")
 sim <- MCMCsim(sampler, burnin=500, n.iter=2000, verbose=FALSE)
 summary(sim)
 plot(as.matrix(sim$x), pch=".")
 # 4. soft TMVN approximation (Souris et al., 2018)
-sampler <- create_TMVN_sampler(Q=diag(2), mu=c(4, 4), S=S, method="softTMVN")
+sampler <- create_TMVN_sampler(Q=diag(2), mu=c(4, 4), constraints=C, method="softTMVN")
 sim <- MCMCsim(sampler, n.iter=600, verbose=FALSE)
 summary(sim)
 plot(as.matrix(sim$x), pch=".")
@@ -134,9 +122,9 @@ Z.I. Botev and P. L'Ecuyer (2016).
    and student-t distributions subject to linear inequality constraints.
    Journal of Statistical Theory and Practice 9(4), 712-732.
 
- A. Nishimura, Z. Zhang and M.A. Suchard (2021). Hamiltonian zigzag sampler got more momentum
-   than its Markovian counterpart: Equivalence of two zigzags under a momentum refreshment limit.
-   arXiv:2104.07694.
+ A. Nishimura, Z. Zhang and M.A. Suchard (2024). Zigzag path connects two Monte Carlo samplers:
+   Hamiltonian counterpart to a piecewise deterministic Markov process.
+   Journal of the American Statistical Association, 1-13.
 
  A. Pakman and L. Paninski (2014).
    Exact Hamiltonian Monte Carlo for truncated multivariate gaussians.
@@ -150,9 +138,9 @@ Z.I. Botev and P. L'Ecuyer (2016).
    Gaussian Markov Random Fields.
    Chapman & Hall/CRC.
 
- A. Souris, A. Bhattacharya and P. Debdeep (2018).
-   The Soft Multivariate Truncated Normal Distribution.
-   arXiv:1807.09155.
+ A. Souris, A. Bhattacharya and P. Debdeep (2019).
+   The Soft Multivariate Truncated Normal Distribution with Applications to Bayesian Constrained Estimation.
+   arXiv:1807.09155v2.
 
  K.A. Valeriano, C.E. Galarza and L.A. Matos (2023).
    Moments and random number generation for the truncated elliptical family of distributions.

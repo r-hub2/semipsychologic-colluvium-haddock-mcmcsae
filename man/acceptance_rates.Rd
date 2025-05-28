@@ -20,10 +20,11 @@ Return Metropolis-Hastings acceptance rates
 \examples{
 \donttest{
 ex <- mcmcsae_example()
-# specify a model that requires MH sampling (in this case for a modeled
+# specify a model that requires MH sampling (in this case for a modelled
 #   degrees of freedom parameter in the variance part of the model)
-sampler <- create_sampler(ex$model, data=ex$dat, formula.V=~vfac(factor="fA",
-  prior=pr_invchisq(df="modeled")))
+sampler <- create_sampler(ex$model, data=ex$dat,
+  family = f_gaussian(var.model = ~vfac(factor="fA", prior=pr_invchisq(df="modeled")))
+)
 sim <- MCMCsim(sampler, burnin=100, n.iter=300, thin=2, n.chain=4, store.all=TRUE)
 (summary(sim))
 acceptance_rates(sim)

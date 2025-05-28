@@ -119,7 +119,6 @@ NumericVector Crgig(const int n, const NumericVector & p, const NumericVector & 
   const int na=a.size();
   const int nb=b.size();
   //double pi,ai,bi;
-  GetRNGstate();
   for (int i = 0; i < n; ++i) {
     /*
     NB issue has been solved in GiGrvg 0.7
@@ -144,19 +143,18 @@ NumericVector Crgig(const int n, const NumericVector & p, const NumericVector & 
       na == 1 ? a[0] : a[i]
     );
   }
-  PutRNGstate();
   return out;
 }
 
 
 //’ Draw a vector of (approximate) Chinese Restaurant Table (CRT) variates
-// Used in a Gibbs sampler for negative binomial model with modeled dispersion parameter.
+// Used in a Gibbs sampler for negative binomial model with modeled shape parameter.
 // The approximation is based on Le Cam's theorem, i.e. the approximation of a convolution
 // of Bernoulli random variables by a Poisson distribution. The sampling is exact for all
 // values of \code{y} less than or equal to \code{2*m}.
 //’
 //’ @param y data vector.
-//’ @param r dispersion parameter, can be scalar or vector.
+//’ @param r (inverse) dispersion or shape parameter, can be scalar or vector.
 //’ @param m positive integer; larger values give more accuracy but slower performance.
 //’ @returns A vector of (approximate) CRT variates.
 // [[Rcpp::export(rng=true)]]

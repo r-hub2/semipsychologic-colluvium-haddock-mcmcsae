@@ -20,7 +20,11 @@ plot.dc <- function(x, nrows, ncols, ask=FALSE, ...) {
   if (missing(nrows)) nrows <- min(5L, n_vars(x))
   if (missing(ncols)) ncols <- 3L * min(2L, ceiling(n_vars(x) / nrows))
   oldpar <- par(no.readonly=TRUE)
-  on.exit(par(oldpar))
+  on.exit({
+    safe_params <- intersect(names(oldpar), names(par()))
+    safe_params <- setdiff(safe_params, c("pin", "plt", "usr", "fig"))
+    par(oldpar[safe_params])
+  })
   par(mar=c(2.4,2.8,0.9,0.8))
   par(mfrow=c(nrows, ncols))
   par(ask=ask)
@@ -150,14 +154,14 @@ trace_plot <- function(dc1, xlab="iterations", ylab="") {
 #' @param maxcols maximum number of columns of estimates on a page.
 #' @param offset space used between plots of multiple estimates for the same area.
 #' @param cex.var the font size for the variable names, default=0.8.
-#' @param mar a numerical vector of the form \code{c(bottom, left, top, right)},
+#' @param mar a numeric vector of the form \code{c(bottom, left, top, right)},
 #'  specifying the number of lines of margin on each of the four sides of the plot.
 plot_coef <- function(..., n.se=1, est.names, sort.by=NULL, decreasing=FALSE,
                       index=NULL, maxrows=50L, maxcols=6L,
                       offset=0.1, cex.var=0.8, mar=c(0.1,2.1,5.1,0.1)) {
 
   dotargs <- list(...)
-  toplot <- b_apply(dotargs, function(obj) any(class(obj)[1L] == c("dc_summary", "matrix", "sae", "list")))
+  toplot <- b_apply(dotargs, \(obj) any(class(obj)[1L] == c("dc_summary", "matrix", "sae", "list")))
   grpar <- dotargs[!toplot]  # other graphical parameters
   if (!length(grpar)) grpar <- NULL
 
@@ -165,7 +169,7 @@ plot_coef <- function(..., n.se=1, est.names, sort.by=NULL, decreasing=FALSE,
   if (!length(x)) stop("nothing to plot")
 
   # extract point estimates to plot
-  ests <- lapply(x, function(obj) {
+  ests <- lapply(x, \(obj) {
     switch(class(obj)[1L],
       dc_summary=, matrix = obj[, "Mean"],
       sae=, list = obj$est,
@@ -173,7 +177,7 @@ plot_coef <- function(..., n.se=1, est.names, sort.by=NULL, decreasing=FALSE,
     )
   })
 
-  ints <- lapply(x, function(obj) {
+  ints <- lapply(x, \(obj) {
     # for dc_summary and sae objects by default use mean +/- se intervals
     switch(class(obj)[1L],
       dc_summary=, matrix = cbind(obj[, "Mean"] - n.se * obj[, "SD"], obj[, "Mean"] + n.se * obj[, "SD"]),
@@ -212,7 +216,7 @@ plot_coef <- function(..., n.se=1, est.names, sort.by=NULL, decreasing=FALSE,
           rownames(ints[[i]]) <- lab
         }
       } else {
-        ind <- match(names(obj.est), lab)
+        ind <- fmatch(names(obj.est), lab)
         ests[[i]] <- NA_real_ * ests[[1L]]
         ests[[i]][ind[!is.na(ind)]] <- obj.est[!is.na(ind)]
         if (!is.null(ints[[i]])) {
@@ -228,7 +232,7 @@ plot_coef <- function(..., n.se=1, est.names, sort.by=NULL, decreasing=FALSE,
     o <- lab
   } else {
     if (is.character(index)) {
-      if (anyNA(match(index, lab))) stop("some elements of index cannot be matched")
+      if (anyNA(fmatch(index, lab))) stop("some elements of index cannot be matched")
       o <- index
     } else {
       o <- lab[index]
@@ -252,7 +256,11 @@ plot_coef <- function(..., n.se=1, est.names, sort.by=NULL, decreasing=FALSE,
   compute.xlim <- all("xlim" != names(grpar))
 
   oldpar <- par(no.readonly=TRUE)
-  on.exit(par(oldpar))
+  on.exit({
+    safe_params <- intersect(names(oldpar), names(par()))
+    safe_params <- setdiff(safe_params, c("pin", "plt", "usr", "fig"))
+    par(oldpar[safe_params])
+  })
   for (page in seq_len(pages)) {
     colrange <- ((page - 1L) * maxcols + 1L):min((page * maxcols), cols)
     plot.new()
@@ -290,7 +298,7 @@ plot_coef <- function(..., n.se=1, est.names, sort.by=NULL, decreasing=FALSE,
       plot(0, 0, type="n", bty="n", xaxt="n", yaxt="n")
       if (missing(est.names))
         est.names <- paste0("est", seq_along(ests))
-      dots.only <- b_apply(x, function(obj) is.list(obj) && is.null(obj[["se"]]) && is.null(obj[["lower"]]))
+      dots.only <- b_apply(x, \(obj) is.list(obj) && is.null(obj[["se"]]) && is.null(obj[["lower"]]))
       legend("topright", est.names, xpd=TRUE, horiz=TRUE, inset=c(0, 0),
         bty="n", pch=rep.int(20L, length(ests)), lty=ifelse(dots.only, 0, 1),
         col=seq_along(ests)

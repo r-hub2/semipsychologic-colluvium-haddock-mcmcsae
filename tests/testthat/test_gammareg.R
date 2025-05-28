@@ -73,10 +73,9 @@ test_that("gamma regression with offset works", {
   sim <- MCMCsim(sampler, n.iter=600, burnin=250, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$beta[, "Mean"], 0.25 * b, 4 * b)
-  expect_warning(sampler <- create_sampler(
-      y ~ offset(o) + reg(~ x1 + x2, name="beta"),
-      family="gamma", data = df, control=sampler_control(block=list("beta"))
-    ), "only one"
+  sampler <- create_sampler(
+    y ~ offset(o) + reg(~ x1 + x2, name="beta"),
+    family="gamma", data = df, control=sampler_control(block=list("beta"))
   )
   expect_length(sampler$block, 1L)
   expect_equal(sampler$mod[[length(sampler$mod)]]$offset, df$o)
@@ -130,4 +129,45 @@ test_that("gamma multilevel model works", {
   expect_between(summ$beta[, "Mean"], 0.3 * b, 3 * b)
   expect_between(summ$v_sigma[, "Mean"], 0.3 * sqrt(2), 3 * sqrt(2))
   expect_between(summ$gamma_shape_[, "Mean"], 0.25 * sh, 4 * sh)
+})
+
+n <- 2000
+m <- 30
+dat <- data.frame(
+  x = rnorm(n),
+  g = factor(sample(1:m, n, replace=TRUE))
+)
+v <- rnorm(m, sd=0.5)
+vv <- rnorm(m, sd=0.25)
+Vmu <- exp(-1 + 0.5 * dat$x + vv[dat$g])
+dat$y <- rnorm(n, mean = 1 + dat$x + v[dat$g], sd=sqrt(Vmu))
+alpha <- 1
+dat$V <- rgamma(n, shape=alpha, rate=alpha/Vmu)
+test_that("gaussian-gamma model works", {
+  sampler <- create_sampler(
+    y ~ reg(~ 1 + x, debug=FALSE) + gen(factor = ~ g),
+    family = f_gaussian_gamma(
+      var.model = V ~ reg(~ 1 + x, name="vbeta") + gen(factor = ~ g, name="vv"),
+      shape.prior=pr_fixed(1)
+    ), data = dat,
+    control=sampler_control(block.V=TRUE)
+  )
+  expect_identical(sampler$family$family, "gaussian_gamma")
+  expect_identical(sort(sampler$block.V[[1]]), sort(c("vbeta", "vv")))
+  expect_true(sampler$family$alpha.fixed)
+  sampler <- create_sampler(
+    y ~ reg(~ 1 + x, name="beta") + gen(factor = ~ g, name="v"),
+    family = f_gaussian_gamma(
+      var.model =
+        V ~ reg(~ 1 + x, name="vbeta") + gen(factor = ~ g, name="vv")
+    ), data = dat,
+    control=sampler_control(block.V=TRUE)
+  )
+  sim <- MCMCsim(sampler, burnin=180, n.iter=550, n.chain=2, store.all=TRUE, verbose=FALSE)
+  summ <- summary(sim)
+  expect_between(summ$gamma_shape_[, "Mean"], 0.2, 5)
+  expect_between(summ$beta[, "Mean"], c(1, 1) - 2, c(1, 1) + 2)
+  expect_between(summ$vbeta[, "Mean"], c(-1, 0.5) - 2, c(-1, 0.5) + 2)
+  expect_between(cor(summ$v[, "Mean"], v), 0.6, 1)
+  expect_between(cor(summ$vv[, "Mean"], vv), 0.5, 1)
 })

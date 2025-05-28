@@ -3,7 +3,7 @@
 #'
 #' This function is intended to be used to specify the \code{formula.gl} argument to
 #' the \code{\link{gen}} model component specification function.
-#' Group-level predictors and hierarchical centering are
+#' Group-level predictors and hierarchical centring are
 #' not used by default, and they currently cannot be used in a model component that is sampled
 #' together with another model component in the same Gibbs block.
 #'
@@ -43,20 +43,21 @@ glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL, Q0=NULL,
     } else {
       X <- model_matrix(formula, e$e[["data"]], sparse=FALSE)
       if (remove.redundant) X <- remove_redundancy(X)
-      if (is.null(e$factor)) stop("cannot derive group-level design matrix")
-      if (any(e$info$types == "spline")) stop("unsupported combination: splines and group-level covariates")
-      fac <- combine_factors(e$info$variables, e$e[["data"]], enclos=environment(formula))
-      X <- economizeMatrix(crossprod(aggrMatrix(fac, mean=TRUE), X), strip.names=FALSE, check=TRUE)
-      rm(fac)
+      if (is.null(e[["factor"]])) stop("cannot derive group-level design matrix")
+      if (any(e$info[["types"]] == "splines")) stop("unsupported combination: splines and group-level covariates")
+      X <- economizeMatrix(crossprod(aggrMatrix(
+        combine_factors(e$info[["variables"]], e$e[["data"]], enclos=environment(formula)),
+        mean=TRUE), X), strip.names=FALSE, check=TRUE
+      )
     }
   } else {  # formula + group-level data provided
     X <- model_matrix(formula, data, sparse=FALSE)
     if (remove.redundant) X <- remove_redundancy(X)
     # TODO if formula is used, match levels of factor to glp$data
   }
-  if (nrow(X) != e$l) stop("wrong number of rows of group-level design matrix")
-  if (!is.null(colnames(X))) {
-    e$e$coef.names[[name]] <- colnames(X)
+  if (nrow(X) != e[["l"]]) stop("wrong number of rows of group-level design matrix")
+  if (!is.null(dimnames(X)[[2L]])) {
+    e$e$coef.names[[name]] <- dimnames(X)[[2L]]
   }
   X <- unname(X)  # l x p0
 
@@ -73,25 +74,24 @@ glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL, Q0=NULL,
 
   if (prior$type != "normal" || any(prior$mean != 0)) stop("only a normal prior with mean zero is currently supported for group-level effects")
   # if modeled.Q need sparse Q0 and XX in order to combine them easily using a block-diagonal sparse template
-  prior$init(q, e$e$coef.names[[name]], sparse=e$e$modeled.Q, sigma=!e$e$sigma.fixed)
-  informative.prior <- prior$informative
-  Q0 <- prior$precision
+  prior$init(q, e$e$coef.names[[name]], sparse=e$e[["modeled.Q"]], sigma=!e$e[["sigma.fixed"]])
+  informative.prior <- prior[["informative"]]
+  Q0 <- prior[["precision"]]
   Q0b0 <- numeric(q)  # need this in draw function, even though only b0=0 is supported
 
   # for modeled Q, the XX block of XX.ext is updated -> choose sparse
-  XX.ext <- economizeMatrix(bdiag(e$XX, Q0), symmetric=TRUE, sparse=if (e$e$modeled.Q) TRUE else NULL)
+  XX.ext <- economizeMatrix(bdiag(e[["XX"]], Q0), symmetric=TRUE, sparse=if (e$e[["modeled.Q"]]) TRUE else NULL)
   IU0 <- economizeMatrix(cbind(CdiagU(e[["l"]]), -X), drop.zeros=TRUE)
-  if (e$strucA$update.Q) {
+  if (e$strucA[["update.Q"]]) {
     # TODO crossprod_sym may introduce 0 fill-in --> kronecker template may fail for "unstructured" or "diagonal" var
     #      may drop (prune) 0s, but need to do that in each next crossprod_sym call too! (unavoidable?)
-    QA.ext <- crossprod_sym(IU0, e$strucA$update_Q(e$QA, runif(1L, 0.25, 0.75)))
+    QA.ext <- crossprod_sym(IU0, e$strucA$update_Q(e[["QA"]], runif(1L, 0.25, 0.75)))
   } else {
-    QA.ext <- economizeMatrix(crossprod_sym(IU0, e$QA),
+    QA.ext <- economizeMatrix(crossprod_sym(IU0, e[["QA"]]),
       sparse=if (e[["in_block"]]) TRUE else NULL, symmetric=TRUE, drop.zeros=TRUE)
   }
-  if (!is.null(e$R)) {
-    R <- economizeMatrix(crossprod(kronecker(IU0, CdiagU(e[["q0"]])), e$R), allow.tabMatrix=FALSE)
-  }
+  if (!is.null(e[["R"]]))
+    R <- economizeMatrix(crossprod(kronecker(IU0, CdiagU(e[["q0"]])), e[["R"]]), allow.tabMatrix=FALSE)
 
   rm(data, e)
   environment()

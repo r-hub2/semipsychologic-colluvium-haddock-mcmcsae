@@ -2,7 +2,7 @@
 % Please edit documentation in R/MCMCsim.R
 \name{summary.mcdraws}
 \alias{summary.mcdraws}
-\title{Summarize an mcdraws object}
+\title{Summarise an mcdraws object}
 \usage{
 \method{summary}{mcdraws}(
   object,
@@ -38,7 +38,7 @@ and try again. The default is 100.}
 A list of class \code{mcdraws_summary} summarizing \code{object}.
 }
 \description{
-Summarize an mcdraws object
+Summarise an mcdraws object
 }
 \examples{
 \donttest{

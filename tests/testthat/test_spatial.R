@@ -32,7 +32,7 @@ test_that("spatial model works", {
     ), "deprecated"
   )
   sampler <- create_sampler(
-    BIR74 ~ SID74 + gen(factor = ~ spatial(CNTY_ID, graph=nc), constr=FALSE, name="vs"),
+    BIR74 ~ SID74 + gen(factor = ~ spatial(CNTY_ID, graph=nc), GMRFconstr=FALSE, name="vs"),
     data=nc
   )
   expect_null(sampler$mod[["vs"]][["R"]])

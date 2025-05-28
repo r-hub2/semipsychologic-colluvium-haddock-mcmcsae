@@ -18,8 +18,10 @@ SEXP Ctab(const IntegerVector & Dim, const bool reduced, const IntegerVector & p
   S4 out("tabMatrix");
   out.slot("Dim") = clone(Dim);
   out.slot("reduced") = reduced;
+  if (perm.size() != Dim[0]) stop("length of perm slot must equal row dimension of tabMatrix");
   out.slot("perm") = clone(perm);
   out.slot("num") = num;
+  if (num && x.size() != Dim[0]) stop("length of x slot (if nonempty) must equal row dimension of tabMatrix");
   out.slot("x") = clone(x);
   return out;
 }
@@ -31,27 +33,32 @@ SEXP Ctab(const IntegerVector & Dim, const bool reduced, const IntegerVector & p
 //’ @param ignore_x whether to use only the indicator part of the tabMatrix (for expansion).
 //’ @returns The vector \code{Ay}.
 // [[Rcpp::export(rng=false)]]
-NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector & y, const bool ignore_x = false) {
+Rcpp::NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector & y, const bool ignore_x = false) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const IntegerVector perm(as<S4>(A).slot("perm"));
-  const IntegerVector Dim(as<S4>(A).slot("Dim"));
-  if (Dim[1] != y.size()) stop("incompatible dimensions");
+  const S4 A_s4(A);  // Only do this once
+  const IntegerVector perm = A_s4.slot("perm");
+  const IntegerVector Dim = A_s4.slot("Dim");
   const int n = perm.size();
-  NumericVector out = no_init(n);
-  const bool reduced(::Rf_asLogical(as<S4>(A).slot("reduced")));
-  const bool num(::Rf_asLogical(as<S4>(A).slot("num")));
+  if (Dim[1] != y.size()) stop("incompatible dimensions");
+  NumericVector out(no_init(n));
+  const bool reduced = as<bool>(A_s4.slot("reduced"));
+  const bool num = as<bool>(A_s4.slot("num"));
+  const int* perm_ptr = perm.begin();
+  const double* y_ptr = y.begin();
+  double* out_ptr = out.begin();
   if (reduced) {
-    for (int i = 0; i < n; i++) {
-      out[i] = (perm[i] >= 0) * y[perm[i]];
+    for (int i = 0; i < n; ++i) {
+      out_ptr[i] = (perm_ptr[i] >= 0) ? y_ptr[perm_ptr[i]] : 0.0;
     }
   } else if (num && !ignore_x) {
-    const NumericVector x(as<S4>(A).slot("x"));
-    for (int i = 0; i < n; i++) {
-      out[i] = x[i] * y[perm[i]];
+    const Rcpp::NumericVector x = A_s4.slot("x");
+    const double* x_ptr = x.begin();
+    for (int i = 0; i < n; ++i) {
+      out_ptr[i] = x_ptr[i] * y_ptr[perm_ptr[i]];
     }
   } else {
-    for (int i = 0; i < n; i++) {
-      out[i] = y[perm[i]];
+    for (int i = 0; i < n; ++i) {
+      out_ptr[i] = y_ptr[perm_ptr[i]];
     }
   }
   return out;
@@ -65,12 +72,13 @@ NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector & y, const boo
 // [[Rcpp::export(rng=false)]]
 Eigen::MatrixXd Ctab_dense_prod(const SEXP A, const Eigen::Map<Eigen::MatrixXd> & y) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const IntegerVector perm(as<S4>(A).slot("perm"));
-  const IntegerVector Dim(as<S4>(A).slot("Dim"));
+  const S4 A_S4(A);
+  const IntegerVector perm(A_S4.slot("perm"));
+  const IntegerVector Dim(A_S4.slot("Dim"));
   if (Dim[1] != y.rows()) stop("incompatible dimensions");
   const int n = perm.size();
-  const bool reduced(::Rf_asLogical(as<S4>(A).slot("reduced")));
-  const bool num(::Rf_asLogical(as<S4>(A).slot("num")));
+  const bool reduced(::Rf_asLogical(A_S4.slot("reduced")));
+  const bool num(::Rf_asLogical(A_S4.slot("num")));
   Eigen::MatrixXd out(n, y.cols());
   if (reduced) {
     for (int i = 0; i < n; i++) {
@@ -81,7 +89,7 @@ Eigen::MatrixXd Ctab_dense_prod(const SEXP A, const Eigen::Map<Eigen::MatrixXd> 
       }
     }
   } else if (num) {
-    const NumericVector x(as<S4>(A).slot("x"));
+    const NumericVector x(A_S4.slot("x"));
     for (int i = 0; i < n; i++) {
       out.row(i) = x[i] * y.row(perm[i]);
     }
@@ -101,12 +109,13 @@ Eigen::MatrixXd Ctab_dense_prod(const SEXP A, const Eigen::Map<Eigen::MatrixXd> 
 // [[Rcpp::export(rng=false)]]
 Eigen::MatrixXd Cdense_tab_tcrossprod(const Eigen::Map<Eigen::MatrixXd> & y, const SEXP A) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const IntegerVector perm(as<S4>(A).slot("perm"));
-  const IntegerVector Dim(as<S4>(A).slot("Dim"));
+  const S4 A_S4(A);
+  const IntegerVector perm(A_S4.slot("perm"));
+  const IntegerVector Dim(A_S4.slot("Dim"));
   if (Dim[1] != y.cols()) stop("incompatible dimensions");
   const int n = perm.size();
-  const bool reduced(::Rf_asLogical(as<S4>(A).slot("reduced")));
-  const bool num(::Rf_asLogical(as<S4>(A).slot("num")));
+  const bool reduced(::Rf_asLogical(A_S4.slot("reduced")));
+  const bool num(::Rf_asLogical(A_S4.slot("num")));
   Eigen::MatrixXd out(y.rows(), n);
   if (reduced) {
     for (int i = 0; i < n; i++) {
@@ -117,7 +126,7 @@ Eigen::MatrixXd Cdense_tab_tcrossprod(const Eigen::Map<Eigen::MatrixXd> & y, con
       }
     }
   } else if (num) {
-    const NumericVector x(as<S4>(A).slot("x"));
+    const NumericVector x(A_S4.slot("x"));
     for (int i = 0; i < n; i++) {
       out.col(i) = x[i] * y.col(perm[i]);
     }
@@ -137,13 +146,14 @@ Eigen::MatrixXd Cdense_tab_tcrossprod(const Eigen::Map<Eigen::MatrixXd> & y, con
 // [[Rcpp::export(rng=false)]]
 NumericVector Ctab_numeric_crossprod(const SEXP A, const NumericVector & y) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const IntegerVector perm(as<S4>(A).slot("perm"));
-  const IntegerVector Dim(as<S4>(A).slot("Dim"));
+  const S4 A_S4(A);
+  const IntegerVector perm(A_S4.slot("perm"));
+  const IntegerVector Dim(A_S4.slot("Dim"));
   const int n = y.size();
   if (Dim[0] != n) stop("incompatible dimensions");
   NumericVector out(Dim[1]);
-  const bool reduced(::Rf_asLogical(as<S4>(A).slot("reduced")));
-  const bool num(::Rf_asLogical(as<S4>(A).slot("num")));
+  const bool reduced(::Rf_asLogical(A_S4.slot("reduced")));
+  const bool num(::Rf_asLogical(A_S4.slot("num")));
   if (reduced) {
     for (int i = 0; i < n; i++) {
       if (perm[i] >= 0) {
@@ -151,7 +161,7 @@ NumericVector Ctab_numeric_crossprod(const SEXP A, const NumericVector & y) {
       }
     }
   } else if (num) {
-    const NumericVector x(as<S4>(A).slot("x"));
+    const NumericVector x(A_S4.slot("x"));
     for (int i = 0; i < n; i++) {
       out[perm[i]] += x[i]*y[i];
     }
@@ -171,14 +181,15 @@ NumericVector Ctab_numeric_crossprod(const SEXP A, const NumericVector & y) {
 // [[Rcpp::export(rng=false)]]
 NumericMatrix Ctab_dense_crossprod(const SEXP A, const NumericMatrix & y) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const IntegerVector perm(as<S4>(A).slot("perm"));
-  const IntegerVector Dim(as<S4>(A).slot("Dim"));
+  const S4 A_S4(A);
+  const IntegerVector perm(A_S4.slot("perm"));
+  const IntegerVector Dim(A_S4.slot("Dim"));
   const int yrows = y.rows();
   if (Dim[0] != yrows) stop("incompatible dimensions");
   const int ycols = y.cols();
   NumericMatrix out(Dim[1], ycols);
-  const bool reduced(::Rf_asLogical(as<S4>(A).slot("reduced")));
-  const bool num(::Rf_asLogical(as<S4>(A).slot("num")));
+  const bool reduced(::Rf_asLogical(A_S4.slot("reduced")));
+  const bool num(::Rf_asLogical(A_S4.slot("num")));
   if (reduced) {
     for (int i = 0; i < yrows; i++) {
       if (perm[i] >= 0) {
@@ -188,7 +199,7 @@ NumericMatrix Ctab_dense_crossprod(const SEXP A, const NumericMatrix & y) {
       }
     }
   } else if (num) {
-    const NumericVector x(as<S4>(A).slot("x"));
+    const NumericVector x(A_S4.slot("x"));
     for (int j = 0; j < ycols; j++) {
       for (int i = 0; i < yrows; i++) {
         out(perm[i], j) += x[i] * y(i, j);
@@ -211,12 +222,13 @@ NumericMatrix Ctab_dense_crossprod(const SEXP A, const NumericMatrix & y) {
 // [[Rcpp::export(rng=false)]]
 NumericVector Ctab_unary_crossprod(const SEXP A) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const IntegerVector perm(as<S4>(A).slot("perm"));
-  const IntegerVector Dim(as<S4>(A).slot("Dim"));
+  const S4 A_S4(A);
+  const IntegerVector perm(A_S4.slot("perm"));
+  const IntegerVector Dim(A_S4.slot("Dim"));
   const int n = Dim[0];
   NumericVector diag(Dim[1]);
-  const bool reduced(::Rf_asLogical(as<S4>(A).slot("reduced")));
-  const bool num(::Rf_asLogical(as<S4>(A).slot("num")));
+  const bool reduced(::Rf_asLogical(A_S4.slot("reduced")));
+  const bool num(::Rf_asLogical(A_S4.slot("num")));
   if (reduced) {
     for (int i = 0; i < n; i++) {
       if (perm[i] >= 0) {
@@ -224,7 +236,7 @@ NumericVector Ctab_unary_crossprod(const SEXP A) {
       }
     }
   } else if (num) {
-    const NumericVector x(as<S4>(A).slot("x"));
+    const NumericVector x(A_S4.slot("x"));
     for (int i = 0; i < n; i++) {
       diag[perm[i]] += x[i]*x[i];
     }
@@ -243,11 +255,12 @@ NumericVector Ctab_unary_crossprod(const SEXP A) {
 // [[Rcpp::export(rng=false)]]
 SEXP Ctab2dgC(const SEXP M) {
   if (!Rf_isS4(M) || !Rf_inherits(M, "tabMatrix")) stop("M is not a tabMatrix");
-  const IntegerVector Dim(as<S4>(M).slot("Dim"));
-  const IntegerVector perm(as<S4>(M).slot("perm"));
-  const NumericVector x(as<S4>(M).slot("x"));
-  const bool reduced(::Rf_asLogical(as<S4>(M).slot("reduced")));
-  const bool num(::Rf_asLogical(as<S4>(M).slot("num")));
+  const S4 M_S4(M);
+  const IntegerVector Dim(M_S4.slot("Dim"));
+  const IntegerVector perm(M_S4.slot("perm"));
+  const NumericVector x(M_S4.slot("x"));
+  const bool reduced(::Rf_asLogical(M_S4.slot("reduced")));
+  const bool num(::Rf_asLogical(M_S4.slot("num")));
   S4 out("dgCMatrix");
   out.slot("Dim") = clone(Dim);
   IntegerVector tab(Dim[1]);
@@ -310,13 +323,14 @@ SEXP Ctab2dgC(const SEXP M) {
 // [[Rcpp::export(rng=false)]]
 NumericMatrix Ctab2mat(const SEXP M) {
   if (!Rf_isS4(M) || !Rf_inherits(M, "tabMatrix")) stop("M is not a tabMatrix");
-  const IntegerVector Dim(as<S4>(M).slot("Dim"));
-  const IntegerVector perm(as<S4>(M).slot("perm"));
-  const bool reduced(::Rf_asLogical(as<S4>(M).slot("reduced")));
-  const bool num(::Rf_asLogical(as<S4>(M).slot("num")));
+  const S4 M_S4(M);
+  const IntegerVector Dim(M_S4.slot("Dim"));
+  const IntegerVector perm(M_S4.slot("perm"));
+  const bool reduced(::Rf_asLogical(M_S4.slot("reduced")));
+  const bool num(::Rf_asLogical(M_S4.slot("num")));
   NumericMatrix out(Dim[0], Dim[1]);
   if (num) {
-    const NumericVector x(as<S4>(M).slot("x"));
+    const NumericVector x(M_S4.slot("x"));
     for (int i = 0; i < Dim[0]; i++) {
       out(i, perm[i]) = x[i];
     }

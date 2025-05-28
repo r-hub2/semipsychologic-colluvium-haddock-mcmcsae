@@ -18,7 +18,7 @@ m_HMC(Tsim = pi/2, max.events = .Machine$integer.max, diagnostic = FALSE)
 
 m_HMCZigZag(
   Tsim = 1,
-  rate = 1,
+  scale = 1,
   prec.eq = NULL,
   diagnostic = FALSE,
   max.events = .Machine$integer.max,
@@ -56,11 +56,11 @@ and for method 'HMCZigZag' also gradient events). Default is unlimited.
 Specifying a finite number may speed up the sampling but may also result
 in a biased sampling algorithm.}
 
-\item{rate}{vector of Laplace rate parameters for method 'HMCZigZag'. It must be
-a positive numeric vector of length one or the number of variables.}
+\item{scale}{vector of Laplace scale parameters for method 'HMCZigZag'. It must be
+a positive numeric vector of length equal to one or the number of variables.}
 
 \item{prec.eq}{positive numeric vector of length 1 or the number of equality restrictions,
-to control the precision with which the equality restrictions are imposed; the larger
+to control the precision by which the equality restrictions are imposed; the larger
 \code{prec.eq} the more precisely they will be imposed.}
 
 \item{adapt}{experimental feature: if \code{TRUE} the rate parameter will be adapted

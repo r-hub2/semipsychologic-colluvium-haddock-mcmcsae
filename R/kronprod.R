@@ -7,7 +7,7 @@
 # NB zero structure assumed to be constant, even for matrix M1
 build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
 
-  if (is_unit_ddi(M1) && !M1.fixed) stop("unexpected input")  # unit ddi is assumed to be fixed
+  if (is_unit_ddi(M1) && !M1.fixed) stop("unit ddiMatrix assumed to be fixed")
   if (q2 == 1L) {  # scalar multiplication
     if (is.matrix(M1)) {
       update <- function(M1, M2x, values.only=FALSE) M2x * M1
@@ -118,7 +118,7 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       attr(template, "x") <- NULL
       M1dsC <- forceSymmetric(as(M1, "CsparseMatrix"), uplo="U")
       w <- which(as.matrix(M1dsC) != 0 & row(M1) <= col(M1))
-      d <- diff(M1dsC@p)
+      d <- diff.default(M1dsC@p)
       d <- d[d > 0L]
       rm(M1dsC)
       update <- function(M1, M2x, values.only=FALSE) {
@@ -165,7 +165,7 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       template <- as(kronecker(M1, Cdiag(if (expand) rep.int(M2, q2) else M2)), "CsparseMatrix")
       if (class(M1)[1L] == "dsCMatrix") template <- forceSymmetric(template, uplo="U")
       attr(template, "x") <- NULL
-      d <- diff(M1@p)
+      d <- diff.default(M1@p)
       d <- d[d > 0L]
       update <- function(M1, M2x, values.only=FALSE) {
         x <- Crepgen(M1@x, d, if (expand) rep.int(M2x, q2) else M2x)
@@ -182,7 +182,7 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       template <- forceSymmetric(as(kronecker(M1, M2), "CsparseMatrix"), uplo="U")
       upper <- which(row(M1) <= col(M1))
       prod.table <- base_tcrossprod(M1[upper], M2@x)
-      ind <- arrayInd(match(template@x, prod.table), dim(prod.table))
+      ind <- arrayInd(fmatch(template@x, prod.table), dim(prod.table))
       ind1 <- upper[ind[, 1L]]
       ind2 <- ind[, 2L]
       if (!isTRUE(all.equal(M1[ind1] * M2@x[ind2], template@x))) stop("incorrect sparse kronecker template")
@@ -219,9 +219,9 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       template <- forceSymmetric(as(kronecker(M1, M2), "CsparseMatrix"), uplo="U")
       upper <- which(row(M2) <= col(M2))
       x1 <- unique(M1@x)
-      x1.ind <- match(x1, M1@x)
+      x1.ind <- fmatch(x1, M1@x)
       prod.table <- base_tcrossprod(x1, M2[upper])
-      ind <- arrayInd(match(template@x, prod.table), dim(prod.table))
+      ind <- arrayInd(fmatch(template@x, prod.table), dim(prod.table))
       ind1 <- x1.ind[ind[, 1L]]
       ind2 <- upper[ind[, 2L]]
       if (!isTRUE(all.equal(M1@x[ind1] * M2[ind2], template@x))) stop("incorrect sparse kronecker template")
@@ -256,11 +256,11 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
     dsCdsC = {
       template <- forceSymmetric(as(kronecker(M1, M2), "CsparseMatrix"), uplo="U")
       x1 <- unique(M1@x)
-      x1.ind <- match(x1, M1@x)
+      x1.ind <- fmatch(x1, M1@x)
       x2 <- unique(M2@x)
-      x2.ind <- match(x2, M2@x)
+      x2.ind <- fmatch(x2, M2@x)
       prod.table <- base_tcrossprod(x1, x2)
-      ind <- arrayInd(match(template@x, prod.table), dim(prod.table))
+      ind <- arrayInd(fmatch(template@x, prod.table), dim(prod.table))
       ind1 <- x1.ind[ind[, 1L]]
       ind2 <- x2.ind[ind[, 2L]]
       if (!isTRUE(all.equal(M1@x[ind1] * M2@x[ind2], template@x))) stop("incorrect sparse kronecker template")

@@ -6,7 +6,7 @@ setClass("tabMatrix",
     reduced = "logical",  # whether columns are removed (contrasts); a -1 in perm represents such columns
     # if reduced there can be all-0 rows
     num = "logical",  # whether the matrix is numeric or 0/1
-    # TODO generalize x to matrix/dgCMatrix
+    # TODO generalise x to matrix/dgCMatrix
     x = "numeric",  # the numeric values in case num=TRUE
     xlab = "character"  # name associated with numeric x component (scalar, later to be generalized to colnames)
   ),
@@ -32,6 +32,7 @@ setClass("tabMatrix",
 
 # general constructor
 tabMatrix <- function(Dim, Dimnames=NULL, reduced=FALSE, perm=integer(), num=FALSE, x=numeric(), xlab=NULL) {
+  # TODO check that elements in perm are between 0 and Dim[2] - 1
   out <- Ctab(Dim=Dim, reduced=reduced, perm=perm, num=num, x=x)
   if (!is.null(Dimnames)) attr(out, "Dimnames") <- Dimnames
   if (!is.null(xlab)) attr(out, "xlab") <- xlab
@@ -57,32 +58,32 @@ setAs("factor", "tabMatrix",
 # index matrix has exactly one 1 in each row and otherwise 0s
 is_ind_matrix <- function(X) class(X)[1L] == "tabMatrix" && !X@num && !X@reduced
 
-setMethod("colSums", "tabMatrix", function(x, na.rm=FALSE, dims=1, ...)
+setMethod("colSums", "tabMatrix", \(x, na.rm=FALSE, dims=1, ...)
   if (x@num)
     fast_aggrC(x@x, x@perm + 1L, x@Dim[2L])
   else
     tabulate(x@perm + 1L, nbins=x@Dim[2L])
 )
 
-setMethod("rowSums", "tabMatrix", function(x, na.rm=FALSE, dims=1, ...) {
+setMethod("rowSums", "tabMatrix", \(x, na.rm=FALSE, dims=1, ...) {
   if (x@num) return(x@x)
   out <- rep.int(1, x@Dim[1L])
   if (x@reduced) out[x@perm == -1L] <- 0
   out
 })
 
-setMethod("isDiagonal", "tabMatrix", function(object) {
+setMethod("isDiagonal", "tabMatrix", \(object) {
   d <- object@Dim
   if (d[1L] != d[2L]) return(FALSE)
   if (object@reduced) {
-    sub <- which(object@perm != -1L)
+    sub <- whichv(object@perm, -1L, invert=TRUE)
     identical(object@perm[sub], (0:(d[1L] - 1L))[sub])
   } else {
     identical(object@perm, 0:(d[1L] - 1L))
   }
 })
 
-setMethod("diag", "tabMatrix", function(x=1, nrow, ncol) {
+setMethod("diag", "tabMatrix", \(x=1, nrow, ncol) {
   d <- x@Dim
   if (d[1L] <= d[2L]) {
     if (x@num)
@@ -99,9 +100,9 @@ setMethod("diag", "tabMatrix", function(x=1, nrow, ncol) {
   out
 })
 
-setMethod("t", "tabMatrix", function(x) {
+setMethod("t", "tabMatrix", \(x) {
   if (x@reduced) {
-    sub <- which(x@perm != -1L)
+    sub <- whichv(x@perm, -1L, invert=TRUE)
     sparseMatrix(i=x@perm[sub], j=(0:(x@Dim[1L] - 1L))[sub], x=rep.int(1, length(sub)), dims=rev(x@Dim), dimnames=rev(x@Dimnames), index1=FALSE, check=FALSE)
   } else if (x@num) {
     sparseMatrix(i=x@perm, j=0:(x@Dim[1L] - 1L), x=x@x, dims=rev(x@Dim), dimnames=rev(x@Dimnames), index1=FALSE, check=FALSE)
@@ -110,7 +111,7 @@ setMethod("t", "tabMatrix", function(x) {
   }
 })
 
-setMethod("coerce", c("tabMatrix", "ddiMatrix"), function(from, to="ddiMatrix", strict=TRUE) {
+setMethod("coerce", c("tabMatrix", "ddiMatrix"), \(from, to="ddiMatrix", strict=TRUE) {
   if (!isDiagonal(from)) stop("not a diagonal tabMatrix")
   if (from@reduced) {
     x <- rep.int(1, from@Dim[1L])
@@ -125,28 +126,28 @@ setMethod("coerce", c("tabMatrix", "ddiMatrix"), function(from, to="ddiMatrix", 
   out
 })
 
-setMethod("coerce", c("tabMatrix", "matrix"), function(from, to="matrix", strict=TRUE) {
+setMethod("coerce", c("tabMatrix", "matrix"), \(from, to="matrix", strict=TRUE) {
   out <- Ctab2mat(from)
   if (!(is.null(from@Dimnames[[1L]]) && is.null(from@Dimnames[[2L]]))) attr(out, "dimnames") <- from@Dimnames
   out
 })
 
-setMethod("coerce", c("tabMatrix", "CsparseMatrix"), function(from, to="CsparseMatrix", strict=TRUE) {
+setMethod("coerce", c("tabMatrix", "CsparseMatrix"), \(from, to="CsparseMatrix", strict=TRUE) {
   out <- Ctab2dgC(from)
   if (!(is.null(from@Dimnames[[1L]]) && is.null(from@Dimnames[[2L]]))) attr(out, "Dimnames") <- from@Dimnames
   out
 })
 
-setMethod("coerce", c("ddiMatrix", "tabMatrix"), function(from, to="tabMatrix", strict=TRUE)
+setMethod("coerce", c("ddiMatrix", "tabMatrix"), \(from, to="tabMatrix", strict=TRUE)
   tabMatrix(Dim=from@Dim, Dimnames=from@Dimnames,
     reduced=FALSE, perm=0:(from@Dim[1L] - 1L), num = from@diag == "N",
     x = if (from@diag == "N") from@x else numeric()
   )
 )
 
-setMethod("coerce", c("matrix", "tabMatrix"), function(from, to="tabMatrix", strict=TRUE) {
-  perm <- apply(from, 1L, function(x) {
-    nz <- which(x != 0)
+setMethod("coerce", c("matrix", "tabMatrix"), \(from, to="tabMatrix", strict=TRUE) {
+  perm <- apply(from, 1L, \(x) {
+    nz <- whichv(x, 0, invert=TRUE)
     if (length(nz) == 1L) nz else if (length(nz) == 0L) NA_integer_ else stop("not a tabMatrix")
   })
   num <- reduced <- FALSE
@@ -167,7 +168,7 @@ setMethod("coerce", c("matrix", "tabMatrix"), function(from, to="tabMatrix", str
   )
 })
 
-setMethod("coerce", c("dgCMatrix", "tabMatrix"), function(from, to="tabMatrix", strict=TRUE) {
+setMethod("coerce", c("dgCMatrix", "tabMatrix"), \(from, to="tabMatrix", strict=TRUE) {
   perm <- rep.int(-1L, nrow(from))
   x <- numeric(nrow(from))
   nnz <- from@p[-1L] - from@p[-length(from@p)]
@@ -199,8 +200,8 @@ setMethod("coerce", c("dgCMatrix", "tabMatrix"), function(from, to="tabMatrix", 
 
 tab_is_zero <- function(x) (x@reduced && all(x@perm == -1L)) || (x@num && all(x@x == 0))
 
-dgC_is_tabMatrix <- function(M) anyDuplicated(M@i[M@x != 0]) == 0
-
+dgC_is_tabMatrix <- function(M) if (length(M@i) > nrow(M)) FALSE else any_duplicated(M@i)
+  
 # see whether tabMatrix is actually a permutation matrix
 tab_isPermutation <- function(M) {
   M@Dim[1L] == M@Dim[2L] && !M@num && identical(sort(M@perm), 0:(M@Dim[1L] - 1L))
@@ -221,7 +222,7 @@ NULL
 # auxiliary function to get a positive integer index vector
 get_ind <- function(index, M, type="row") {
   if (is.character(index)) {
-    ind <- match(index, if (type == "row") rownames(M) else colnames(M))
+    ind <- fmatch(index, if (type == "row") dimnames(M)[[1L]] else dimnames(M)[[2L]])
   } else if (is.logical(index)) {
     if (length(index) != M@Dim[if (type == "row") 1L else 2L]) stop("incompatible index vector")
     ind <- base::which(index)
@@ -247,44 +248,44 @@ tab_row_select <- function(M, i, drop) {
     out
   } else {
     tabMatrix(Dim=c(length(i), M@Dim[2L]), Dimnames=list(M@Dimnames[[1L]][i], M@Dimnames[[2L]]),
-              reduced=M@reduced, perm=M@perm[i], num=M@num, x=if (M@num) M@x[i] else numeric(0L)
+      reduced=M@reduced, perm=M@perm[i], num=M@num, x=if (M@num) M@x[i] else numeric(0L)
     )
   }
 }
 
 # row selection
 #' @rdname tabMatrix-indexing
-setMethod("[", c(x="tabMatrix", i="index", j="missing", drop="logical"), function (x, i, j, ..., drop=TRUE)
+setMethod("[", c(x="tabMatrix", i="index", j="missing", drop="logical"), \(x, i, j, ..., drop=TRUE)
   tab_row_select(x, i, drop)
 )
 
 # row selection, missing drop
 #' @rdname tabMatrix-indexing
-setMethod("[", c(x="tabMatrix", i="index", j="missing", drop="missing"), function (x, i, j, ..., drop=TRUE)
+setMethod("[", c(x="tabMatrix", i="index", j="missing", drop="missing"), \(x, i, j, ..., drop=TRUE)
   tab_row_select(x, i, drop=TRUE)
 )
 
 tab_col_select <- function(M, j, drop) {
   j <- get_ind(j, M, "col")
   out <- Ctab2dgC(M)[, j, drop=drop]
-  if (is.vector(out)) out else as(out, "tabMatrix")
+  if (is.null(dim(out))) out else as(out, "tabMatrix")
 }
 
 # column selection
 #' @rdname tabMatrix-indexing
-setMethod("[", c(x="tabMatrix", i="missing", j="index", drop="logical"), function (x, i, j, ..., drop=TRUE)
+setMethod("[", c(x="tabMatrix", i="missing", j="index", drop="logical"), \(x, i, j, ..., drop=TRUE)
   tab_col_select(x, j, drop)
 )
 
 # column selection, missing drop
 #' @rdname tabMatrix-indexing
-setMethod("[", c(x="tabMatrix", i="missing", j="index", drop="missing"), function (x, i, j, ..., drop=TRUE)
+setMethod("[", c(x="tabMatrix", i="missing", j="index", drop="missing"), \(x, i, j, ..., drop=TRUE)
   tab_col_select(x, j, drop=TRUE)
 )
 
 
 # rbind of tabMatrices is tabMatrix
-setMethod("rbind2", c("tabMatrix", "tabMatrix"), function(x, y, ...) {
+setMethod("rbind2", c("tabMatrix", "tabMatrix"), \(x, y, ...) {
   if (x@Dim[2L] != y@Dim[2L]) stop("number of columns of matrices must match for rbind2")
   perm <- c(x@perm, y@perm)
   num <- x@num || y@num
@@ -316,33 +317,33 @@ setMethod("rbind2", c("tabMatrix", "tabMatrix"), function(x, y, ...) {
   out
 })
 
-setMethod("rbind2", c("tabMatrix", "Matrix"), function(x, y, ...)
+setMethod("rbind2", c("tabMatrix", "Matrix"), \(x, y, ...)
   rbind2(Ctab2dgC(x), y, ...)
 )
-setMethod("rbind2", c("Matrix", "tabMatrix"), function(x, y, ...)
+setMethod("rbind2", c("Matrix", "tabMatrix"), \(x, y, ...)
   rbind2(x, Ctab2dgC(y), ...)
 )
-setMethod("cbind2", c("tabMatrix", "Matrix"), function(x, y, ...)
+setMethod("cbind2", c("tabMatrix", "Matrix"), \(x, y, ...)
   cbind2(Ctab2dgC(x), y, ...)
 )
-setMethod("cbind2", c("Matrix", "tabMatrix"), function(x, y, ...)
+setMethod("cbind2", c("Matrix", "tabMatrix"), \(x, y, ...)
   cbind2(x, Ctab2dgC(y), ...)
 )
-setMethod("rbind2", c("tabMatrix", "matrix"), function(x, y, ...)
+setMethod("rbind2", c("tabMatrix", "matrix"), \(x, y, ...)
   rbind2(Ctab2dgC(x), y, ...)
 )
-setMethod("rbind2", c("matrix", "tabMatrix"), function(x, y, ...)
+setMethod("rbind2", c("matrix", "tabMatrix"), \(x, y, ...)
   rbind2(x, Ctab2dgC(y), ...)
 )
-setMethod("cbind2", c("tabMatrix", "matrix"), function(x, y, ...)
+setMethod("cbind2", c("tabMatrix", "matrix"), \(x, y, ...)
   cbind2(Ctab2dgC(x), y, ...)
 )
-setMethod("cbind2", c("matrix", "tabMatrix"), function(x, y, ...)
+setMethod("cbind2", c("matrix", "tabMatrix"), \(x, y, ...)
   cbind2(x, Ctab2dgC(y), ...)
 )
 
 
-setMethod("nnzero", "tabMatrix", function(x, na.counted=NA) {
+setMethod("nnzero", "tabMatrix", \(x, na.counted=NA) {
   if (x@reduced)
     sum(x@perm != -1L)
   else if (x@num)
@@ -357,11 +358,11 @@ setMethod("nnzero", "tabMatrix", function(x, na.counted=NA) {
 #' @param x a tabMatrix object.
 #' @param recursive not used.
 #' @returns Whether the tabMatrix object contains missings or not.
-setMethod("anyNA", "tabMatrix", function(x, recursive=FALSE)
+setMethod("anyNA", "tabMatrix", \(x, recursive=FALSE)
   if (x@num) anyNA(x@x) else FALSE
 )
 
-setMethod("show", "tabMatrix", function(object) str(object))
+setMethod("show", "tabMatrix", \(object) str(object))
 
 # expand a vector, using the indicator part of tabM
 expand_mv <- function(tabM, v) Ctab_numeric_prod(tabM, v, TRUE)
@@ -370,7 +371,7 @@ remove_levels <- function(f, l=1L) {
   lvs <- attr(f, "levels")
   if (length(l) != 1L || l < 1L || l > length(lvs)) stop("incorrect input")
   lvsnew <- lvs[-l]
-  structure(match(lvs, lvsnew)[f], levels=lvsnew, class="factor")
+  structure(fmatch(lvs, lvsnew)[f], levels=lvsnew, class="factor")
 }
 
 # factor (interaction) to tabMatrix
@@ -384,7 +385,11 @@ fac2tabM <- function(fvars, data, enclos=emptyenv(), x=numeric(), xlab=character
   if (missing(fvars) || !length(fvars)) stop("unexpected 'fvars' argument")
   for (f in seq_along(fvars)) {
     fac <- eval_in(fvars[f], data, enclos)
-    if (!is.factor(fac) || drop.unused.levels) fac <- factor(fac)
+    if (is.factor(fac)) {
+      if (drop.unused.levels) fac <- fdroplevels(fac)
+    } else {
+      fac <- qF(fac)
+    }
     if (!is.null(contrasts)) {
       # TODO instead of changing levels here, compute the indices of the final codes vector
       #      which should be set to -1; this would be a lot faster for long factors
@@ -393,7 +398,7 @@ fac2tabM <- function(fvars, data, enclos=emptyenv(), x=numeric(), xlab=character
       } else if (length(contrasts) == 1L && contrasts == "contr.SAS") {  # 'SAS' convention: last level is baseline
         fac <- remove_levels(fac, length(attr(fac, "levels")))
       } else if (any(fvars[f] == names(contrasts))) {  # user-specified base
-        m <- match(contrasts[fvars[f]], attr(fac, "levels"))
+        m <- fmatch(contrasts[fvars[f]], attr(fac, "levels"))
         if (length(m) != 1L || is.na(m)) stop("invalid contrasts")
         fac <- remove_levels(fac, m)
       }
@@ -441,8 +446,8 @@ tables2tabM <- function(formula, data, ...) {
     else
       stop("empty formula")
   }
-  tnames <- colnames(tmat)
-  vnames <- rownames(tmat)
+  tnames <- dimnames(tmat)[[2L]]
+  vnames <- dimnames(tmat)[[1L]]
   qvar <- !catvars(trms, data)  # quantitative variables
   qvar <- vnames[which(qvar)]
   out <- setNames(vector(mode="list", length(tnames)), tnames)

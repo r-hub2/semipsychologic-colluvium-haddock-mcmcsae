@@ -1,5 +1,5 @@
 
-#' Create a model component object for an offset, i.e. fixed, non-parametrized term in the linear predictor
+#' Create a model component object for an offset, i.e. fixed, non-parametrised term in the linear predictor
 #'
 #' This function is intended to be used on the right hand side of the \code{formula} argument to
 #' \code{\link{create_sampler}} or \code{\link{generate_data}}.
@@ -20,7 +20,7 @@ mc_offset <- function(formula, value=NULL, name="") {
   n <- e[["n"]]
 
   if (is.null(value)) {
-    offset <- as.vector(model_matrix(update.formula(formula, ~ 0 + .), data=e[["data"]]))
+    offset <- get_var_from_formula(formula, e[["data"]])
   } else {
     offset <- as.numeric(value)
     if (length(offset) != 1L || anyNA(offset)) stop("'value' argument of mc_offset must be a single numeric value")
@@ -39,7 +39,7 @@ mc_offset <- function(formula, value=NULL, name="") {
       lp <<- function(p) copy_vector(rep.int(offset, n))
     else
       lp <<- function(p) copy_vector(offset)
-    if (all(offset == 0))
+    if (allv(offset, 0))
       lp_update <<- function(x, plus=TRUE, p) NULL
     else
       lp_update <<- function(x, plus=TRUE, p) v_update(x, plus, offset)
@@ -58,7 +58,7 @@ mc_offset <- function(formula, value=NULL, name="") {
       }
     } else {
       if (is.null(value))
-        newoffset <- as.vector(model_matrix(update.formula(formula, ~ 0 + .), data=newdata))
+        newoffset <- get_var_from_formula(formula, newdata)
       else
         newoffset <- pred.offset
       nnew <- nrow(newdata)
@@ -68,7 +68,7 @@ mc_offset <- function(formula, value=NULL, name="") {
       linpred <- function(p) copy_vector(rep.int(newoffset, nnew))
     else
       linpred <- function(p) copy_vector(newoffset)
-    if (all(newoffset == 0))
+    if (allv(newoffset, 0))
       linpred_update <- function(x, plus=TRUE, p) NULL
     else
       linpred_update <- function(x, plus=TRUE, p) v_update(x, plus, newoffset)
@@ -79,13 +79,13 @@ mc_offset <- function(formula, value=NULL, name="") {
     lp <- function(p) copy_vector(rep.int(offset, n))
   else
     lp <- function(p) copy_vector(offset)
-  if (all(offset == 0))
+  if (allv(offset, 0))
     lp_update <- function(x, plus=TRUE, p) NULL
   else
     lp_update <- function(x, plus=TRUE, p) v_update(x, plus, offset)
   scalar <- length(pred.offset) == 1L
   # draws_linpred method acts on (subset of) mcdraws object, used in fitted() and pointwise log-likelihood llh_i functions
-  # here internal offset should be disregarded
+  # here internal offset (Poisson approx) is excluded
   draws_linpred <- function(obj, units=NULL, chains=NULL, draws=NULL, matrix=FALSE) {
     if (matrix) {
       nr <- (if (is.null(chains)) n_chains(obj) else length(chains)) * (if (is.null(draws)) n_draws(obj) else length(draws))

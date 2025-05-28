@@ -21,6 +21,7 @@ is a Laplace or double exponential distribution.}
 
 \item{prior}{the prior assigned to the variance factors. Currently the prior can be inverse chi-squared
 or exponential, specified by a call to \code{\link{pr_invchisq}} or \code{\link{pr_exp}}, respectively.
+Alternatively, the variance factors can be set to fixed values using \code{\link{pr_fixed}}.
 The default priors are inverse chi-squared with 1 degree of freedom. See the help pages of the
 prior specification functions for details on how to set non-default priors.}
 

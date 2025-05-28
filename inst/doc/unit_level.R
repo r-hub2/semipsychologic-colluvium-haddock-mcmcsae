@@ -14,7 +14,7 @@ mod <- api00 ~
   gen(factor = ~ iid(cname), name="v")
 sampler <- create_sampler(mod, data=apisrs)
 sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
-(summary(sim))
+summary(sim)
 
 ## ----fig.width=7, fig.height=7, fig.align="center"------------------------------------------------
 N <- table(apipop$cname)

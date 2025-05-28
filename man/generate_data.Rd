@@ -10,7 +10,7 @@ generate_data(
   family = "gaussian",
   ny = NULL,
   ry = NULL,
-  r.mod,
+  r.mod = NULL,
   sigma.fixed = NULL,
   sigma.mod = NULL,
   Q0 = NULL,
@@ -20,25 +20,25 @@ generate_data(
 }
 \arguments{
 \item{formula}{A model formula, see \code{\link{create_sampler}}.
-Any left-hand-side of the formula is ignored.}
+Any left-hand side of the formula is ignored.}
 
 \item{data}{see \code{\link{create_sampler}}.}
 
 \item{family}{sampling distribution family, see \code{\link{create_sampler}}.}
 
-\item{ny}{see \code{\link{create_sampler}}.}
+\item{ny}{NO LONGER USED; see \code{\link{create_sampler}}.}
 
-\item{ry}{see \code{\link{create_sampler}}.}
+\item{ry}{NO LONGER USED; see \code{\link{create_sampler}}.}
 
-\item{r.mod}{see \code{\link{create_sampler}}.}
+\item{r.mod}{NO LONGER USED; see \code{\link{create_sampler}}.}
 
-\item{sigma.fixed}{see \code{\link{create_sampler}}.}
+\item{sigma.fixed}{DEPRECATED; see \code{\link{create_sampler}}.}
 
-\item{sigma.mod}{see \code{\link{create_sampler}}.}
+\item{sigma.mod}{DEPRECATED; see \code{\link{create_sampler}}.}
 
-\item{Q0}{see \code{\link{create_sampler}}.}
+\item{Q0}{DEPRECATED; see \code{\link{create_sampler}}.}
 
-\item{formula.V}{see \code{\link{create_sampler}}.}
+\item{formula.V}{DEPRECATED; see \code{\link{create_sampler}}.}
 
 \item{linpred}{see \code{\link{create_sampler}}.}
 }
@@ -62,7 +62,7 @@ dat <- data.frame(
 gd <- generate_data(
   ~ reg(~ 1 + x, prior=pr_normal(precision=10, mean=c(0, 1)), name="beta") +
     gen(factor = ~ g, name="v"),
-  family="binomial", ny="ny", data=dat
+  family=f_binomial(n.trial = ~ ny), data=dat
 )
 gd
 plot(dat$x, gd$y)

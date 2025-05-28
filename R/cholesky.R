@@ -30,11 +30,12 @@ check_chol_control <- function(control) {
   w <- which(!(names(control) %in% names(defaults)))
   if (length(w)) stop("unrecognized control parameters ", paste0(names(control)[w], collapse=", "))
   control <- modifyList(defaults, control, keep.null=TRUE)
-  control$ordering <- as.integer(control$ordering)
+  control$ordering <- as.integer(control[["ordering"]])
   control
 }
 
 # in case of permutation/pivoting, the decomposition is PtLLtP
+# for LDL there is currently no Ltimes method and no solve method for systems other than "A"
 build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
   type <- class(M)[1L]
   if (all(type != c("numeric", "matrix", "ddiMatrix", "dsCMatrix"))) stop("'", type, "' is not a supported matrix class")
@@ -42,8 +43,8 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
 
   if (type == "dsCMatrix") {
     if (LDL) control$super <- FALSE  # not supported by Matrix/CHOLMOD
-    if (is.null(control$perm)) {
-      # TODO find better decision rule for use of permutation in cholesky factorization
+    if (is.null(control[["perm"]])) {
+      # is there a better decision rule for using permutation in cholesky factorisation?
       control$perm <- size > 100L
     }
   } else {
@@ -59,6 +60,9 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
   #   rhs: right hand side, of type numeric, matrix or dgCMatrix
   #   system: the type of system to be solved, see Matrix package
   # Ltimes left-multiplies a vector/matrix by L (in case of permutations P'L which need not be lower triangular!) or its transpose
+  # logdet: return logarithm of determinant of the Cholesky factor
+  #         NB 1) in case of LDL the logarithm of the absolute value of the determinant is returned
+  #         NB 2) for the determinant of M itself, multiply the return value by 2
   # inverse: return inverse of the original matrix
   switch(type,
     numeric=, ddiMatrix = {  # diagonal represented as vector case (including trivial scalar case)
@@ -67,6 +71,7 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
         cholM <- M
         update <- function(parent, mult=0) if (mult != 0) stop("unit ddiMatrix assumed fixed")
         Ltimes <- function(x, transpose=TRUE) x
+        logdet <- function() 0
         solve <- function(rhs, system="A") rhs
         inverse <- function() cholM
       } else {
@@ -78,6 +83,7 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
           update <- function(parent, mult=0) cholM <<- sqrt(parent + mult)
         }
         Ltimes <- function(x, transpose=TRUE) cholM * x
+        logdet <- function() sum(log(cholM))
         solve <- function(rhs, system="A") {
           switch(class(rhs)[1L],
             numeric=, matrix =
@@ -107,20 +113,21 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
       perm <- is.unsorted(cholM@perm, strictly = TRUE)
       if (perm) {  # permutation matrix unaffected by updates
         P <- cholM@perm + 1L
-        iP <- invPerm(cholM@perm, zero.p=TRUE)
+        iP <- invertPerm(cholM@perm, off=0L, ioff=1L)
       }
-      if (control$inplace) {
+      if (control[["inplace"]]) {
         # requires that zero-pattern does not change!
         update <- function(parent, mult=0) cCHM_update_inplace(cholM, parent, mult)
       } else {
         # for forked parallel processing cholM should probably be stored in the state list p
         update <- function(parent, mult=0) cholM <<- .updateCHMfactor(cholM, parent, mult)
       }
-      # TODO(?) Ltimes for LDL and solve for systems other than "A" for LDL 
       if (perm) {
-        # TODO check whether the permutation is handled correctly in the transpose=FALSE case
+        # TODO
+        # - check whether the permutation is handled correctly in the transpose=FALSE case
+        # - use update flag to avoid unnecessary calls to expand1
         Ltimes <- function(x, transpose=TRUE) {
-          L <- as(cholM, "Matrix")
+          L <- expand1(cholM, which="L")
           if (transpose)
             if (is.vector(x)) crossprod_mv(L, x[P]) else crossprod_mv(L, x[P, , drop=FALSE])
           else
@@ -151,7 +158,7 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
         }
       } else {
         Ltimes <- function(x, transpose=TRUE) {
-          L <- as(cholM, "Matrix")
+          L <- expand1(cholM, which="L")
           if (transpose)
             if (is.vector(x)) crossprod_mv(L, x) else crossprod_mm(L, x)
           else
@@ -165,6 +172,8 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
             stop("'", class(rhs)[1L], "' not supported as right hand side in solve")
           )
       }
+      # sqrt=TRUE (without factor 0.5) yields NaN for LDL factors of negative definite matrices
+      logdet <- function() 0.5 * as.numeric(determinant(cholM, logarithm=TRUE, sqrt=FALSE)[["modulus"]])
       inverse <- function() Matrix::solve(cholM)
     },
     matrix = {
@@ -187,6 +196,7 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
         else
           if (is.vector(x)) crossprod_mv(cholM, x) else crossprod_mm(cholM, x)
       }
+      logdet <- function() as.numeric(determinant.matrix(cholM, logarithm=TRUE)[["modulus"]])
       solve <- function(rhs, system="A") {
         switch(class(rhs)[1L],
           numeric =
@@ -217,6 +227,6 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
     }
   )  # END switch(type, ...)
 
-  rm(M, type, Imult, control)
+  rm(M, Imult, control)
   environment()
 }

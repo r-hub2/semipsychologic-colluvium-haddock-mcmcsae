@@ -62,29 +62,29 @@ fitted_res <- function(obj, mean.only=FALSE, units=NULL, chains=seq_len(n_chains
                        draws=seq_len(n_draws(obj)), matrix=FALSE, type, resid, ...) {
   smplr <- obj[["_model"]]
   if (mean.only && (!is.null(obj[["e_"]]) || !is.null(obj[["_means"]][["e_"]]))) {
-    if ((resid && smplr$e.is.res) || (!resid && !smplr$e.is.res))
+    if ((resid && smplr[["e.is.res"]]) || (!resid && !smplr[["e.is.res"]]))
       return(get_means(obj, "e_")[[1L]])
     else
       return(smplr$y - get_means(obj, "e_")[[1L]])
   }
   if (is.null(units)) {
-    units <- seq_len(smplr$n)
+    units <- seq_len(smplr[["n"]])
     all.units <- TRUE
   } else {
     all.units <- FALSE
   }
   if (is.null(obj[["e_"]])) {
     nr <- if (matrix) length(chains) * length(draws) else length(draws)
-    mc <- smplr$mod[[1L]]
+    mc <- smplr[["mod"]][[1L]]
     out <- mc$draws_linpred(obj, units, chains, draws, matrix)
-    for (mc in smplr$mod[-1L])
+    for (mc in smplr[["mod"]][-1L])
       for (ch in chains)
         out[[ch]] <- out[[ch]] + mc$draws_linpred(obj, units, ch, draws, matrix)[[1L]]
   } else {
     out <- get_from(obj[["e_"]], chains=chains, draws=draws, vars=units)
-    if (smplr$e.is.res) {
+    if (smplr[["e.is.res"]]) {
       # change to linear predictor as code below assumes that
-      out <- lapply(out, function(x) rep_each(smplr$y[units], nrow(x)) - x)
+      out <- lapply(out, function(x) rep_each(smplr[["y"]][units], nrow(x)) - x)
     }
   }
   if (type == "response") {
@@ -95,17 +95,17 @@ fitted_res <- function(obj, mean.only=FALSE, units=NULL, chains=seq_len(n_chains
   }
   if (resid) {  # compute residuals at the response scale
     if (matrix)
-      out <- rep_each(smplr$y[units], nrow(out)) - out
+      out <- rep_each(smplr[["y"]][units], nrow(out)) - out
     else
-      out <- lapply(out, function(x) rep_each(smplr$y[units], nrow(x)) - x)
+      out <- lapply(out, function(x) rep_each(smplr[["y"]][units], nrow(x)) - x)
   }
   if (matrix) {
     dimnames(out) <- list(NULL, units)
-    if (mean.only) out <- colMeans(out)
+    if (mean.only) out <- fmean.matrix(out, na.rm=FALSE)
   } else {
     attr(out, "labels") <- units
     class(out) <- "dc"
-    if (mean.only) out <- colMeans(as.matrix(out))
+    if (mean.only) out <- fmean.matrix(as.matrix(out), na.rm=FALSE)
   }
   out
 }
@@ -215,9 +215,9 @@ weights.mcdraws <- function(object, ...) get_means(object, "weights_")[[1L]]
 #'    Understanding predictive information criteria for Bayesian models.
 #'    Statistics and Computing 24, 997-1016.
 #'
-#'  A. Vehtari, D. Simpson, A. Gelman, Y. Yao and J. Gabry (2015).
+#'  A. Vehtari, D. Simpson, A. Gelman, Y. Yao and J. Gabry (2024).
 #'    Pareto smoothed importance sampling.
-#'    arXiv:1507.02646.
+#'    arXiv:1507.02646v9.
 #'
 #'  A. Vehtari, A. Gelman and J. Gabry (2017).
 #'    Practical Bayesian model evaluation using leave-one-out cross-validation
@@ -237,35 +237,39 @@ compute_DIC <- function(x, use.pV=FALSE) {
   if (!inherits(x, "mcdraws")) stop("not an object of class 'mcdraws'")
   if (x[["_info"]]$from.prior) stop("cannot compute DIC for draws from prior")
   post.means <- get_means(x)
+  model <- x[["_model"]]
   if (is.null(post.means[["e_"]]))
-    stop("cannot compute DIC: missing simulation means of ", if (x[["_model"]]$e.is.res) "residuals" else "linear predictor", "'e_'")
-  if (x[["_model"]]$modeled.Q && any(x[["_model"]]$family$family == c("gaussian", "gaussian_gamma"))) {
+    stop("cannot compute DIC: missing simulation means of ", if (model[["e.is.res"]]) "residuals" else "linear predictor", "'e_'")
+  if (any(model$family[["family"]] == c("gaussian", "gaussian_gamma")) && model[["modeled.Q"]]) {
     if (is.null(post.means[["Q_"]])) stop("cannot compute DIC: missing simulation means of 'Q_'")
-    if (x[["_model"]]$Q0.type == "symm") {
+    if (model[["Q0.type"]] == "symm") {
       # reconstruct mean sparse precision matrix
-      post.means[["QM_"]] <- block_scale_dsCMatrix(x[["_model"]]$Q0, post.means[["Q_"]])
+      post.means[["QM_"]] <- block_scale_dsCMatrix(model[["Q0"]], post.means[["Q_"]])
     }
   }
   if (is.null(post.means[["llh_"]]))
     stop("cannot compute DIC; missing simulation means of 'llh_'")
-  deviance_at_mean <- -2 * x[["_model"]]$llh(post.means)
-  mean_deviance <- -2 * post.means[["llh_"]]
+  if (any(model$family[["family"]] == c("gaussian", "gaussian_gamma")))
+    deviance.at.mean <- -2 * model$llh(post.means, dotprodC(post.means[["e_"]], model$Q_e(post.means)))
+  else
+    deviance.at.mean <- -2 * model$llh(post.means)
+  mean.deviance <- -2 * post.means[["llh_"]]
   if (use.pV) {
     # larger Monte Carlo error(?), but guaranteed to be positive
     pDIC <- 2 * c(var(as.matrix.dc(x[["llh_"]], colnames=FALSE)))
   } else {  # default
-    pDIC <- mean_deviance - deviance_at_mean
+    pDIC <- mean.deviance - deviance.at.mean
   }
-  c(DIC=deviance_at_mean + 2 * pDIC, p_DIC=pDIC)
+  c(DIC=deviance.at.mean + 2 * pDIC, p_DIC=pDIC)
 }
 
 get_lppd_function <- function(x) {
   llh_i <- x[["_model"]]$llh_i
   if (is.null(llh_i)) stop("pointwise log-likelihood function not implemented; cannot compute WAIC")
-  if (!(any("e_" == par_names(x)) || all(names(Filter(function(mc) mc[["type"]] != "mc_offset", x[["_model"]]$mod)) %in% par_names(x))))
+  if (!(any("e_" == par_names(x)) || all(names(Filter(\(mc) mc[["type"]] != "mc_offset", x[["_model"]]$mod)) %in% par_names(x))))
     stop("WAIC can only be computed if all coefficients are stored. Please use 'store.all=TRUE' in MCMCsim.")
   if (x[["_model"]]$modeled.Q && x[["_model"]]$family$family == "gaussian" && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", x[["_model"]]$Vmod)) %in% par_names(x)))
-    stop("WAIC can only be computed if all modeled variance factors are stored. Please use 'store.all=TRUE' in MCMCsim.")
+    stop("WAIC can only be computed if all modelled variance factors are stored. Please use 'store.all=TRUE' in MCMCsim.")
   llh_i
 }
 
@@ -307,28 +311,29 @@ compute_WAIC <- function(x, diagnostic=FALSE, batch.size=NULL, show.progress=TRU
         else
           ind <- batch + (b - 1L) * batch.size
         logprob_i <- llh_i(obj, ind)
-        lppd[ind] <- colLogSumExps(logprob_i)
-        waic.var[ind] <- colVars(logprob_i)
-        waic.mean[ind] <- .colMeans(logprob_i, nS, length(ind))
+        lppd[ind] <- logSumExpColwiseC(logprob_i)
+        waic.var[ind] <- fvar.matrix(logprob_i, na.rm=FALSE)
+        waic.mean[ind] <- fmean.matrix(logprob_i, na.rm=FALSE)
       }
       list(lppd=lppd, var=waic.var, mean=waic.mean, nS=nS)
     }
     message(n.draw, " draws distributed over ", n.cores, " cores")
     sim_list <- split_iters(x, parts=n.cores)
     out <- parallel::parLapply(cl, X=sim_list, fun=waic_obj)
-    lppd <- exp(out[[1L]]$lppd)
+    lppd.max <- do.call(pmax, lapply(out, `[[`, "lppd"))
+    lppd <- exp(out[[1L]]$lppd - lppd.max)
     pwaic <- out[[1L]]$var  # running posterior variance
     nA <- out[[1L]]$nS
     avg <- out[[1L]]$mean  # running posterior mean
     for (o in out[-1L]) {
-      lppd <- lppd + exp(o$lppd)
-      nAB <- nA + o$nS
-      pwaic <- ((nA - 1L) * pwaic + (o$nS - 1L) * o$var + (nA * o$nS / nAB) * (avg - o$mean)^2) / (nAB - 1L)
-      avg <- (nA * avg + o$nS * o$mean) / nAB
+      lppd <- lppd + exp(o[["lppd"]] - lppd.max)
+      nAB <- nA + o[["nS"]]
+      pwaic <- ((nA - 1L) * pwaic + (o[["nS"]] - 1L) * o[["var"]] + (nA * o[["nS"]] / nAB) * (avg - o[["mean"]])^2) / (nAB - 1L)
+      avg <- (nA * avg + o[["nS"]] * o[["mean"]]) / nAB
       nA <- nAB
     }
-    lppd <- log(lppd) - log(nA)
-    lppd_sum <- sum(lppd)
+    lppd <- lppd.max + log(lppd)
+    lppd_sum <- sum(lppd) - length(lppd) * log(nA)
     pWAIC1 <- 2 * (lppd_sum - sum(avg))
     pWAIC2 <- sum(pwaic)
   } else {
@@ -343,14 +348,14 @@ compute_WAIC <- function(x, diagnostic=FALSE, batch.size=NULL, show.progress=TRU
       else
         ind <- batch + (b - 1L) * batch.size
       logprob_i <- llh_i(x, ind)
-      lppd_i <- colLogSumExps(logprob_i) - log(n.draw)
-      pwaic_i <- colVars(logprob_i)
+      lppd_i <- logSumExpColwiseC(logprob_i) - log(n.draw)
+      pwaic_i <- fvar.matrix(logprob_i, na.rm=FALSE)
       if (diagnostic) {
         lppd[ind] <- lppd_i
         pwaic[ind] <- pwaic_i
       }
       lppd_sum <- lppd_sum + sum(lppd_i)
-      pWAIC1 <- pWAIC1 + sum(.colMeans(logprob_i, n.draw, length(ind)))
+      pWAIC1 <- pWAIC1 + sum(fmean.matrix(logprob_i, na.rm=FALSE))
       pWAIC2 <- pWAIC2 + sum(pwaic_i)
       if (show.progress) setTxtProgressBar(pb, b)
     }
@@ -378,7 +383,7 @@ waic.mcdraws <- function(x, by.unit=FALSE, ...) {
   llh_i <- get_lppd_function(x)
   if (by.unit) {
     data <- data.frame(i=seq_len(x[["_model"]]$n))
-    f <- function(data_i, draws) llh_i(draws, data_i$i)
+    f <- function(data_i, draws) llh_i(draws, data_i[["i"]])
     loo::waic(f, data=data, draws=x)
   } else {
     loo::waic(as.matrix(llh_i(x)))
@@ -394,7 +399,7 @@ loo.mcdraws <- function(x, by.unit=FALSE, r_eff=FALSE, n.cores=1L, ...) {
   llh_i <- get_lppd_function(x)
   if (by.unit) {
     data <- data.frame(i=seq_len(x[["_model"]]$n))
-    f <- function(data_i, draws) llh_i(draws, data_i$i)
+    f <- function(data_i, draws) llh_i(draws, data_i[["i"]])
     if (r_eff)
       r_eff <- loo::relative_eff(f, chain_id=rep_each(seq_len(n_chains(x)), n_draws(x)), data=data, draws=x, cores=n.cores)
     else

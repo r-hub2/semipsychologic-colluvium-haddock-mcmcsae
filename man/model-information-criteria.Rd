@@ -99,9 +99,9 @@ D. Spiegelhalter, N. Best, B. Carlin and A. van der Linde (2002).
    Understanding predictive information criteria for Bayesian models.
    Statistics and Computing 24, 997-1016.
 
- A. Vehtari, D. Simpson, A. Gelman, Y. Yao and J. Gabry (2015).
+ A. Vehtari, D. Simpson, A. Gelman, Y. Yao and J. Gabry (2024).
    Pareto smoothed importance sampling.
-   arXiv:1507.02646.
+   arXiv:1507.02646v9.
 
  A. Vehtari, A. Gelman and J. Gabry (2017).
    Practical Bayesian model evaluation using leave-one-out cross-validation

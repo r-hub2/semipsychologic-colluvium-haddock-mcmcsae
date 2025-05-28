@@ -10,7 +10,7 @@ y <- 1 + rnorm(n)
 test_that("offset-only mean model works", {
   sampler <- create_sampler(y ~ offset(1))
   expect_length(sampler$mod, 1L)
-  expect_equal(sampler$mod[[1]]$offset, rep.int(1, n))
+  expect_equal(sampler$mod[[1]]$offset, 1)
   sim <- MCMCsim(sampler, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$sigma_[, "Mean"], 0.75, 1.3)
@@ -30,7 +30,7 @@ test_that("offset-only mean model works", {
 
   # zero mean model
   sampler <- create_sampler(y ~ offset(0))
-  expect_equal(sampler$mod[[1]]$offset, rep.int(0, n))
+  expect_equal(sampler$mod[[1]]$offset, 0)
   sim <- MCMCsim(sampler, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$sigma_[, "Mean"], 0.75*sqrt(mean(y^2)), 1.3*sqrt(mean(y^2)))

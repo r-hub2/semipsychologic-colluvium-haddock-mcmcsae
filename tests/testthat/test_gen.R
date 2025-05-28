@@ -3,6 +3,12 @@ context("Model component 'gen'")
 
 set.seed(1, kind="Mersenne-Twister", normal.kind="Inversion")
 
+test_that("generating data for iid random effects at the data level works", {
+  dat <- data.frame(t=1:100)
+  gd <- generate_data(~ gen(factor=~t, name="v"), data=dat)
+  expect_length(gd$pars$v, 100L)
+})
+
 n <- 1000L
 m <- 25L
 df <- data.frame(
@@ -64,4 +70,22 @@ test_that("model with t-distributed random effects works", {
   summ <- summary(sim)
   #plot(vf, summ$v[, "Mean"]); abline(0, 1)
   expect_equal(unname(summ$v[, "Mean"]), vf, tolerance=0.5)
+})
+
+n <- 60
+df <- data.frame(
+  x=runif(n),
+  z=rnorm(n),
+  u=rgamma(n, shape = 2)
+)
+df$y <- 1 - df$x + df$z - df$u + rnorm(n, sd=0.4)
+test_that("model with gen component with empty factor argument works", {
+  sampler <- create_sampler(
+    y ~ gen(~ x + z + u, var="diagonal", name="beta"),
+    data=df
+  )
+  expect_equal(sampler$mod[[1]]$l, 1L)
+  sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
+  summ <- summary(sim)
+  expect_between(c(1, -1, 1, -1), summ$beta[, "Mean"] - 5 * summ$beta[, "SD"], summ$beta[, "Mean"] + 5 * summ$beta[, "SD"])
 })

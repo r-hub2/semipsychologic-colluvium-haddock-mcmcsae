@@ -37,6 +37,16 @@ test_that("MCMCsim arguments work", {
   expect_length(sim$v_var, 4)
   expect_identical(dim(sim$v_var[[1]]), c(250L, 2L))
   expect_identical(dim(as.matrix(sim$v_var)), c(1000L, 2L))
+  da <- to_draws_array(sim)
+  expect_is(da, "draws_array")
+  expect_equal(nrow(summary(da)), sum(sapply(sim[par_names(sim)], n_vars)))
+  fv <- fitted(sim)
+  expect_is(fv, "dc")
+  res <- residuals(sim)
+  expect_is(res, "dc")
+  res <- residuals(sim, matrix=TRUE)
+  expect_is(res, "matrix")
+  expect_identical(dim(res), c(1000L, nrow(ex$dat)))
 })
 
 test_that("combine_chains works", {

@@ -54,17 +54,17 @@ combine_chains <- function(...) {
   if (!is.null(dotargs[[1L]][["_accept"]])) {
     out[["_accept"]] <- list()
     for (v in names(dotargs[[1L]][["_accept"]]))
-      out[["_accept"]][[v]] <- do.call("c", lapply(dotargs, function(x) x[["_accept"]][[v]]))
+      out[["_accept"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_accept"]][[v]]))
   }
   if (!is.null(dotargs[[1L]][["_means"]])) {
     out[["_means"]] <- list()
     for (v in names(dotargs[[1L]][["_means"]]))
-      out[["_means"]][[v]] <- do.call("c", lapply(dotargs, function(x) x[["_means"]][[v]]))
+      out[["_means"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_means"]][[v]]))
   }
   if (!is.null(dotargs[[1L]][["_sds"]])) {
     out[["_sds"]] <- list()
     for (v in names(dotargs[[1L]][["_sds"]]))
-      out[["_sds"]][[v]] <- do.call("c", lapply(dotargs, function(x) x[["_sds"]][[v]]))
+      out[["_sds"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_sds"]][[v]]))
   }
   for (v in par_names(dotargs[[1L]])) {
     out[[v]] <- do.call("c", lapply(dotargs, `[[`, v))
@@ -85,7 +85,7 @@ combine_chains_dc <- function(obj) {
   if (!is.null(attr(obj[[1L]], "ppp"))) {
     l <- length(attr(obj[[1L]], "ppp"))
     if (l == 1L)
-      attr(out, "ppp") <- mean(vapply(obj, attr, 0, "ppp"))
+      attr(out, "ppp") <- fmean.default(vapply(obj, attr, 0, "ppp"), na.rm=FALSE)
     else
       attr(out, "ppp") <- rowMeans(vapply(obj, attr, numeric(l), "ppp"))
   }
@@ -159,12 +159,12 @@ combine_iters <- function(...) {
   if (!is.null(dotargs[[1L]][["_means"]])) {
     out[["_means"]] <- list()
     for (v in names(dotargs[[1L]][["_means"]]))
-      out[["_means"]][[v]] <- do.call("c", lapply(dotargs, function(x) x[["_means"]][[v]]))
+      out[["_means"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_means"]][[v]]))
   }
   if (!is.null(dotargs[[1L]][["_sds"]])) {
     out[["_sds"]] <- list()
     for (v in names(dotargs[[1L]][["_sds"]]))
-      out[["_sds"]][[v]] <- do.call("c", lapply(dotargs, function(x) x[["_sds"]][[v]]))
+      out[["_sds"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_sds"]][[v]]))
   }
   for (v in par_names(dotargs[[1L]])) {
     out[[v]] <- dotargs[[1L]][[v]]
@@ -181,7 +181,7 @@ combine_iters <- function(...) {
 # obj is a list of dc objects
 combine_iters_dc <- function(obj) {
   chains <- seq_along(obj[[1L]])
-  n.draw <- sum(i_apply(obj, function(x) nrow(x[[1L]])))
+  n.draw <- sum(i_apply(obj, \(x) nrow(x[[1L]])))
   n.var <- ncol(obj[[1L]][[1L]])
   out <- list()
   if (is.integer(obj[[1L]][[1L]][1L, 1L]))
@@ -230,7 +230,7 @@ split_iters <- function(obj, iters=NULL, parts=NULL) {
       for (v in par_names(obj))
         out[[k]][[v]] <- get_from(obj[[v]], draws=its[[k]])
       if (!is.null(obj[["_info"]][["list.pars"]]))
-        for (v in obj[["_info"]][["list.pars"]]) out[[k]][[v]] <- lapply(obj[[v]], function(x) x[its[[k]]])
+        for (v in obj[["_info"]][["list.pars"]]) out[[k]][[v]] <- lapply(obj[[v]], \(x) x[its[[k]]])
     } else {
       out[[k]] <- get_from(obj, draws=its[[k]])
     }

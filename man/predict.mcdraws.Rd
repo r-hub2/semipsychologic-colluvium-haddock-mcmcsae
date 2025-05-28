@@ -9,9 +9,7 @@
   newdata = NULL,
   X. = if (is.null(newdata)) "in-sample" else NULL,
   type = c("data", "link", "response", "data_cat"),
-  var = NULL,
-  ny = NULL,
-  ry = NULL,
+  weights = NULL,
   fun. = identity,
   labels = NULL,
   ppcheck = FALSE,
@@ -42,24 +40,29 @@ new data is generated according to the predictive distribution.
 If \code{type="link"} only the linear predictor for the mean is generated, and
 in case \code{type="response"} the linear predictor is transformed to the response scale.
 For Gaussian models \code{type="link"} and \code{type="response"} are equivalent.
-For binomial and negative binomial models \code{type="response"} returns the simulations
-of the latent probabilities. For multinomial models \code{type="link"} generates
+For binomial models \code{type="response"} returns the simulations
+of the latent probabilities, and for negative binomial models the exponentiated
+linear predictor, which differs from the mean by a factor equal to the shape parameter.
+For multinomial models \code{type="link"} generates
 the linear predictor for all categories except the last, and \code{type="response"} transforms
 this vector to the probability scale, and \code{type="data"} generates the multinomial data,
 all in long vector format, where the output for all categories (except the last) are stacked.
 For multinomial models and single trials, a further option is \code{type="data_cat"},
 which generates the data as a categorical vector, with integer coded levels.}
 
-\item{var}{variance(s) used for out-of-sample prediction. By default 1.}
-
-\item{ny}{number of trials used for out-of-sample prediction in case of a binomial model. By default 1.}
-
-\item{ry}{fixed part of the (reciprocal) dispersion parameter in case of a negative binomial model.}
+\item{weights}{an optional formula specifying a vector of nonnegative weights.
+Weights are only used for data-generating prediction (\code{type = "data"}).
+A weight \eqn{w_i} means that the \emph{sum} of \eqn{w_i} individual
+predictions is generated for each unit $i$. For example, for the poststratification
+step of Multilevel Regression and Poststratification (MRP) the weights
+are the population counts and the units are the unique combinations of
+all auxiliary variables used in the model, typically stored in a single \code{data.frame}.}
 
 \item{fun.}{function applied to the vector of posterior predictions to compute one or multiple summaries
 or test statistics. The function can have one or two arguments. The first argument is always the vector
-of posterior predictions. The optional second argument represents a list of model parameters, needed only
-when a test statistic depends on them. The function must return an integer or numeric vector.}
+of posterior predictions. The optional second argument must be named 'p' and represents a list of model
+parameters, needed only when a test statistic depends on them. The function must return an integer or
+numeric vector.}
 
 \item{labels}{optional names for the output object. Must be a vector of the same length as the result of \code{fun.}.}
 

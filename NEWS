@@ -2,14 +2,14 @@
 version 0.7.8
 - added bym2 model component
 - in spatial random effect factor, argument poly.df has been replaced by graph
-  which now also accepts neighbours lists, and argument detect.constraints has
+  which now also accepts neighbours lists, and argument derive.constraints has
   been deprecated as it is no longer needed
 - AR1 random effect factors used to be limited to fixed autoregressive
-  parameter values, whereas now uniform or truncated normal priors can be
-  assigned
+  parameter values, whereas now these parameters can be inferred by
+  assigning them uniform or truncated normal priors
 - prediction for models with offsets did not always work correctly, especially
   for Poisson family
-- bug fix in blocked Gibbs sampler for models including a measurement model
+- fixed a bug in blocked Gibbs sampler for models including a measurement model
   component
 - more control over Metropolis-Hastings proposal distributions for some
   parameters through new control arguments

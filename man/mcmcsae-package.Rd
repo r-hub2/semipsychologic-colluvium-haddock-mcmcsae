@@ -11,8 +11,8 @@ Fit multi-level models with possibly correlated random effects using MCMC.
 Functions to fit multi-level models with Gaussian, binomial, multinomial,
 negative binomial or Poisson likelihoods using MCMC. Models with a linear predictor
 consisting of various possibly correlated random effects are supported, allowing
-flexible modeling of temporal, spatial or other kinds of dependence structures.
-For Gaussian models the variance can be modeled too. By modeling variances
+flexible modelling of temporal, spatial or other kinds of dependence structures.
+For Gaussian models the variance can be modelled too. By modelling variances
 at the unit level the marginal distribution can be changed to a Student-t or Laplace
 distribution, which may account better for outliers.
 The package has been developed with applications to small area estimation

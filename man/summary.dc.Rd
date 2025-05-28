@@ -2,7 +2,7 @@
 % Please edit documentation in R/MCMCsim.R
 \name{summary.dc}
 \alias{summary.dc}
-\title{Summarize a draws component (dc) object}
+\title{Summarise a draws component (dc) object}
 \usage{
 \method{summary}{dc}(
   object,
@@ -22,7 +22,7 @@
 \item{na.rm}{whether to remove NA/NaN draws in computing the summaries.}
 
 \item{time}{MCMC computation time; if specified the effective sample size per unit of time
-is returned in an extra column labeled 'efficiency'.}
+is returned in an extra column labelled 'efficiency'.}
 
 \item{abbr}{if \code{TRUE} abbreviate the labels in the output.}
 
@@ -35,7 +35,7 @@ but if an out of memory error occurs it may be a good idea to use a smaller numb
 A matrix with summaries of class \code{dc_summary}.
 }
 \description{
-Summarize a draws component (dc) object
+Summarise a draws component (dc) object
 }
 \examples{
 \donttest{

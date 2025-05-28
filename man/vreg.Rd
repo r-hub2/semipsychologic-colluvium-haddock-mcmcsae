@@ -30,8 +30,10 @@ The default is determined by a simple heuristic based on storage size.}
 \item{X}{a (possibly sparse) design matrix can be specified directly, as an alternative to the
 creation of one based on \code{formula}. If \code{X} is specified \code{formula} is ignored.}
 
-\item{prior}{prior specification for the coefficients. Currently only
-normal priors are supported, specified using function \code{\link{pr_normal}}.}
+\item{prior}{prior specification for the coefficients. A normal prior can be
+specified using function \code{\link{pr_normal}}. Alternatively, fixed values for
+the coefficients can be specified using \code{\link{pr_fixed}}, e.g. to generate
+data with given coefficients.}
 
 \item{Q0}{prior precision matrix for the regression effects. The default is a
 zero matrix corresponding to a noninformative improper prior.

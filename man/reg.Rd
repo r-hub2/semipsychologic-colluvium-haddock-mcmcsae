@@ -13,12 +13,7 @@ reg(
   prior = NULL,
   Q0 = NULL,
   b0 = NULL,
-  R = NULL,
-  r = NULL,
-  S = NULL,
-  s = NULL,
-  lower = NULL,
-  upper = NULL,
+  constraints = NULL,
   name = "",
   debug = FALSE
 )
@@ -57,21 +52,10 @@ It can be specified as a scalar value or as a numeric vector of
 appropriate length. DEPRECATED, please use argument \code{prior}
 instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
 
-\item{R}{optional constraint matrix for equality restrictions R'x = r where
-\code{x} is the vector of regression effects.}
-
-\item{r}{right hand side for the equality constraints.}
-
-\item{S}{optional constraint matrix for inequality constraints S'x >= s where
-\code{x} is the vector of regression effects.}
-
-\item{s}{right hand side for the inequality constraints.}
-
-\item{lower}{as an alternative to \code{s}, \code{lower} and \code{upper} may be specified
-for two-sided constraints lower <= S'x <= upper.}
-
-\item{upper}{as an alternative to \code{s}, \code{lower} and \code{upper} may be specified
-for two-sided constraints lower <= S'x <= upper.}
+\item{constraints}{optional linear equality and/or inequality constraints
+imposed on the vector of regression coefficients. Use function
+\code{\link{set_constraints}} to specify the constraint matrices and
+right-hand sides.}
 
 \item{name}{the name of the model component. This name is used in the output of the
 MCMC simulation function \code{\link{MCMCsim}}. By default the name will be 'reg'
@@ -129,7 +113,8 @@ df <- data.frame(x=runif(n))
 df$y <- rnorm(n, 1 + 2*df$x)
 R <- matrix(1, 2, 1)
 r <- 3
-sampler <- create_sampler(y ~ reg(~ 1 + x, R=R, r=r, name="beta"), data=df)
+C <- set_constraints(R=R, r=r)
+sampler <- create_sampler(y ~ reg(~ 1 + x, constraints=C, name="beta"), data=df)
 sim <- MCMCsim(sampler)
 summary(sim)
 plot(sim, "beta")

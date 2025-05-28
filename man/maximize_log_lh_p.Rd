@@ -2,7 +2,7 @@
 % Please edit documentation in R/models.R
 \name{maximize_log_lh_p}
 \alias{maximize_log_lh_p}
-\title{Maximize the log-likelihood or log-posterior as defined by a sampler closure}
+\title{Maximise the log-likelihood or log-posterior as defined by a sampler closure}
 \usage{
 maximize_log_lh_p(
   sampler,
@@ -25,11 +25,11 @@ or the log-posterior, respectively.}
 \item{...}{other parameters passed to \code{\link[stats]{optim}}.}
 }
 \value{
-A list of parameter values that, provided the optimization was successful, maximize the (log-)likelihood
+A list of parameter values that, provided the optimisation was successful, maximize the (log-)likelihood
  or (log-)posterior.
 }
 \description{
-Maximize the log-likelihood or log-posterior as defined by a sampler closure
+Maximise the log-likelihood or log-posterior as defined by a sampler closure
 }
 \examples{
 \donttest{
@@ -40,7 +40,7 @@ dat <- data.frame(
 )
 df <- generate_data(
   ~ reg(~x, name="beta", prior=pr_normal(precision=1)) + gen(~x, factor=~f, name="v"),
-  sigma.fixed=TRUE, data=dat
+  family=f_gaussian(var.prior=pr_fixed(value=1)), data=dat
 )
 dat$y <- df$y
 sampler <- create_sampler(y ~ x + gen(~x, factor=~f, name="v"), data=dat)

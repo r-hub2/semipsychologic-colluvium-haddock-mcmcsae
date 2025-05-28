@@ -393,7 +393,7 @@ follows</p>
 <span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  <span class="fu">gen</span>(<span class="at">factor =</span> <span class="sc">~</span> <span class="fu">iid</span>(cname), <span class="at">name=</span><span class="st">&quot;v&quot;</span>)</span>
 <span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>sampler <span class="ot">&lt;-</span> <span class="fu">create_sampler</span>(mod, <span class="at">data=</span>apisrs)</span>
 <span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>sim <span class="ot">&lt;-</span> <span class="fu">MCMCsim</span>(sampler, <span class="at">store.all=</span><span class="cn">TRUE</span>, <span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>(<span class="fu">summary</span>(sim))</span></code></pre></div>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="fu">summary</span>(sim)</span></code></pre></div>
 <pre><code>## llh_ :
 ##       Mean   SD t-value MCSE q0.05  q0.5 q0.95 n_eff R_hat
 ## llh_ -1090 4.49    -243 0.12 -1097 -1089 -1083  1394     1

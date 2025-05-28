@@ -1,11 +1,16 @@
 
-# get column indices of CsparseMatrix, 0-based, of nonzero elements in column-major order
-get_col_ind <- function(M) rep(seq_len(ncol(M)) - 1L, diff(M@p))
+# get column indices of CsparseMatrix (compressed column-oriented)
+get_col_ind <- function(M, zero.based=TRUE) {
+  if (zero.based)
+    rep(seq_len(dim(M)[2L]) - 1L, diff.default(M@p))
+  else
+    rep(seq_len(dim(M)[2L]), diff.default(M@p))
+}
 
 # output type determined by input types and force.sparse, not by economizeMatrix
 make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
   q <- nrow(M1)
-  if (nrow(M1) != q) stop("M1 is not symmetric")
+  if (ncol(M1) != q) stop("M1 is not symmetric")
   doM0 <- !is.null(M0)
   doM2 <- !is.null(M2)
   if (doM0 && !identical(dim(M0), c(q, q))) stop("dimension of M0 differs from dimension of M1")
@@ -28,7 +33,7 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
           M1 + M2,
         sparse=sparse.output, symmetric=TRUE
       )
-    } else {  
+    } else {
       template <- as.matrix(M0)
     }
   }
@@ -42,14 +47,14 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
     sub1 <- class1 == "dsC" && length(M1@x) < q
     if (!UnitdiagM1 && sub1) {
       # diagonal dsC containing zeros
-      ind1 <- match(M1@i, seq_len(q) - 1L)
+      ind1 <- fmatch(M1@i, seq_len(q) - 1L)
     }
     if (doM2) {
       UnitdiagM2 <- is_unit_ddi(M2)
       sub2 <- class2 == "dsC" && length(M2@x) < q
       if (!UnitdiagM2 && sub2) {
         # diagonal dsC containing zeros
-        ind2 <- match(M2@i, seq_len(q) - 1L)
+        ind2 <- fmatch(M2@i, seq_len(q) - 1L)
       }
     }
     if (doM0) {
@@ -87,26 +92,20 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
     switch(class1,
       ddi = {
         ind1 <- which(template@i == j & ddi_diag(M1)[j + 1L] != 0) - 1L
-        if (any(M1@x == 0)) {
-          nz1 <- which(M1@x != 0)
+        if (anyv(M1@x, 0)) {
+          nz1 <- whichv(M1@x, 0, invert=TRUE)
           getM1x <- function(M) M@x[nz1]
         } else {
           getM1x <- function(M) M@x
         }
       },
       mat = {
-        ind1 <- match(
-          apply(which(upper.tri(M1, diag=TRUE) & M1 != 0, arr.ind = TRUE) - 1L, 1L, paste, collapse=":"),
-          paste(template@i, j, sep=":")
-        ) - 1L
         Mind1 <- which(upper.tri(M1, diag=TRUE) & M1 != 0)
+        ind1 <- fmatch(Mind1 - 1L, template@i + q * j) - 1L
         getM1x <- function(M) M[Mind1]
       },
       dsC = {
-        ind1 <- match(
-          paste(M1@i, get_col_ind(M1), sep=":"),
-          paste(template@i, j, sep=":")
-        ) - 1L
+        ind1 <- fmatch(list(M1@i, get_col_ind(M1)), list(template@i, j)) - 1L
         getM1x <- function(M) M@x
       }
     )
@@ -114,26 +113,25 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
       switch(class2,
         ddi = {
           ind2 <- which(template@i == j & ddi_diag(M2)[j + 1L] != 0) - 1L
-          if (any(M2@x == 0)) {
-            nz2 <- which(M2@x != 0)
+          if (anyv(M2@x, 0)) {
+            nz2 <- whichv(M2@x, 0, invert=TRUE)
             getM2x <- function(M) M@x[nz2]
           } else {
             getM2x <- function(M) M@x
           }
         },
         mat = {
-          ind2 <- match(
-            apply(which(upper.tri(M2, diag=TRUE) & M2 != 0, arr.ind = TRUE) - 1L, 1L, paste, collapse=":"),
-            paste(template@i, j, sep=":")
-          ) - 1L
           Mind2 <- which(upper.tri(M2, diag=TRUE) & M2 != 0)
+          ind2 <- fmatch(Mind2 - 1L, template@i + q * j) - 1L
           getM2x <- function(M) M[Mind2]
+          if (class1 == "mat") {
+            # additional check for cancellations in M1 + M2 --> invalid sum template
+            if (anyNA(ind2)) stop("invalid matrix sum template")
+            # maybe randomize the (nonzeros of the) input matrices to prevent cancellations
+          }
         },
         dsC = {
-          ind2 <- match(
-            paste(M2@i, get_col_ind(M2), sep=":"),
-            paste(template@i, j, sep=":")
-          ) - 1L
+          ind2 <- fmatch(list(M2@i, get_col_ind(M2)), list(template@i, j)) - 1L
           getM2x <- function(M) M@x
         }
       )
@@ -174,8 +172,9 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
         j1 <- get_col_ind(M1)
         ind1 <- 1L + M1@i + q * j1
         update <- add(update, quote(x[ind1] <- x[ind1] + w1 * M1@x))
-        ind1.lower <- 1L + j1[j1 != M1@i] + q * M1@i[j1 != M1@i]
-        update <- add(update, quote(x[ind1.lower] <- x[ind1.lower] + w1 * M1@x[j1 != M1@i]))
+        ind1.nd <- which(j1 != M1@i)
+        ind1.lower <- 1L + j1[ind1.nd] + q * M1@i[ind1.nd]
+        update <- add(update, quote(x[ind1.lower] <- x[ind1.lower] + w1 * M1@x[ind1.nd]))
       }
     }
     if ((doM0 && doM2) || (!doM0 && class1 == "mat")) {
@@ -187,8 +186,9 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
         j2 <- get_col_ind(M2)
         ind2 <- 1L + M2@i + q * j2
         update <- add(update, quote(x[ind2] <- x[ind2] + w2 * M2@x))
-        ind2.lower <- 1L + j2[j2 != M2@i] + q * M2@i[j2 != M2@i]
-        update <- add(update, quote(x[ind2.lower] <- x[ind2.lower] + w2 * M2@x[j2 != M2@i]))
+        ind2.nd <- which(j2 != M2@i)
+        ind2.lower <- 1L + j2[ind2.nd] + q * M2@i[ind2.nd]
+        update <- add(update, quote(x[ind2.lower] <- x[ind2.lower] + w2 * M2@x[ind2.nd]))
       }
     }
     update <- add(update, quote(x))
@@ -205,9 +205,16 @@ make_det <- function(M, chol.control=chol_control(perm=FALSE)) {
     rm(M, chol.control)
     function(w1, w2) sum(log(w1 * ev0 + w2))
   } else {
-    detchol <- build_chol(M, control=chol.control)
     d <- nrow(M)
-    rm(chol.control)
-    function(w1, w2) d * log(w1) + 2 * c(determinant(detchol$update(M, w2/w1)$cholM)$modulus)
+    if (is.matrix(M)) {
+      function(w1, w2) d * log(w1) +
+        as.numeric(determinant.matrix(Ccholesky(add_diagC(M, rep.int(w2/w1, d))), logarithm=TRUE)[["modulus"]])
+    } else if (class(M)[1L] == "dsCMatrix") {
+      ch <- build_chol(M, control=chol.control)
+      rm(chol.control)
+      function(w1, w2) d * log(w1) +
+        as.numeric(determinant(.updateCHMfactor(ch[["cholM"]], M, mult=w2/w1), logarithm=TRUE, sqrt=FALSE)[["modulus"]])
+    } else stop("unexpected matrix type")
+    #function(w1, w2) d * log(w1) + 2 * detchol$logdet(mult=w2/w1)
   }
 }

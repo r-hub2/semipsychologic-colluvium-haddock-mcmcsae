@@ -15,7 +15,11 @@ df$y <- rnorm(m, theta, sqrt(psi))
 ## ----message=FALSE--------------------------------------------------------------------------------
 library(mcmcsae)
 model <- y ~ reg(~ 1 + x, name="beta") + gen(factor = ~iid(area), name="v")
-sampler <- create_sampler(model, sigma.fixed=TRUE, Q0=1/psi, linpred="fitted", data=df)
+sampler <- create_sampler(
+  model,
+  family=f_gaussian(var.prior=pr_fixed(1), var.vec = ~ psi),
+  linpred="fitted", data=df
+)
 
 ## -------------------------------------------------------------------------------------------------
 sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
@@ -36,8 +40,11 @@ compute_WAIC(sim, show.progress=FALSE)
 plot(df$x, residuals(sim, mean.only=TRUE), xlab="x", ylab="residual"); abline(h=0)
 
 ## -------------------------------------------------------------------------------------------------
-sampler <- create_sampler(model, sigma.fixed=TRUE, Q0=1/psi,
-             linpred="fitted", data=df, compute.weights=TRUE)
+sampler <- create_sampler(
+  model,
+  family=f_gaussian(var.prior=pr_fixed(1), var.vec = ~ psi),
+  linpred="fitted", data=df, compute.weights=TRUE
+)
 sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
 
 ## ----fig.show='hold'------------------------------------------------------------------------------

@@ -49,7 +49,8 @@ void v_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const Eigen::Map
 // [[Rcpp::export(rng=false)]]
 void mv_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const SEXP M, const Eigen::Map<Eigen::VectorXd> & x) {
   if (Rf_isS4(M)) {
-    IntegerVector Dim = as<S4>(M).slot("Dim");
+    const S4 M_S4(M);
+    IntegerVector Dim = M_S4.slot("Dim");
     if (Dim[0] != y.size() || Dim[1] != x.size()) stop("incompatible dimensions");
     if (Rf_inherits(M, "dgCMatrix")) {
       if (plus) {
@@ -58,7 +59,7 @@ void mv_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const SEXP M, c
         y.noalias() -= as<Eigen::Map<Eigen::SparseMatrix<double> > >(M) * x;
       }
     } else if (Rf_inherits(M, "ddiMatrix")) {
-      Eigen::Map<Eigen::VectorXd> Mxslot = as<Eigen::Map<Eigen::VectorXd> >(as<S4>(M).slot("x"));
+      Eigen::Map<Eigen::VectorXd> Mxslot = as<Eigen::Map<Eigen::VectorXd> >(M_S4.slot("x"));
       if (Mxslot.size() == 0) {
         if (plus) y += x; else y -= x;
       } else {
@@ -70,10 +71,10 @@ void mv_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const SEXP M, c
       }
     } else {
       if (!Rf_inherits(M, "tabMatrix")) stop("unexpected matrix type");
-      const IntegerVector perm(as<S4>(M).slot("perm"));
+      const IntegerVector perm(M_S4.slot("perm"));
       const int n = perm.size();
-      const bool reduced(::Rf_asLogical(as<S4>(M).slot("reduced")));
-      const bool num(::Rf_asLogical(as<S4>(M).slot("num")));
+      const bool reduced(::Rf_asLogical(M_S4.slot("reduced")));
+      const bool num(::Rf_asLogical(M_S4.slot("num")));
       if (reduced) {
         if (plus) {
           for (int i = 0; i < n; i++) if (perm[i] >= 0) y[i] += x[perm[i]];
@@ -81,7 +82,7 @@ void mv_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const SEXP M, c
           for (int i = 0; i < n; i++) if (perm[i] >= 0) y[i] -= x[perm[i]];
         }
       } else if (num) {
-        const NumericVector Mxslot(as<S4>(M).slot("x"));
+        const NumericVector Mxslot(M_S4.slot("x"));
         if (plus) {
           for (int i = 0; i < n; i++) y[i] += Mxslot[i] * x[perm[i]];
         } else {
@@ -100,6 +101,16 @@ void mv_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const SEXP M, c
     if (MM.cols() != x.size() || MM.rows() != y.size()) stop("incompatible dimensions");
     if (plus) y.noalias() += MM * x; else y.noalias() -= MM * x;
   }
+}
+
+
+//’ Compute square root of the reciprocal of a numeric vector
+//’ 
+//’ @param x a numeric vector, whose elements are assumed to be nonnegative.
+//’ @returns The inverse of the square root of x.
+// [[Rcpp::export(rng=false)]]
+Eigen::VectorXd invsqrt(const Eigen::Map<Eigen::VectorXd> & x) {
+  return x.array().rsqrt();
 }
 
 //’ Inverse of a symmetric positive definite dense matrix
@@ -181,7 +192,7 @@ double dotprodC(const Eigen::Map<Eigen::VectorXd> & x, const Eigen::Map<Eigen::V
 //’
 //’ @param x a numeric vector.
 //’ @param group an integer vector of the same length as \code{x} defining the groups.
-//’ @param n the number of groups, assumed to be labeled \code{1:n}.
+//’ @param n the number of groups, assumed to be labelled \code{1:n}.
 //’ @returns A vector with totals of \code{x} by group.
 // [[Rcpp::export(rng=false)]]
 NumericVector fast_aggrC(const NumericVector & x, const IntegerVector & group, const int n) {
@@ -478,36 +489,6 @@ Eigen::SparseMatrix<double> Csparse_sym_twist(const Eigen::MappedSparseMatrix<do
   return out.triangularView<Eigen::Upper>();
 }
 
-//’ Compute the crossprod of two dense matrices, known to result in a symmetric matrix
-//’
-//’ @param A a numeric dense matrix.
-//’ @param B a numeric dense matrix, assumed to be of the form \code{QA} where \code{Q} is symmetric.
-//’ @returns The product \code{A'B}.
-// [[Rcpp::export(rng=false)]]
-NumericMatrix Cdense_crossprod_sym2(const NumericMatrix & A, const NumericMatrix & B) {
-  const int n = A.ncol();
-  if (B.ncol() != n) stop("incompatible dimensions");
-  const int rank = A.nrow();
-  if (B.nrow() != rank) stop("incompatible dimensions");
-  NumericMatrix out = no_init(n, n);
-  double z;
-  int i, j, k;
-  for (i = 0; i < n; i++) {
-    for (j = 0; j <= i; j++) {
-      z = 0;
-      for (k = 0; k < rank - 3; k += 4) {
-        z += (A(k,i) * B(k,j) + A(k+1,i) * B(k+1,j)) + (A(k+2,i) * B(k+2,j) + A(k+3,i) * B(k+3,j));
-      }
-      for (; k < rank; k++) {
-        z += A(k,i) * B(k,j);
-      }
-      out(i,j) = z;
-      out(j,i) = z;
-    }
-  }
-  return out;
-}
-
 //’ Create a unit Diagonal Matrix
 //’
 //’ @param n an integer representing the dimension.
@@ -650,6 +631,19 @@ NumericVector log1pexpC(const NumericVector & x) {
   return out;
 }
 
+//’ Compute column-wise log of sum of exponentials for a dense matrix
+//’
+//’ @param M numeric dense matrix.
+//’ @returns The vector of column-wise log-sum-exp of M.
+// [[Rcpp::export(rng=false)]]
+Eigen::VectorXd logSumExpColwiseC(const Eigen::MatrixXd & M) {
+  Eigen::RowVectorXd maxCoeff = M.colwise().maxCoeff();
+  Eigen::MatrixXd shifted = M.rowwise() - maxCoeff;
+  Eigen::RowVectorXd sumExp = shifted.array().exp().colwise().sum();
+  Eigen::RowVectorXd logSumExp = maxCoeff + sumExp.array().log().matrix();
+  return logSumExp.transpose();
+}
+
 //’ Compute Kronecker product of two dense matrices
 //’
 //’ @param M1 numeric dense matrix.
@@ -764,4 +758,25 @@ Eigen::SparseMatrix<double> Ccreate_sparse_crossprod_sym_template(
     }
   }
   return out;
+}
+
+//’ Compute variances of each row of a dense matrix
+//’
+//’ @param M a (dense) matrix.
+// [[Rcpp::export(rng=false)]]
+Eigen::VectorXd rowVarsC(const Eigen::Map<Eigen::MatrixXd> & M) {
+  const int n_rows = M.rows();
+  const int n_cols = M.cols();
+  Eigen::VectorXd vars(n_rows);
+  for (int i = 0; i < n_rows; ++i) {
+    double mean = M.row(i).mean();
+    double var = 0.0;
+    for (int j = 0; j < n_cols; ++j) {
+      double diff = M(i, j) - mean;
+      var += diff * diff;
+    }
+    vars[i] = var / (n_cols - 1); // sample variance (not population variance)
+  }
+  
+  return vars;
 }

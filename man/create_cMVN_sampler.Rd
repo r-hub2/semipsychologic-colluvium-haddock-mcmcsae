@@ -10,8 +10,8 @@ create_cMVN_sampler(
   update.Q = FALSE,
   R = NULL,
   r = NULL,
-  eps1 = 0,
-  eps2 = 0,
+  eps1 = sqrt(.Machine$double.eps),
+  eps2 = sqrt(.Machine$double.eps),
   chol.control = chol_control(perm = TRUE)
 )
 }

@@ -20,7 +20,7 @@ n_eff(dc, useFFT = TRUE, lag.max, cl = NULL)
 \item{cl}{a cluster for parallel computation.}
 }
 \value{
-In case of \code{R_hat} the split-R-hat convergence diagnostic for each
+In case of \code{R_hat} the split R-hat convergence diagnostic for each
  component of the vector parameter, and in case of \code{n_eff} the effective
  number of independent samples for each component of the vector parameter.
 }

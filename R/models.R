@@ -12,7 +12,7 @@ check_mod_names <- function(x) {
   reserved.exts <- c("_df", "_gl", "_GMRFext", "_omega", "_rho", "_sigma", "_xi")
   if (any(grepl(paste0("(", paste0(reserved.exts, collapse="|"), ")$"), x)))
     stop("model component names ending with any of ('", paste0(reserved.exts, collapse="', '"), "') are not allowed")
-  if (any(duplicated(x))) stop("duplicate model component name(s): '", paste0(x[duplicated(x)], collapse="', '"), "'")
+  if (any_duplicated(x)) stop("duplicate model component name(s): '", paste0(x[duplicated(x)], collapse="', '"), "'")
   TRUE
 }
 
@@ -49,23 +49,23 @@ computeDesignMatrix <- function(formula=NULL, data=NULL, labels=TRUE) {
   for (m in seq_along(out)) {
     out[[m]] <- match.call(eval(out[[m]][[1L]]), out[[m]])
     mc <- as.list(out[[m]])[-1L]
-    if (is.null(mc$formula))
+    if (is.null(mc[["formula"]]))
       mc$formula <- ~ 1
     else
-      mc$formula <- as.formula(eval(mc$formula))
-    environment(mc$formula) <- environment(formula)
-    if (any("|" == all.names(mc$formula))) {
+      mc$formula <- as.formula(eval(mc[["formula"]]))
+    environment(mc[["formula"]]) <- environment(formula)
+    if (any("|" == all.names(mc[["formula"]]))) {
       # assume this is a mec component; we use as design matrix the covariate matrix subject to error
-      vs <- as.list(attr(terms(mc$formula), "variables")[-1L])
-      formula.X <- as.formula(paste0("~ 0 + ", paste0(s_apply(vs, function(x) deparse(x[[2L]])), collapse=" + ")), env=environment(formula))
-      out[[m]] <- model_matrix(formula.X, data, sparse=mc$sparse)
+      vs <- as.list(attr(terms(mc[["formula"]]), "variables")[-1L])
+      formula.X <- as.formula(paste0("~ 0 + ", paste0(s_apply(vs, \(x) deparse(x[[2L]])), collapse=" + ")), env=environment(formula))
+      out[[m]] <- model_matrix(formula.X, data, sparse=mc[["sparse"]])
     } else {
-      if (!is.null(mc$factor))
-        mc$factor <- as.formula(mc$factor, env=environment(formula))
+      if (!is.null(mc[["factor"]]))
+        mc$factor <- as.formula(mc[["factor"]], env=environment(formula))
       if (is.null(mc$remove.redundant)) mc$remove.redundant <- FALSE
       if (is.null(mc$drop.empty.levels)) mc$drop.empty.levels <- FALSE
-      out[[m]] <- compute_X(mc$formula, mc$factor, mc$remove.redundant,
-          mc$drop.empty.levels, mc$sparse, data)
+      out[[m]] <- compute_X(mc[["formula"]], mc[["factor"]], mc$remove.redundant,
+          mc$drop.empty.levels, mc[["sparse"]], data)
     }        
     if (!labels) colnames(out[[m]]) <- NULL
   }
@@ -104,7 +104,7 @@ compute_X <- function(formula=~1, factor=NULL,
   if (length(cols2remove))
     attr(X, "factor.cols.removed") <- cols2remove
   if (ncol(X0) > 1L)
-    attr(X, "formula.colnames") <- colnames(X0)
+    attr(X, "formula.colnames") <- dimnames(X0)[[2L]]
   X
 }
 
@@ -134,51 +134,43 @@ combine_X0_XA <- function(X0, XA) {
     if (qA * q0 > 1e6L) {
       labs <- NULL
     } else {  # this may be too much; forget about column names
-      labs <- paste(rep.int(colnames(X0), qA), rep_each(colnames(XA), q0), sep=":")
+      labs <- paste(rep.int(dimnames(X0)[[2L]], qA), rep_each(dimnames(XA)[[2L]], q0), sep=":")
     }
   } else {
-    labs <- colnames(XA)
+    labs <- dimnames(XA)[[2L]]
   }
   attr(out, "Dimnames") <- list(NULL, labs)
   economizeMatrix(out, strip.names=FALSE)
 }
 
-compute_XA <- function(factor=NULL, data=NULL) {
-  enclos <- environment(factor)
-  factor.info <- get_factor_info(factor, data)
+compute_XA <- function(factor.info=NULL, data=NULL) {
   if (is.null(factor.info)) return(NULL)
+  enclos <- environment(factor.info)
+  if (inherits(factor.info, "formula")) {
+    factor.info <- get_factor_info(factor.info, data)
+  }
   n <- n_row(data)
-  if (any("spline" == factor.info$types)) {  # B-spline design matrix components
-    fs <- as.list(attr(terms(factor), "variables"))[-1L]
+  if (any("splines" == factor.info[["types"]])) {  # B-spline design matrix components
+    fs <- factor.info[["factors"]]
     out <- matrix(1, nrow=1L, ncol=n)
     labs <- ""
-    for (f in seq_along(factor.info$types)) {
+    for (f in seq_along(factor.info[["types"]])) {
       variable <- eval_in(factor.info$variables[f], data, enclos)
-      switch(factor.info$types[f],
-        spline = {
-          # P-splines, i.e. penalized B-splines
-          # RW1/2(t) are special cases with degree 1, knots (tmin+1):(tmax-1), and the same precision matrix
-          if (is.null(fs[[f]][["knots"]])) fs[[f]]$knots <- min(variable) + ((-4:35)/30) * (max(variable) - min(variable))
-          if (is.null(fs[[f]][["degree"]])) fs[[f]]$degree <- 3L
-          if (length(fs[[f]][["knots"]]) == 1L) {  # assumed to be the number of knots
-            if (fs[[f]][["knots"]] <= 2L * (fs[[f]][["degree"]] + 2L)) stop("spline: too few knots")
-            fs[[f]]$knots <- min(variable) + ((seq_len(fs[[f]][["knots"]]) - (fs[[f]][["degree"]] + 1L))/(fs[[f]][["knots"]] - 2L*(fs[[f]][["degree"]] + 2L))) * (max(variable) - min(variable))
-          }
-          Xf <- drop0(splines::splineDesign(fs[[f]][["knots"]], variable, fs[[f]][["degree"]] + 1L, sparse=TRUE), tol=sqrt(.Machine$double.eps), is.Csparse=TRUE)
-          labs <- as.vector(outer(labs, paste0("bs", seq_len(ncol(Xf))), FUN=paste, sep=if (identical(labs, "")) "" else ":"))
-        },
-        {
-          Xf <- aggrMatrix(variable, facnames=TRUE)
-          labs <- as.vector(outer(labs, colnames(Xf), FUN=paste, sep=if (identical(labs, "")) "" else ":"))
-        }
-      )
+      if (factor.info[["types"]][f] == "splines") {
+        Xf <- drop0(splines::splineDesign(fs[[f]][["knots"]], variable, fs[[f]][["degree"]] + 1L,
+          sparse=TRUE, outer.ok=TRUE), tol=sqrt(.Machine$double.eps), is.Csparse=TRUE)
+        labs <- as.vector(outer(labs, paste0("bs", seq_len(ncol(Xf))), FUN=paste, sep=if (identical(labs, "")) "" else ":"))
+      } else {
+        Xf <- aggrMatrix(variable, facnames=TRUE)
+        labs <- as.vector(outer(labs, dimnames(Xf)[[2L]], FUN=paste, sep=if (identical(labs, "")) "" else ":"))
+      }
       out <- KhatriRao(t(Xf), out)
     }
     out <- economizeMatrix(t(out), strip.names=FALSE)  # names of @i and @x removed by t()
     dimnames(out) <- list(NULL, labs)
     out
   } else {
-    fac <- combine_factors(factor.info$variables, data, enclos=enclos)
+    fac <- combine_factors(factor.info[["variables"]], data, enclos=enclos)
     if (anyNA(fac)) stop("NA's in 'factor' not allowed")
     aggrMatrix(fac, facnames=TRUE)
   }
@@ -189,29 +181,47 @@ get_factor_info <- function(formula, data) {
   enclos <- environment(formula)
   if (is.null(formula) || intercept_only(formula)) return(NULL)
   fs <- as.list(attr(terms(formula), "variables"))[-1L]
-  fs <- lapply(fs, function(x) if (is.symbol(x)) call("iid", x) else x)
-  variables <- vapply(fs, function(x) deparse(x[[2L]]), "")
-  types <- vapply(fs, function(x) as.character(x[[1L]]), "")
+  fs <- lapply(fs, \(x) if (is.symbol(x)) call("iid", x) else x)
+  variables <- vapply(fs, \(x) deparse(x[[2L]]), "")
+  types <- vapply(fs, \(x) as.character(x[[1L]]), "")
+  if (!all(types %in% c("iid", "RW1", "RW2", "season", "AR1", "splines", "spatial", "custom"))) {
+    stop("unsupported factors in 'factor' argument: ",
+      paste(types[!(types %in% c("iid", "RW1", "RW2", "season", "AR1", "splines", "spatial", "custom"))], collapse=", ")
+    )
+  }
   ncols <- integer(length(fs))
   # extra info, currently used to hold AR1 prior and MH options
   extra <- vector("list", length(fs))
   for (f in seq_along(ncols)) {
-    if (types[f] == "spline") {
-      if (is.null(fs[[f]][["knots"]])) {
-        n.knots <- 40L
+    if (types[f] == "splines") {
+      # P-splines, i.e. penalized B-splines
+      # RW1/2(t) are special cases with degree 1, knots (tmin+1):(tmax-1), and the same precision matrix
+      if (is.null(fs[[f]][["degree"]])) {
+        fs[[f]]$degree <- 3L
       } else {
-        if (length(fs[[f]][["knots"]]) == 1L)
-          n.knots <- fs[[f]][["knots"]]
-        else
-          n.knots <- length(eval(fs[[f]][["knots"]]))
+        fs[[f]]$degree <- as.integer(eval(fs[[f]]$degree, envir=enclos))
+        if (length(fs[[f]]$degree) != 1L) stop('splines degree must be a single integer')
+        if (fs[[f]]$degree <= 0L) stop('splines degree cannot be negative')
       }
-      if (is.null(fs[[f]][["degree"]])) fs[[f]]$degree <- 3L
-      ncols[f] <- n.knots - fs[[f]][["degree"]] - 1L
+      if (is.null(fs[[f]][["knots"]])) {
+        fs[[f]][["knots"]] <- 40L
+      } else {
+        fs[[f]][["knots"]] <- eval(fs[[f]][["knots"]], envir=enclos)
+        if (!is.numeric(fs[[f]]$knots)) stop("wrong input for splines knots")
+      }
+      if (length(fs[[f]][["knots"]]) == 1L) {  # assumed to be the number of knots
+        # evaluate variable to derive knot positions
+        variable <- eval_in(variables[f], data, enclos)
+        fs[[f]]$knots <- min(variable) + (max(variable) - min(variable)) *
+          ((seq_len(fs[[f]][["knots"]]) - fs[[f]][["degree"]] - 2L)/(fs[[f]][["knots"]] - 2L*(fs[[f]][["degree"]] + 2L)))
+      }
+      ncols[f] <- length(fs[[f]][["knots"]]) - fs[[f]][["degree"]] - 1L
+      if (ncols[f] <= fs[[f]][["degree"]] + 1L) stop("splines: too few knots")
     } else {
       if (variables[[f]] == "local_")
         ncols[f] <- n_row(data)
       else
-        ncols[f] <- nlevels(as.factor(eval_in(variables[f], data, enclos)))
+        ncols[f] <- nlevels(qF(eval_in(variables[f], data, enclos)))
       if (types[f] == "AR1") {
         fs[[f]] <- match.call(function(variable, phi=NULL, w=NULL, control=NULL) {}, fs[[f]])
         prior.AR1 <- eval(fs[[f]][["phi"]])
@@ -236,9 +246,9 @@ get_factor_info <- function(formula, data) {
 }
 
 eval_in <- function(text, data, enclos=emptyenv()) {
-  if (text == "local_" && all("local_" != colnames(data))) return(seq_len(n_row(data)))
-  if (text == "global_" && all("global_" != colnames(data))) return(rep.int(1, n_row(data)))
-  if (is.integer(data) && length(data) == 1L)
+  if (text == "local_" && all("local_" != dimnames(data)[[2L]])) return(seq_len(n_row(data)))
+  if (text == "global_" && all("global_" != dimnames(data)[[2L]])) return(rep.int(1, n_row(data)))
+  if (is_integer_scalar(data))
     eval(substitute(evalq(expr, NULL, enclos), list(expr=str2lang(text))))
   else
     eval(substitute(evalq(expr, data, enclos), list(expr=str2lang(text))))
@@ -307,7 +317,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
       fcall <- call("iid", fcall)  # if no GMRF type name is used assume iid
     }
     fcall[[2L]] <- NULL  # remove first argument, which is assumed to be the factor variable's name
-    if (info$types[f] != "spatial") fcall$n <- info$n[f]
+    if (info$types[f] != "spatial") fcall$n <- info[["n"]][f]
     if (needD || Q) {
       DQcall <- fcall
       DQcall[[1L]] <- as.name(paste0(if (needD) "D_" else "Q_", DQcall[[1L]]))
@@ -316,11 +326,11 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
       Rcall <- fcall
       Rcall[[1L]] <- as.name(paste0("R_", Rcall[[1L]]))
     }
-    switch(info$types[f],
-      spline = {
+    switch(info[["types"]][f],
+      splines = {
         penalty <- fcall[["penalty"]]
         if (is.null(penalty)) penalty <- "RW2"
-        if (all(penalty != c("iid", "RW1", "RW2"))) stop("unsupported spline penalty argument")
+        if (all(penalty != c("iid", "RW1", "RW2"))) stop("unsupported splines penalty argument")
         if (needD || Q) {
           DQcall[[1L]] <- as.name(paste0(if (needD) "D_" else "Q_", penalty))
           DQcall$knots <- DQcall$degree <- DQcall$penalty <- NULL
@@ -363,7 +373,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
         }
         if (deprecated) warn("argument 'poly.df' is deprecated; please use argument 'graph' instead")
         graph <- get_neighbours_list(graph, snap, queen)
-        if (length(graph) != info$n[f]) stop("number of nodes of 'graph', ", length(graph), ", does not equal number of levels of variable '", info$variables[f], "', ", info$n[f])
+        if (length(graph) != info[["n"]][f]) stop("number of nodes of 'graph', ", length(graph), ", does not equal number of levels of variable '", info$variables[f], "', ", info$n[f])
         # TODO
         #   aggregate spatial object to factor, if the spatial object has more detail
         #   check that level order is the same: first try variable of the same name as factor, then try rownames of @data; if unsuccessful issue a warning
@@ -402,7 +412,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
             }
           } else {
             Rf <- economizeMatrix(eval(Rcall[["R"]], env), allow.tabMatrix=FALSE)
-            if (dim(Rf)[1L] != info$n[f]) stop("wrong dimension of custom restriction matrix")
+            if (dim(Rf)[1L] != info[["n"]][f]) stop("wrong dimension of custom restriction matrix")
             if (isTRUE(Rcall[["derive.constraints"]])) warn("argument 'derive.constraints' ignored as restriction matrix 'R' is specified")
           }
         }
@@ -425,47 +435,59 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
     )
     if (needD || Q) DQ <- cross(DQ, DQf)
     if (needR) {
-      if (!is.null(out$R)) {
-        out$R <- kronecker(CdiagU(info$n[f]), out$R)
+      if (!is.null(out[["R"]])) {
+        out$R <- kronecker(CdiagU(info[["n"]][f]), out[["R"]])
       }
       if (!is.null(Rf)) {
         nIGMRF <- nIGMRF + 1L
-        if (is.null(out$R))
-          out$R <- zeroMatrix(prod(info$n[seq_len(f)]), 0L)
-        out$R <- cbind(out$R, kronecker(Rf, CdiagU(prod(info$n[seq_len(f - 1L)]))))
+        if (is.null(out[["R"]]))
+          out$R <- zeroMatrix(prod(info[["n"]][seq_len(f)]), 0L)
+        out$R <- cbind(out[["R"]], kronecker(Rf, CdiagU(prod(info$n[seq_len(f - 1L)]))))
       }
     }
   }  # END for (f in seq_along(factor.info$types))
-  if (needR && !is.null(out$R)) {
+  if (needR && !is.null(out[["R"]])) {
     if (!is.null(cols2remove)) out$R <- out$R[-cols2remove, ]
     if ((remove.redundant.R.cols && nIGMRF >= 2L) || !is.null(cols2remove)) {
       # for multiple IGMRF factors R as constructed has redundant columns,
-      #   because of duplicate inclusion of cross-poducts of null-vectors
-      out$R <- remove_redundancy(out$R)
+      #   because of duplicate inclusion of cross-products of null-vectors
+      out$R <- remove_redundancy(out[["R"]])
     }
-    out$R <- economizeMatrix(out$R, allow.tabMatrix=FALSE, ...)
+    out$R <- economizeMatrix(out[["R"]], allow.tabMatrix=FALSE, ...)
   }
   if (needD) {
     if (!is.null(cols2remove)) {
       DQ <- DQ[, -cols2remove]
       # then see which rows become all-zero and remove them too
-      DQ <- DQ[-which(rowSums(DQ * DQ) == 0), ]
+      DQ <- DQ[-whichv(rowSums(DQ * DQ), 0), ]
     }
     out$D <- economizeMatrix(DQ, ...)
-    if (scale.precision && !is_unit_diag(out$D)) {
+    if (scale.precision && !is_unit_diag(out[["D"]])) {
       # scale with geometric mean of marginal variances, as proposed in Riebler ea
-      mvar <- sim_marg_var(D=out$D, R=out$R)
-      if (!is.null(out$R) & ncol(out$R) > 1L) {
-        # assume that each column of R corresponds to a connected component of the graph
-        comp <- apply(out$R, 2L, function(x) which(x != 0))
-        mvar <- lapply(comp, function(ind) exp(mean(log(mvar[ind]))))
-        f <- numeric(ncol(out$D))
+      mvar <- sim_marg_var(D=out[["D"]], R=out[["R"]])
+      if (!is.null(out[["R"]]) && ncol(out[["R"]]) > 1L) {
+        # TODO correct and optimize code below
+        # now it is assumed that each column of R corresponds to a connected component of the graph
+        # which is not generally true for product IGMRF structures
+        if (class(out[["R"]])[1L] == "dgCMatrix") {
+          nz.cols <- diff.default(out[["R"]]@p)
+          comp <- list()
+          ind <- 1L
+          for (i in seq_along(nz.cols)) {
+            comp[[i]] <- out[["R"]]@i[ind:(ind + nz.cols[i] - 1L)] + 1L
+            ind <- ind + nz.cols[i]
+          }
+        } else {
+          comp <- dapply(out[["R"]], \(x) whichv(x, 0, invert=TRUE), MARGIN=2L)
+        }
+        mvar <- lapply(comp, \(ind) exp(fmean.default(log(mvar[ind]), na.rm=FALSE)))
+        f <- numeric(ncol(out[["D"]]))
         for (i in seq_along(comp)) {
           if (length(comp[[i]]) == 1L) {
             # deal with singletons: set precision to 1
-            e_i <- numeric(ncol(out$D))
+            e_i <- numeric(ncol(out[["D"]]))
             e_i[comp[[i]]] <- 1
-            out$D <- rbind(out$D, e_i)
+            out$D <- rbind(out[["D"]], e_i)
             f[comp[[i]]] <- 1
           } else {
             f[comp[[i]]] <- mvar[[i]]
@@ -474,27 +496,27 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
         if (any(i_apply(comp, length) == 1L)) {
           # associate independent random effects with singletons, do not constrain to 0
           out$R <- economizeMatrix(
-            out$R[, -which(i_apply(comp, length) == 1L), drop=FALSE],
+            out$R[, -whichv(i_apply(comp, length), 1L), drop=FALSE],
             allow.tabMatrix=FALSE, ...
           )
         }
-        out$D <- economizeMatrix(out$D %*% Cdiag(f), ...)
+        out$D <- economizeMatrix(out[["D"]] %*% Cdiag(f), ...)
       } else {
-        mvar <- exp(mean(log(mvar)))
+        mvar <- exp(fmean.default(log(mvar), na.rm=FALSE))
         if (mvar > 0)
-          out$D <- sqrt(mvar) * out$D
+          out$D <- sqrt(mvar) * out[["D"]]
         else warn("zero marginal variance detected; will not scale precision matrix")
       }
     }
   }
   if (Q) {
     if (needD) {
-      out$Q <- crossprod(out$D)
+      out$Q <- crossprod(out[["D"]])
     } else {
       out$Q <- DQ
       if (!is.null(cols2remove)) out$Q <- out$Q[-cols2remove, -cols2remove]
     }
-    out$Q <- economizeMatrix(out$Q, symmetric=TRUE, ...)
+    out$Q <- economizeMatrix(out[["Q"]], symmetric=TRUE, ...)
   }
   if (needD && !D) out$D <- NULL
   if (needR && !R) out$R <- NULL
@@ -536,7 +558,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
 #'     are passed to \code{\link[spdep]{poly2nb}}, which computes a neighbours list.
 #'     Alternatively, a neighbours list object of class \code{nb} can be passed directly
 #'     as argument \code{graph}.}
-#'   \item{spline(f, knots, degree)}{P-splines, i.e. penalized B-splines structure over
+#'   \item{splines(f, knots, degree)}{P-splines, i.e. penalised B-splines structure over
 #'     the domain of a quantitative variable f. Arguments knots and degree are passed to
 #'     \code{\link[splines]{splineDesign}}. If \code{knots} is a single value it is interpreted as
 #'     the number of knots, otherwise as a vector of knot positions. By default 40 equally spaced
@@ -558,7 +580,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
 #'   gd <- generate_data(
 #'     ~ reg(~ AREA + BIR74, prior=pr_normal(precision=1), name="beta") +
 #'       gen(factor = ~ spatial(NAME, graph=nc), name="vs"),
-#'     sigma.mod = pr_invchisq(df=10, scale=1),
+#'     family=f_gaussian(var.prior = pr_invchisq(df=10, scale=1)),
 #'     data = nc
 #'   )
 #'   # add the generated target variable and the spatial random effects to the
@@ -572,7 +594,8 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
 #'     gen(factor = ~ spatial(NAME, graph=nc), name="vs"),
 #'     data=nc
 #'   )
-#'   sim <- MCMCsim(sampler, store.all=TRUE, n.iter=600, n.chain=2, verbose=FALSE)
+#'   # increase burnin and n.iter below to improve MCMC convergence
+#'   sim <- MCMCsim(sampler, store.all=TRUE, burnin=100, n.iter=250, n.chain=2, verbose=FALSE)
 #'   (summ <- summary(sim))
 #'   nc$vs <- summ$vs[, "Mean"]
 #'   plot(nc[c("vs_true", "vs")])
@@ -621,7 +644,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=TRUE, R=TRUE, cols2rem
 #' @references
 #'  B. Allevius (2018).
 #'    On the precision matrix of an irregularly sampled AR(1) process.
-#'    arXiv:1801.03791.
+#'    arXiv:1801.03791v2.
 #'
 #'  H. Rue and L. Held (2005).
 #'    Gaussian Markov Random Fields.
@@ -657,7 +680,7 @@ spatial <- function(name, graph=NULL, snap=sqrt(.Machine$double.eps), queen=TRUE
 
 #' @export
 #' @rdname correlation
-spline <- function(name, knots, degree) dont_call()
+splines <- function(name, knots, degree) dont_call()
 
 #' @export
 #' @rdname correlation
@@ -818,7 +841,7 @@ R_spatial <- function(graph=NULL, snap=sqrt(.Machine$double.eps), queen=TRUE, po
   if (derive.constraints) warn("argument 'derive.constraints' is deprecated as it is no longer needed")
   comp <- attr(nbs, "ncomp")
   if (is.null(comp)) {
-    if (!requireNamespace("spdep", quietly=TRUE)) stop("Package spdep required to construct a spatial precision matrix. Please install it.")
+    if (!requireNamespace("spdep", quietly=TRUE)) stop("Package spdep required to construct a spatial precision matrix.")
     # older versions of spdep may not add ncomp attribute to neighbours list(?)
     comp <- spdep::n.comp.nb(nbs)  # compute disconnected parts
   }
@@ -893,7 +916,7 @@ derive_constraints <- function(Q, tol=sqrt(.Machine$double.eps)) {
 # nr: number of the AR1 factor
 DA_AR1_template <- function(info, DA0.5, nr) {
   info$factors[[nr]]$phi <- 0.25
-  DA0.25 <- compute_GMRF_matrices(info, D=TRUE, Q=FALSE, R=FALSE)$D
+  DA0.25 <- compute_GMRF_matrices(info, D=TRUE, Q=FALSE, R=FALSE)[["D"]]
   # indices for -phi:
   ind1 <- which(abs(DA0.25@x - 0.5 * DA0.5@x) < sqrt(.Machine$double.eps))
   # indices for 1 + phi^2:
@@ -914,7 +937,7 @@ DA_AR1_template <- function(info, DA0.5, nr) {
 # nr: number of the AR1 factor
 QA_AR1_template <- function(info, QA0.5, nr) {
   info$factors[[nr]]$phi <- 0.25
-  QA0.25 <- compute_GMRF_matrices(info, D=FALSE, Q=TRUE, R=FALSE, sparse=TRUE)$Q
+  QA0.25 <- compute_GMRF_matrices(info, D=FALSE, Q=TRUE, R=FALSE, sparse=TRUE)[["Q"]]
   # indices for -phi:
   ind1 <- which(abs(QA0.25@x - 0.5 * QA0.5@x) < sqrt(.Machine$double.eps))
   # indices for 1 + phi^2:
@@ -930,7 +953,7 @@ QA_AR1_template <- function(info, QA0.5, nr) {
 }
 
 
-#' Maximize the log-likelihood or log-posterior as defined by a sampler closure
+#' Maximise the log-likelihood or log-posterior as defined by a sampler closure
 #'
 #' @examples
 #' \donttest{
@@ -941,7 +964,7 @@ QA_AR1_template <- function(info, QA0.5, nr) {
 #' )
 #' df <- generate_data(
 #'   ~ reg(~x, name="beta", prior=pr_normal(precision=1)) + gen(~x, factor=~f, name="v"),
-#'   sigma.fixed=TRUE, data=dat
+#'   family=f_gaussian(var.prior=pr_fixed(value=1)), data=dat
 #' )
 #' dat$y <- df$y
 #' sampler <- create_sampler(y ~ x + gen(~x, factor=~f, name="v"), data=dat)
@@ -957,13 +980,13 @@ QA_AR1_template <- function(info, QA0.5, nr) {
 #' @param method optimization method, passed to \code{\link[stats]{optim}}.
 #' @param control control parameters, passed to \code{\link[stats]{optim}}.
 #' @param ... other parameters passed to \code{\link[stats]{optim}}.
-#' @returns A list of parameter values that, provided the optimization was successful, maximize the (log-)likelihood
+#' @returns A list of parameter values that, provided the optimisation was successful, maximize the (log-)likelihood
 #'  or (log-)posterior.
 maximize_log_lh_p <- function(sampler, type=c("llh", "lpost"), method="BFGS", control=list(fnscale=-1), ...) {
   type <- match.arg(type)
   e <- sampler
-  if (e$has.bart) stop("optimization not supported for models with a 'brt' component")
-  if (!is.null(e$Vmod)) stop("optimization not yet implemented for models with sampling variance model specified in 'formula.V'")
+  if (e[["has.bart"]]) stop("optimization not supported for models with a 'brt' component")
+  if (!is.null(e[["Vmod"]])) stop("optimization not yet implemented for models with sampling variance model specified in 'formula.V'")
   ind_sigma <- e$vec_list[["sigma_"]]
   if (type == "llh") {
     f <- function(x)

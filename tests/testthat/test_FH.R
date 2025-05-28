@@ -12,10 +12,13 @@ psi <- (1 + 2*runif(m))^2
 df$y <- rnorm(m, theta, sqrt(psi))
 
 test_that("single block Gibbs sampler for FH model runs", {
-  sampler <- create_sampler(
-    y ~ reg(~ 1 + x, name="beta") + gen(factor = ~ area, name="v"),
-    Q0=1/psi, sigma.fixed=TRUE, data=df
+  expect_warning(
+    sampler <- create_sampler(
+      y ~ reg(~ 1 + x, name="beta") + gen(factor = ~ area, name="v"),
+      Q0=1/psi, sigma.fixed=TRUE, data=df
+    ), "deprecated"
   )
+  expect_equal(sampler$family$Q0, Cdiag(1/psi))
   expect_identical(sampler$block[[1L]], c("beta", "v"))
   expect_true(sampler$mod[["v"]]$usePX)
   expect_length(sampler$mbs, 1L)
@@ -29,9 +32,10 @@ test_that("single block Gibbs sampler for FH model runs", {
 test_that("separate Gibbs block sampler, shortcut '_local' for area indicator, and compute_WAIC work", {
   sampler <- create_sampler(
     y ~ reg(~ 1 + x, name="beta") + gen(factor = ~ local_, name="v"),
-    Q0=Diagonal(x=1/psi), sigma.fixed=TRUE, data=df,
-    control=sampler_control(block=FALSE)
+    family=f_gaussian(var.prior = pr_fixed(1), var.vec = ~ psi),
+    data=df, control=sampler_control(block=FALSE)
   )
+  expect_equal(sampler$Q0, Diagonal(x = 1/psi))
   expect_null(sampler$mbs)
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE, store.all=TRUE)
   expect_is(sim$v, "dc")
@@ -44,8 +48,9 @@ test_that("separate Gibbs block sampler, shortcut '_local' for area indicator, a
 test_that("FH model with unit sampling variances runs", {
   # misspecified model with identity Q0
   sampler <- create_sampler(y ~ reg(~ 1 + x) + gen(factor = ~ iid(area)),
-    sigma.fixed=TRUE, data=df
+    family = f_gaussian(var.prior = pr_fixed()), data=df
   )
+  expect_true(sampler$sigma.fixed)
   expect_identical(sampler$Q0.type, "unit")
   sim <- MCMCsim(sampler, n.iter=250, burnin=100, n.chain=2, verbose=FALSE)
   expect_is(sim, "mcdraws")

@@ -16,11 +16,9 @@ gen(
   PX = NULL,
   priorA = NULL,
   strucA = GMRF_structure(),
-  R0 = NULL,
-  RA = NULL,
-  constr = NULL,
-  S0 = NULL,
-  SA = NULL,
+  GMRFconstr = NULL,
+  constraints0 = NULL,
+  constraintsA = NULL,
   formula.gl = NULL,
   a = 1000,
   name = "",
@@ -38,7 +36,7 @@ Variable names are looked up in the data frame passed as \code{data} argument to
 
 \item{factor}{a formula with factors by which the effects specified in the \code{formula}
 argument vary. Often only one such factor is needed but multiple factors are allowed so that
-interaction terms can be modeled conveniently. The formula must take the form
+interaction terms can be modelled conveniently. The formula must take the form
 \code{ ~ f1(fac1, ...) * f2(fac2, ...) ...}, where
 \code{fac1, fac2} are factor variables and \code{f1, f2} determine the
 correlation structure assumed between levels of each factor, and the \code{...} indicate
@@ -103,39 +101,29 @@ A prior can currently be specified using \code{\link{pr_invchisq}} or \code{\lin
 \code{factor} to a 'bym2' or 'leroux' structure. See \code{\link{GMRF_structure}}
 for details.}
 
-\item{R0}{an optional equality restriction matrix acting on the coefficients defined by \code{formula}, for each
-level defined by \code{factor}. If c is the number of restrictions, \code{R0} is a
-q0 x c matrix where q0 is the number of columns of the design matrix derived
-from \code{formula}. Together with \code{RA} it defines the set of equality constraints
-to be imposed on the vector of coefficients. Only allowed in combination with \code{var="scalar"}.}
-
-\item{RA}{an optional equality restriction matrix acting on the coefficients defined by \code{factor},
-for each effect defined by \code{formula}. If c is the number of restrictions, \code{RA} is a
-l x c matrix where l is the number of levels defined by \code{factor}.
-Together with \code{R0} this defines the set of equality constraints to be imposed on the vector
-of coefficients.
-If \code{constr=TRUE}, additional constraints are imposed, corresponding to the
-null-vectors of the singular precision matrix in case of an intrinsic Gaussian Markov Random Field.}
-
-\item{constr}{whether constraints corresponding to the null-vectors of the precision matrix
+\item{GMRFconstr}{whether constraints corresponding to the null-vectors of the precision matrix
 are to be imposed on the vector of coefficients. By default this is \code{TRUE} for
-improper or intrinsic GMRF model components, i.e. components with a singular precision matrix
-such as random walks or CAR spatial components.}
+improper or intrinsic Gaussian Markov Random Field model components, i.e. components with a
+singular precision matrix such as random walks or CAR spatial components.}
 
-\item{S0}{an optional inequality restriction matrix acting on the coefficients defined by \code{formula}, for each
-level defined by \code{factor}. If c is the number of restrictions, \code{S0} is a
-q0 x c matrix where q0 is the number of columns of the design matrix derived
-from \code{formula}. Together with \code{SA} it defines the set of inequality constraints
-to be imposed on the vector of coefficients.}
+\item{constraints0}{an optional set of linear (in)equality restrictions acting on the coefficients defined
+by \code{formula}, for each level defined by \code{factor}. The constraint matrices, which can
+be specified using function \code{\link{set_constraints}}, must have number of rows equal to
+the number of columns of the design matrix derived from \code{formula}, each column corresponding
+to a linear constraint. Currently only constraints with zero right-hand side are supported.}
 
-\item{SA}{an optional inequality restriction matrix acting on the coefficients defined by \code{factor},
-for each effect defined by \code{formula}. If c is the number of restrictions, \code{SA} is a
-l x c matrix where l is the number of levels defined by \code{factor}.
-Together with \code{S0} this defines the set of constraints to be imposed on the vector
-of coefficients.}
+\item{constraintsA}{an optional set of linear (in)equality restrictions acting on the coefficients defined
+by \code{factor}, for each effect defined by \code{formula}. The constraint matrices, which can
+be specified using function \code{\link{set_constraints}}, must have number of rows equal to
+the number of levels defined by \code{factor}, each column corresponding to a linear constraint.
+The overall set of constraints imposed on the full vector of coefficients is determined by
+\code{constraints0} and \code{constraintsA} together. If \code{GMRFconstr=TRUE}, these user-defined
+constraints (if any) are supplemented by equality constraints corresponding to the null-vectors
+of the singular precision matrix in case of an intrinsic Gaussian Markov Random Field.
+Currently only constraints with zero right-hand side are supported.}
 
 \item{formula.gl}{a formula of the form \code{~ glreg(...)} for group-level predictors
-around which the random effect component is hierarchically centered.
+around which the random effect component is hierarchically centred.
 See \code{\link{glreg}} for details.}
 
 \item{a}{only used in case the effects are MLiG distributed, as

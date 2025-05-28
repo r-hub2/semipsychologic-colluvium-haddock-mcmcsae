@@ -2,7 +2,7 @@
 % Please edit documentation in R/mc_offset.R
 \name{mc_offset}
 \alias{mc_offset}
-\title{Create a model component object for an offset, i.e. fixed, non-parametrized term in the linear predictor}
+\title{Create a model component object for an offset, i.e. fixed, non-parametrised term in the linear predictor}
 \usage{
 mc_offset(formula, value = NULL, name = "")
 }

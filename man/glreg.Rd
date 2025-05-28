@@ -46,7 +46,7 @@ An object with precomputed quantities for sampling from
 \description{
 This function is intended to be used to specify the \code{formula.gl} argument to
 the \code{\link{gen}} model component specification function.
-Group-level predictors and hierarchical centering are
+Group-level predictors and hierarchical centring are
 not used by default, and they currently cannot be used in a model component that is sampled
 together with another model component in the same Gibbs block.
 }

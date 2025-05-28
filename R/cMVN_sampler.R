@@ -13,7 +13,8 @@
 #' @returns An environment with precomputed quantities and a method 'draw' for sampling
 #'   from a multivariate normal distribution subject to equality constraints.
 create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
-                                eps1=0, eps2=0, chol.control=chol_control(perm=TRUE)) {
+                                eps1=sqrt(.Machine$double.eps), eps2=sqrt(.Machine$double.eps),
+                                chol.control=chol_control(perm=TRUE)) {
   if (is.null(Q)) {
     if (is.null(D)) stop("at least one of 'D' and 'Q' must be provided")
     Q <- crossprod(D)
@@ -47,9 +48,10 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
       switch(class(Q)[1L],
         matrix = {
           if (eps1 > 0) I.diag <- seq.int(1L, by=q+1L, length.out=q)
-          I.zero <- which(abs(as.numeric(if (eps1 == 0) Q else Q + eps1 * CdiagU(q))) > .Machine$double.eps)
+          I.nz <- which(abs(as.numeric(if (eps1 == 0) Q else Q + eps1 * CdiagU(q))) > .Machine$double.eps)
+          upper.ind <- upper.tri(Q, diag=TRUE)
           update_Q.expanded <- function(Q) {
-            x <- Q[upper.tri(Q), diag=TRUE]
+            x <- Q[upper.ind]
             if (eps1 > 0) x[I.diag] <- x[I.diag] + eps1
             attr(Q.expanded, "x")[seq_along(I.nz)] <<- x[I.nz]
           }
@@ -124,10 +126,11 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
 create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, sampler, name="x", chol.control) {
 
   if (name == "") stop("empty name")
-  
+
   chol.control[["LDL"]] <- TRUE
   smplr <- create_cMVN_sampler(D=NULL, Q=Q, update.Q=TRUE, R=R, r=r,
-    eps1=1e-9, eps2=0, chol.control=chol.control
+    eps1=sqrt(.Machine$double.eps), eps2=sqrt(.Machine$double.eps),                           
+    chol.control=chol.control
   )
 
   # X, QT passed from block's draw function
@@ -138,9 +141,9 @@ create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, sampler, name="
     u <- Xy + sigma * crossprod_mv(X, sampler$drawMVNvarQ(p))
     for (mc in mbs) {
       if (mc[["type"]] == "gen")
+        u[mc$block.i] <- u[mc$block.i] + sigma^2 * mc$drawMVNvarQ(p)
+      else if (mc[["informative.prior"]])
         u[mc$block.i] <- u[mc$block.i] + sigma * mc$drawMVNvarQ(p)
-      else
-        u[mc$block.i] <- u[mc$block.i] + mc$drawMVNvarQ(p)
     }
 
     p[[name]] <- smplr$draw(QT, Imult, u)
@@ -182,5 +185,5 @@ sim_marg_var <- function(D, Q=NULL, R=NULL, r=NULL, eps1=1e-9, eps2=1e-9, nSim=1
   smplr <- create_cMVN_sampler(D, Q, R=R, r=r, eps1=eps1, eps2=eps2)
   res <- matrix(NA_real_, ncol(D), nSim)
   for (i in seq_len(nSim)) res[, i] <- smplr$draw()
-  rowVars(res)
+  rowVarsC(res)
 }

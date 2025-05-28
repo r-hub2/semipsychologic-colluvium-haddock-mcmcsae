@@ -123,23 +123,40 @@ test_that("non-zero prior mean works", {
   expect_between(summ$sigma_[, "Mean"], 0.75, 1.5)
 })
 
+test_that("fixed prior mean works", {
+  mod <- y ~ x1 + x2 + x3 + x4
+  f <- c(1,1,2,3,4)
+  ml_mod <- y ~ reg(mod, prior=pr_fixed(value=f), name="beta")
+  sampler <- create_sampler(ml_mod, data=df)
+  sim <- MCMCsim(sampler, n.iter=10, burnin=0, n.chain=2, verbose=FALSE)
+  summ <- summary(sim)
+  expect_equal(unname(summ$beta[, "q0.05"]), f)
+  expect_equal(unname(generate_data(ml_mod, data=df)$pars$beta), f)
+})
+
 n <- 1000
 sd0 <- 0.41
 y <- 1 + rnorm(n, sd=sd0)
 test_that("different priors for residual variance work", {
-  sampler <- create_sampler(y ~ 1, sigma.mod=pr_fixed(0.41^2))
+  expect_warning(
+    sampler <- create_sampler(y ~ 1, sigma.mod=pr_fixed(sd0^2)),
+    "deprecated"
+  )
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE)
   pm_sigma <- summary(sim$sigma_)[, "Mean"]
   expect_between(pm_sigma, 0.75*sd0, 1.25*sd0)
-  sampler <- create_sampler(y ~ 1, sigma.mod=pr_invchisq(df=1, scale="modeled"))
+  expect_warning(
+    sampler <- create_sampler(y ~ 1, sigma.mod=pr_invchisq(df=1, scale="modeled")),
+    "deprecated"
+  )
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE)
   pm_sigma <- summary(sim$sigma_)[, "Mean"]
   expect_between(pm_sigma, 0.75*sd0, 1.25*sd0)
-  sampler <- create_sampler(y ~ 1, sigma.mod=pr_exp(scale=1))
+  sampler <- create_sampler(y ~ 1, family=f_gaussian(var.prior = pr_exp(scale=1)))
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE)
   pm_sigma <- summary(sim$sigma_)[, "Mean"]
   expect_between(pm_sigma, 0.75*sd0, 1.25*sd0)
-  sampler <- create_sampler(y ~ 1, sigma.mod=pr_gig(a=1, b=1, p=1))
+  sampler <- create_sampler(y ~ 1, family=f_gaussian(var.prior=pr_gig(a=2, b=1, p=1.4)))
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE)
   pm_sigma <- summary(sim$sigma_)[, "Mean"]
   expect_between(pm_sigma, 0.75*sd0, 1.25*sd0)

@@ -19,10 +19,10 @@
 #'  and for method 'HMCZigZag' also gradient events). Default is unlimited.
 #'  Specifying a finite number may speed up the sampling but may also result
 #'  in a biased sampling algorithm.
-#' @param rate vector of Laplace rate parameters for method 'HMCZigZag'. It must be
-#'  a positive numeric vector of length one or the number of variables.
+#' @param scale vector of Laplace scale parameters for method 'HMCZigZag'. It must be
+#'  a positive numeric vector of length equal to one or the number of variables.
 #' @param prec.eq positive numeric vector of length 1 or the number of equality restrictions,
-#'  to control the precision with which the equality restrictions are imposed; the larger
+#'  to control the precision by which the equality restrictions are imposed; the larger
 #'  \code{prec.eq} the more precisely they will be imposed.
 #' @param adapt experimental feature: if \code{TRUE} the rate parameter will be adapted
 #'  in an attempt to make the sampling algorithm more efficient.
@@ -72,7 +72,7 @@ m_HMC <- function(Tsim=pi/2, max.events=.Machine$integer.max, diagnostic=FALSE) 
 
 #' @export
 #' @rdname TMVN-methods
-m_HMCZigZag <- function(Tsim=1, rate=1, prec.eq=NULL, diagnostic=FALSE,
+m_HMCZigZag <- function(Tsim=1, scale=1, prec.eq=NULL, diagnostic=FALSE,
                         max.events=.Machine$integer.max, adapt=FALSE) {
   if (is.function(Tsim)) {
     Tsim_value <- Tsim()
@@ -81,10 +81,10 @@ m_HMCZigZag <- function(Tsim=1, rate=1, prec.eq=NULL, diagnostic=FALSE,
     Tsim <- function() Tsim_value
   }
   if (!is.numeric(Tsim_value) || length(Tsim_value) != 1L || Tsim_value <= 0) stop("'Tsim' should be a single positive numeric value, or a function to generate one")
-  if (any(rate <= 0)) stop("Laplace distribution scale parameters must be positive")
+  if (any(scale <= 0)) stop("Laplace distribution scale parameters must be positive")
   max.event <- as.integer(max.events)
   if (length(max.events) != 1L || max.events <= 0) stop("'max.events must be a positive integer'")
-  list(name="HMCZigZag", Tsim=Tsim, rate=rate, prec.eq=prec.eq, diagnostic=diagnostic,
+  list(name="HMCZigZag", Tsim=Tsim, scale=scale, prec.eq=prec.eq, diagnostic=diagnostic,
        max.events=max.events, adapt=adapt)
 }
 

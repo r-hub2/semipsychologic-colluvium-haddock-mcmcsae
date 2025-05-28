@@ -18,14 +18,15 @@
 #'
 #' train <- gendat()
 #' test <- gendat(n=25)
-#' 
+#'
 #' # keep trees for later prediction based on new data
 #' sampler <- create_sampler(
 #'   y ~ brt(~ . - y, name="bart", keepTrees=TRUE),
-#'   sigma.mod=pr_invchisq(df=3,  scale=var(train$y)),
+#'   family = f_gaussian(var.prior=pr_invchisq(df=3, scale=var(train$y))),
 #'   data = train
 #' )
-#' sim <- MCMCsim(sampler, n.chain=2, n.iter=700, thin=2,
+#' # increase burnin and n.iter below to improve MCMC convergence
+#' sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=500, thin=2,
 #'   store.all=TRUE, verbose=FALSE)
 #' (summ <- summary(sim))
 #' plot(train$mu, summ$bart[, "Mean"]); abline(0, 1)
@@ -77,13 +78,13 @@ brt <- function(formula, X=NULL, n.trees=75L,
 
   if (!requireNamespace("dbarts", quietly=TRUE)) stop("package dbarts required for a model including Bayesian Additive Regression Trees")
 
-  if (e$modeled.Q && e$Q0.type == "symm") stop("BART component not compatible with non-diagonal residual variance matrix")
+  if (e[["modeled.Q"]] && e[["Q0.type"]] == "symm") stop("BART component not compatible with non-diagonal residual variance matrix")
 
   if (is.null(X)) {
     # no contrasts applied, no (urgent) need to remove redundancy
     X <- model_matrix(formula, e[["data"]], contrasts.arg="contr.none", sparse=FALSE)
   } else {
-    if (is.null(colnames(X))) colnames(X) <- seq_len(ncol(X))
+    if (is.null(dimnames(X)[[2L]])) colnames(X) <- seq_len(ncol(X))
   }
   X <- economizeMatrix(X, sparse=FALSE, strip.names=FALSE, check=TRUE)
   q <- ncol(X)
@@ -109,14 +110,14 @@ brt <- function(formula, X=NULL, n.trees=75L,
 
   # TODO if sigma.fixed set prior to (almost) fix sigma to 1
   create_BART_sampler <- function() {
-    if (e$Q0.type == "diag") {
+    if (e[["Q0.type"]] == "diag") {
       dbarts::dbarts(formula=X, data=e$y_eff(),
-        weights = e$Q0@x, sigma = if (e$sigma.fixed) 1 else NA_real_,
+        weights = e$Q0@x, sigma = if (e[["sigma.fixed"]]) 1 else NA_real_,
         control=control, ...
       )
     } else {
       dbarts::dbarts(formula=X, data=e$y_eff(),
-        sigma = if (e$sigma.fixed) 1 else NA_real_,
+        sigma = if (e[["sigma.fixed"]]) 1 else NA_real_,
         control=control, ...
       )
     }
@@ -148,7 +149,7 @@ brt <- function(formula, X=NULL, n.trees=75L,
       } else {
         if (!keepTrees) stop("out-of-sample prediction requires setting keepTrees=TRUE in brt() model specification")
         nnew <- nrow(newdata)
-        if (e$family$family == "multinomial") {
+        if (e$family[["family"]] == "multinomial") {
           Xnew <- NULL
           for (k in seq_len(e[["Km1"]])) {
             edat$cat_ <- factor(rep.int(e$cats[k], nnew), levels=e$cats[-length(e$cats)])
@@ -159,10 +160,10 @@ brt <- function(formula, X=NULL, n.trees=75L,
           Xnew <- model_matrix(formula, newdata, contrasts.arg="contr.none", sparse=FALSE)
         }
       }
-      if (is.null(colnames(Xnew))) {
+      if (is.null(dimnames(Xnew)[[2L]])) {
         if (ncol(Xnew) != q) stop("wrong number ", ncol(Xnew), " predictor column(s) for model term '", name, "' versus ", q, " originally")
       } else {
-        Xnew <- Xnew[, colnames(X), drop=FALSE]
+        Xnew <- Xnew[, dimnames(X)[[2L]], drop=FALSE]
       }
       Xnew <- economizeMatrix(Xnew, sparse=FALSE, strip.names=TRUE, check=TRUE)
       rm(newdata, verbose)
@@ -209,16 +210,16 @@ brt <- function(formula, X=NULL, n.trees=75L,
     p
   }
 
-  if (!e$prior.only) {
+  if (!e[["prior.only"]]) {
     draw <- if (debug) function(p) {browser()} else function(p) {}
-    if (!e$single.block) {
-      if (e$e.is.res)
+    if (!e[["single.block"]]) {
+      if (e[["e.is.res"]])
         draw <- add(draw, bquote(p$e_ <- p[["e_"]] + p[[.(name)]]))
       else
         draw <- add(draw, bquote(p$e_ <- p[["e_"]] - p[[.(name)]]))
       draw <- add(draw, bquote(p[[.(name_sampler)]]$setResponse(p[["e_"]])))
     }
-    if (e$modeled.Q)
+    if (e[["modeled.Q"]])
       draw <- add(draw, bquote(p[[.(name_sampler)]]$setWeights(p[["Q_"]])))
     draw <- draw |>
       add(bquote(p[[.(name_sampler)]]$setSigma(.(if (e$sigma.fixed) 1 else quote(p[["sigma_"]]))))) |>
@@ -231,7 +232,7 @@ brt <- function(formula, X=NULL, n.trees=75L,
       # define an inverse transformation for prediction purposes
       # min.y and range.y are set below, if setResponse is used should be updated in each iteration
       # undo_scaling <- function(pred) min.y + range.y * (pred + 0.5)
-      if (e$single.block) {
+      if (e[["single.block"]]) {
         min.y <- min(e$y_eff())
         range.y <- max(e$y_eff()) - min.y
       } else {
@@ -240,13 +241,13 @@ brt <- function(formula, X=NULL, n.trees=75L,
       }
       draw <- add(draw, bquote(p[[.(name_trees)]]$value[p[[.(name_trees)]]$var == -1L] <- min.y/n.trees + range.y * (p[[.(name_trees)]]$value[p[[.(name_trees)]]$var == -1L] + 0.5/n.trees)))
     }
-    if (e$single.block) {
-      if (e$e.is.res)
+    if (e[["single.block"]]) {
+      if (e[["e.is.res"]])
         draw <- add(draw, bquote(p$e_ <- e$y_eff() - p[[.(name)]]))
       else
         draw <- add(draw, bquote(p$e_ <- p[[.(name)]]))
     } else {
-      if (e$e.is.res)
+      if (e[["e.is.res"]])
         draw <- add(draw, bquote(p$e_ <- p[["e_"]] - p[[.(name)]]))
       else
         draw <- add(draw, bquote(p$e_ <- p[["e_"]] + p[[.(name)]]))

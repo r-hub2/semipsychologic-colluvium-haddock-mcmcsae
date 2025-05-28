@@ -77,6 +77,10 @@ mv_update <- function(y, plus, M, x) {
     invisible(.Call(`_mcmcsae_mv_update`, y, plus, M, x))
 }
 
+invsqrt <- function(x) {
+    .Call(`_mcmcsae_invsqrt`, x)
+}
+
 inverseSPD <- function(M) {
     .Call(`_mcmcsae_inverseSPD`, M)
 }
@@ -201,10 +205,6 @@ Csparse_sym_twist <- function(Q, p) {
     .Call(`_mcmcsae_Csparse_sym_twist`, Q, p)
 }
 
-Cdense_crossprod_sym2 <- function(A, B) {
-    .Call(`_mcmcsae_Cdense_crossprod_sym2`, A, B)
-}
-
 CdiagU <- function(n) {
     .Call(`_mcmcsae_CdiagU`, n)
 }
@@ -245,6 +245,10 @@ log1pexpC <- function(x) {
     .Call(`_mcmcsae_log1pexpC`, x)
 }
 
+logSumExpColwiseC <- function(M) {
+    .Call(`_mcmcsae_logSumExpColwiseC`, M)
+}
+
 Cdense_kron <- function(M1, M2) {
     .Call(`_mcmcsae_Cdense_kron`, M1, M2)
 }
@@ -259,6 +263,10 @@ Cnnz_per_col_scps_template <- function(X, j1_ind, j2_ind) {
 
 Ccreate_sparse_crossprod_sym_template <- function(X, j1_ind, j2_ind, nnz_per_col) {
     .Call(`_mcmcsae_Ccreate_sparse_crossprod_sym_template`, X, j1_ind, j2_ind, nnz_per_col)
+}
+
+rowVarsC <- function(M) {
+    .Call(`_mcmcsae_rowVarsC`, M)
 }
 
 Ctab <- function(Dim, reduced, perm, num, x) {

@@ -2,10 +2,10 @@
 % Please edit documentation in R/GMRF_extension.R
 \name{GMRF_structure}
 \alias{GMRF_structure}
-\title{Set a GMRF structure for a generic model component}
+\title{Set up a GMRF structure for a generic model component}
 \usage{
 GMRF_structure(
-  type = c("default", "bym2", "leroux"),
+  type = c("default", "bym2", "leroux", "Leroux"),
   scale.precision = (type == "bym2"),
   prior = NULL,
   control = NULL
@@ -16,7 +16,7 @@ GMRF_structure(
 corresponds to the precision matrix \eqn{Q_A} as specified by argument \code{factor}
 of \code{gen}. Type "bym2" modifies the default structure to one with
 covariance matrix \eqn{\phi \tilde{Q}_{A}^- + (1 - \phi) I} where
-\eqn{\tilde{Q}_{A*}^-} is the generalized inverse of \eqn{Q_A}, by default
+\eqn{\tilde{Q}_{A*}^-} is the generalised inverse of \eqn{Q_A}, by default
 scaled such that the geometric mean of the marginal variances equals 1.
 Type "leroux" modifies the default structure to one with precision matrix
 \eqn{\phi Q_A + (1 - \phi) I}.}

@@ -22,8 +22,8 @@ test_that("crossprod of incidence matrix yields precision matrix", {
 x <- seq(0, 1, 0.01)
 dat <- data.frame(x, y=x*sin(5*x))
 
-test_that("spline model works", {
-  sampler <- create_sampler(y ~ gen(factor = ~ spline(x, knots=15)),
+test_that("splines model works", {
+  sampler <- create_sampler(y ~ gen(factor = ~ splines(x, knots=15)),
                             linpred="fitted", data=dat)
   sim <- MCMCsim(sampler, n.iter=500, verbose=FALSE)
   summ <- summary(sim)

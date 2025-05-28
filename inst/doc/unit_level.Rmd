@@ -45,7 +45,7 @@ mod <- api00 ~
   gen(factor = ~ iid(cname), name="v")
 sampler <- create_sampler(mod, data=apisrs)
 sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
-(summary(sim))
+summary(sim)
 ```
 
 We wish to estimate the area population means
