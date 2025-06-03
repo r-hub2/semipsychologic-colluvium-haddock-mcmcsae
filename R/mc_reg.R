@@ -468,7 +468,7 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
     }
   }
 
-  if (in_block && (!is.null(e$control[["CG"]]) || e$control[["expanded.cMVN.sampler"]])) {
+  if (in_block && (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]])) {
     if (informative.prior) {
       cholQV <- build_chol(Q0, control=e$control[["chol.control"]])
       drawMVNvarQ <- function(p) cholQV$Ltimes(Crnorm(q), transpose=FALSE)

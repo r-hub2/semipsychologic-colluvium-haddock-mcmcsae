@@ -325,8 +325,8 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
       # all components of type reg, gen and mec in a single block
       block <- list(names(mod)[!(types %in% c("mc_offset", "brt"))])
       # single component by default not handled as a block, unless
-      #   compute.weights=TRUE, or expanded.cMVN or CG sampler is used
-      if (!length(block[[1L]]) || (length(block[[1L]]) == 1L && !compute.weights && !is.list(control[["CG"]]) && !control[["expanded.cMVN.sampler"]]))
+      #   compute.weights=TRUE, or cMVN or CG sampler is used
+      if (!length(block[[1L]]) || (length(block[[1L]]) == 1L && !compute.weights && !is.list(control[["CG"]]) && !control[["cMVN.sampler"]]))
         block <- list()
     } else
       block <- list()
@@ -343,12 +343,12 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
   offset.only <- all(types == "mc_offset")
 
   if (!prior.only) {
-    if (control[["expanded.cMVN.sampler"]] || !is.null(control[["CG"]])) {
+    if (control[["cMVN.sampler"]] || !is.null(control[["CG"]])) {
       if (family[["family"]] == "gamma")
-        stop("conjugate gradients and 'expanded.cMVN.sampler' algorithms not supported for 'gamma' family")
+        stop("conjugate gradients and 'cMVN.sampler' algorithms not supported for 'gamma' family")
       if (!length(block)) {
-        warn("conjugate gradients and 'expanded.cMVN.sampler' algorithms currently only used for blocked Gibbs sampler")
-        control$expanded.cMVN.sampler <- FALSE
+        warn("conjugate gradients and 'cMVN.sampler' algorithms currently only used for blocked Gibbs sampler")
+        control$cMVN.sampler <- FALSE
         control$CG <- NULL
       }
     }
@@ -395,7 +395,7 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
           Q_e <- function(p) y_shifted - p[["Q_"]] * p[["e_"]]
       }
     }
-    if (!is.null(control[["CG"]]) || control[["expanded.cMVN.sampler"]]) {
+    if (!is.null(control[["CG"]]) || control[["cMVN.sampler"]]) {
       # set up a function that multiplies by L Chol factor of Q, for sampling from N(., Q)
       if (any(family[["family"]] == c("gaussian", "gaussian_gamma"))) {
         if (modeled.Q) {
@@ -954,10 +954,10 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #' @param recompute.e when \code{FALSE}, residuals or linear predictors are only computed at the start of the simulation.
 #'  This may give a modest speed-up but in some cases may be less accurate due to round-off error accumulation.
 #'  Default is \code{TRUE}.
-#' @param expanded.cMVN.sampler whether an expanded linear system including dual variables is used
+#' @param cMVN.sampler whether an extended linear system including dual variables is used
 #'  for equality constrained multivariate normal sampling. If set to \code{TRUE} this may
-#'  improve the performance of the blocked Gibbs sampler, especially in case of a large number of equality
-#'  constraints, typically GMRF identifiability constraints.
+#'  improve the performance of the blocked Gibbs sampler, especially in case of a large number
+#'  of equality constraints, typically (intrinsic) GMRF identifiability constraints.
 #' @param CG use a conjugate gradient iterative algorithm instead of Cholesky updates for sampling
 #'  the model's coefficients. This must be a list with possible components \code{max.it},
 #'  \code{stop.criterion}, \code{verbose}, \code{preconditioner} and \code{scale}.
@@ -998,14 +998,14 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #'    ACM Transactions on Mathematical Software 35(3), 1-14.
 sampler_control <- function(add.outer.R=TRUE, add.eps.I=FALSE, eps=sqrt(.Machine$double.eps),
                             recompute.e=TRUE,
-                            expanded.cMVN.sampler=FALSE, CG=NULL,
+                            cMVN.sampler=FALSE, CG=NULL,
                             block=TRUE, block.V=TRUE, auto.order.block=TRUE,
                             chol.control=chol_control(),
                             max.size.cps.template=100,
                             PG.approx=TRUE, PG.approx.m=-2L) {
   list(add.outer.R=add.outer.R, add.eps.I=add.eps.I, eps=eps,
        recompute.e=recompute.e,
-       expanded.cMVN.sampler=expanded.cMVN.sampler, CG=CG,
+       cMVN.sampler=cMVN.sampler, CG=CG,
        block=block, block.V=block.V, auto.order.block=auto.order.block,
        chol.control = chol.control,
        max.size.cps.template=max.size.cps.template,
@@ -1044,6 +1044,6 @@ check_sampler_control <- function(control) {
   } else if (!is.null(control[["CG"]])) {
     control$CG <- check_CG_control(control[["CG"]])
   }
-  if (control[["expanded.cMVN.sampler"]] && is.list(control[["CG"]])) stop("'expanded.cMVN.sampler' and 'CG' cannot currently be combined")
+  if (control[["cMVN.sampler"]] && is.list(control[["CG"]])) stop("'cMVN.sampler' and 'CG' cannot currently be combined")
   control
 }

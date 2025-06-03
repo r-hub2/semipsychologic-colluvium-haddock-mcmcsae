@@ -46,8 +46,8 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
 
     add.eps.I <- if (is.null(control)) FALSE else control[["add.eps.I"]]
     add.outer.R <- if (add.eps.I || is.null(control)) FALSE else control[["add.outer.R"]]
-    expanded.cMVN.sampler <- if (is.null(control)) FALSE else control[["expanded.cMVN.sampler"]]
-    if (expanded.cMVN.sampler) {
+    cMVN.sampler <- if (is.null(control)) FALSE else control[["cMVN.sampler"]]
+    if (cMVN.sampler) {
       if (update.XX) {
         mat_sum <- make_mat_sum(M1=XX, M2=Q, force.sparse=TRUE)
         XX_Q <- mat_sum(XX, Q)

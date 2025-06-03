@@ -9,7 +9,7 @@ sampler_control(
   add.eps.I = FALSE,
   eps = sqrt(.Machine$double.eps),
   recompute.e = TRUE,
-  expanded.cMVN.sampler = FALSE,
+  cMVN.sampler = FALSE,
   CG = NULL,
   block = TRUE,
   block.V = TRUE,
@@ -45,10 +45,10 @@ posterior precision matrix of coefficients sampled in a block.}
 This may give a modest speed-up but in some cases may be less accurate due to round-off error accumulation.
 Default is \code{TRUE}.}
 
-\item{expanded.cMVN.sampler}{whether an expanded linear system including dual variables is used
+\item{cMVN.sampler}{whether an extended linear system including dual variables is used
 for equality constrained multivariate normal sampling. If set to \code{TRUE} this may
-improve the performance of the blocked Gibbs sampler, especially in case of a large number of equality
-constraints, typically GMRF identifiability constraints.}
+improve the performance of the blocked Gibbs sampler, especially in case of a large number
+of equality constraints, typically (intrinsic) GMRF identifiability constraints.}
 
 \item{CG}{use a conjugate gradient iterative algorithm instead of Cholesky updates for sampling
 the model's coefficients. This must be a list with possible components \code{max.it},

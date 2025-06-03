@@ -231,7 +231,7 @@ gen <- function(formula = ~ 1, factor=NULL,
     all(b_apply(info[["factors"]][info[["types"]] == "custom"], \(x) !is.null(x[["D"]]))) &&
     !any(b_apply(info[["factors"]], \(x) isTRUE(x[["circular"]])))
   GMRFmats <- compute_GMRF_matrices(info, e[["data"]],
-    D=fastGMRFprior || !is.null(priorA) || !is.null(e$control[["CG"]]) || e$control[["expanded.cMVN.sampler"]],
+    D=fastGMRFprior || !is.null(priorA) || !is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]],
     Q=!(fastGMRFprior || !is.null(priorA)),
     R=GMRFconstr, sparse=if (in_block) TRUE else NULL,
     cols2remove=factor.cols.removed, scale.precision=strucA$scale.precision, drop.zeros=TRUE
@@ -248,7 +248,7 @@ gen <- function(formula = ~ 1, factor=NULL,
     AR1.inferred <- NULL
   }
 
-  if (fastGMRFprior || !is.null(priorA) || !is.null(e$control[["CG"]]) || e$control[["expanded.cMVN.sampler"]]) {
+  if (fastGMRFprior || !is.null(priorA) || !is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]]) {
     if (is.null(AR1.inferred)) {
       DA <- GMRFmats[["D"]]  # lD x l incidence matrix DA
       l <- ncol(DA)
@@ -780,14 +780,14 @@ gen <- function(formula = ~ 1, factor=NULL,
     # store QA x Qv for use in block sampler, and/or AR1 parameter sampler
     name_Q <- paste0(name, "_Q_")  # trailing "_" --> only temporary storage
   }
-  if (!is.null(e$control[["CG"]]) || e$control[["expanded.cMVN.sampler"]] ||
+  if (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]] ||
       (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
     name_Qv <- paste0(name, "_Qv_")
   }
   if (!is.null(AR1.inferred)) {
     draw <- add(draw, bquote(phi <- p[[.(name_AR1)]]))
     draw <- add(draw, bquote(p[[.(name_AR1)]] <- AR1sampler$draw(phi, p)))
-    if (fastGMRFprior || !is.null(priorA) || !is.null(e$control[["CG"]]) || e$control[["expanded.cMVN.sampler"]]) {
+    if (fastGMRFprior || !is.null(priorA) || !is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]]) {
       draw <- add(draw, bquote(DA <- DA.template$update(p[[.(name_AR1)]])))
       if (is.null(priorA))
         draw <- add(draw, bquote(QA <- QA.template$update(p[[.(name_AR1)]])))
@@ -1102,7 +1102,7 @@ gen <- function(formula = ~ 1, factor=NULL,
     } else {
       draw <- add(draw, bquote(p[[.(name_sigma)]] <- abs(xi) * sqrt(if (log(runif(1L)) < log.ar) sigma2_raw.star else sigma2_raw)))
     }
-    if (!is.null(e$control[["CG"]]) || e$control[["expanded.cMVN.sampler"]] ||
+    if (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]] ||
         (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
       draw <- add(draw, bquote(Qv <- 1 / p[[.(name_sigma)]]^2))
     }
@@ -1173,7 +1173,7 @@ gen <- function(formula = ~ 1, factor=NULL,
   if (!is.null(priorA) || is.list(prior[["scale"]]) || strucA[["update.Q"]]) {
     draw <- add(draw, bquote(p[[.(name_Qraw)]] <- Qraw))
   }
-  if (!is.null(e$control[["CG"]]) || e$control[["expanded.cMVN.sampler"]] ||
+  if (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]] ||
       (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
     draw <- add(draw, bquote(p[[.(name_Qv)]] <- Qv))
   }
@@ -1333,7 +1333,7 @@ gen <- function(formula = ~ 1, factor=NULL,
 
   start <- add(start, quote(p))
 
-  if (in_block && (!is.null(e$control[["CG"]]) || e$control[["expanded.cMVN.sampler"]])) {
+  if (in_block && (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]])) {
     # TODO avoid recomputing DA here in inferred AR1 parameter case
     if (q0 == 1L) {
       drawMVNvarQ <- function(p) {

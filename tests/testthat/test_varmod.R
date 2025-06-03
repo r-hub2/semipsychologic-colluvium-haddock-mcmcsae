@@ -173,9 +173,9 @@ test_that("mixed effects for both mean and variance work", {
         gen(factor = ~ f, name="vv"),
       var.prior = pr_fixed(1)
     ), data=dat,
-    control = sampler_control(expanded.cMVN.sampler = TRUE)
+    control = sampler_control(cMVN.sampler = TRUE)
   )
-  expect_true(sampler$control$expanded.cMVN.sampler)
+  expect_true(sampler$control$cMVN.sampler)
   sim <- MCMCsim(sampler, burnin=200, n.iter=600, n.chain=2, store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$beta[, "q0.5"], c(1*0.3, 0.5*0.3, -0.3*3), c(1*3, 0.5*3, -0.3*0.3))

@@ -1,4 +1,34 @@
 
+version 0.7.9
+- predict now also works for models with bym2 components
+- improvements to conjugate gradients and constrained multivariate normal
+  (cMVN) sampling methods, which now also work in more cases (e.g. in case of
+  inferred AR1 parameter, local scale parameters or bym2 components)
+- new argument add.eps.I of sampler_control to add a small multiple of the
+  identity matrix to the coefficients' posterior precision matrix to avoid
+  singularities. Both this option and the constrained multivariate normal
+  (cMVN) sampler allow faster sampling for large structured multilevel models
+  with many linear equality constraints.
+- linear equality and inequality constraints should now be specified using
+  function set_constraints, which returns an environment including functions
+  to check whether a numeric vector obeys all constraints
+- now imports R package collapse instead of matrixStats
+- new argument weights of predict method for mcdraws object, which can be used
+  to pass population sizes of poststratification cells for the P-step of MRP
+  (Multilevel Regression and Poststratification)
+- family-specific arguments should now be passed to thw family argument of
+  create_sampler of generate_data by means of the family functions f_gaussian,
+  f_binomial, f_negbinomial, f_poisson, f_multinomial, f_gamma
+- fixed a bug in prediction with type="response" for multinomial family (thanks
+  to Sumonkanti Das for reporting)
+- fixed a bug where generating data for a model with only random iid effects at
+  the data level failed
+- spline factor component renamed to splines to avoid naming conflict with
+  stats::spline
+- further (small) efficiency improvements
+- more tests, documentation updates and further small bug fixes
+
+
 version 0.7.8
 - added bym2 model component
 - in spatial random effect factor, argument poly.df has been replaced by graph

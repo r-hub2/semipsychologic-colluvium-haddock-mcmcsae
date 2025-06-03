@@ -15,7 +15,7 @@
 #' @param u2 vector of upper bounds for two-sided inequality constraints \eqn{l_2 <= S_2'x <= u_2}.
 #' @param scale whether to scale the columns of all constraint matrices to unit Euclidean norm.
 #' @returns An environment with constraint matrices and vectors and a method to check whether a numeric vector
-#'  satisfies all constraints, for use in other functions. Returns \code{NULL} in case of no constraints.
+#'  satisfies all constraints. Returns \code{NULL} in case of no constraints.
 set_constraints <- function(R=NULL, r=NULL,
                             S=NULL, s=NULL, S2=NULL, l2=NULL, u2=NULL,
                             scale=FALSE) {
@@ -44,15 +44,18 @@ set_constraints <- function(R=NULL, r=NULL,
     }
     check_equalities <- function(x, tol=sqrt(.Machine$double.eps)) {
       if (!is_numeric_scalar(tol) || tol < 0) stop("'tol' must be a single nonnegative number")
+      if (length(x) != n) stop("wrong length of input vector")
       dif <- if (is.null(r)) crossprod_mv(R, x) else crossprod_mv(R, x) - r
       viol <- which(abs(dif) > tol)
-      if (length(viol) >= 1L) {
-        warn(length(viol), " equality restriction(s) violated")
-        message("largest discrepancies:")
-        o <- viol[order(abs(dif[viol]), decreasing = TRUE)[1:min(3L, length(viol))]]
-        fdif <- format(dif[o], digits=3L)
-        message(if (is.null(Rnames)) fdif else paste0(fdif, " (", Rnames[o], ")", collapse=", "))
+      if (length(viol)) {
+        out <- data.frame(
+          constraint_nr = viol, violation = dif[viol]
+        )
+        rownames(out) <- Rnames[viol]
+      } else {
+        out <- NULL
       }
+      out
     }
     eq <- TRUE
   }
@@ -84,15 +87,18 @@ set_constraints <- function(R=NULL, r=NULL,
     S1 <- S; S1names <- Snames; s1 <- s
     check_inequalities <- function(x, tol=sqrt(.Machine$double.eps)) {
       if (!is_numeric_scalar(tol) || tol < 0) stop("'tol' must be a single nonnegative number")
+      if (length(x) != n) stop("wrong length of input vector")
       dif <- if (is.null(s1)) crossprod_mv(S1, x) else crossprod_mv(S1, x) - s1
-      viol <- which(dif < -abs(tol))
-      if (length(viol) >= 1L) {
-        warn(length(viol), " S inequality restriction(s) violated")
-        message("largest discrepancies:")
-        o <- viol[order(dif[viol])[1:min(3L, length(viol))]]
-        fdif <- format(dif[o], digits=3L)
-        message(if (is.null(S1names)) fdif else paste0(fdif, " (", S1names[o], ")", collapse=", "))
+      viol <- which(dif < -tol)
+      if (length(viol)) {
+        out <- data.frame(
+          constraint_nr = viol, violation = dif[viol]
+        )
+        rownames(out) <- S1names[viol]
+      } else {
+        out <- NULL
       }
+      out
     }
     ineq1 <- TRUE
   }
@@ -121,25 +127,27 @@ set_constraints <- function(R=NULL, r=NULL,
     }
     check_inequalities2 <- function(x, tol=sqrt(.Machine$double.eps)) {
       if (!is_numeric_scalar(tol) || tol < 0) stop("'tol' must be a single nonnegative number")
-      dist <- crossprod_mv(S2, x)
-      dif <- dist - l2
-      viol <- which(dif < -tol)
-      if (length(viol) >= 1L) {
-        warn(length(viol), " S2 inequality lower bounds violated")
-        message("largest discrepancies:")
-        o <- viol[order(dif[viol])[1:min(3L, length(viol))]]
-        fdif <- format(dif[o], digits=3L)
-        message(if (is.null(S2names)) fdif else paste0(fdif, " (", S2names[o], ")", collapse=", "))
+      if (length(x) != n) stop("wrong length of input vector")
+      temp <- crossprod_mv(S2, x)
+      dif.l <- temp - l2
+      dif.u <- temp - u2
+      viol.l <- which(dif.l < -tol)
+      viol.u <- which(dif.u > tol)
+      out <- NULL
+      if (length(viol.l) || length(viol.u)) {
+        if (length(viol.l)) {
+          out <- data.frame(
+            constraint_nr = viol.l, violation = dif.l[viol.l]
+          )
+          rownames(out) <- S2names[viol.l]
+        }
+        if (length(viol.u)) {
+          out <- rbind(out, data.frame(
+            constraint_nr = viol.u, violation = dif.u[viol.u]
+          ))
+        }
       }
-      dif <- u2 - dist
-      viol <- which(dif < -tol)
-      if (length(viol) >= 1L) {
-        warn(length(viol), " S2 inequality upper bounds violated")
-        message("largest discrepancies:")
-        o <- viol[order(dif[viol])[1:min(3L, length(viol))]]
-        fdif <- format(dif[o], digits=3L)
-        message(if (is.null(S2names)) fdif else paste0(fdif, " (", S2names[o], ")", collapse=", "))
-      }
+      out
     }
     ineq2 <- TRUE
     # for now use S'x >= s form
@@ -157,9 +165,21 @@ set_constraints <- function(R=NULL, r=NULL,
   ineq <- ineq1 || ineq2
 
   check <- function(x) {
-    if (eq) check_equalities(x)
-    if (ineq1) check_inequalities(x)
-    if (ineq2) check_inequalities2(x)
+    out <- if (eq) {
+      temp <- check_equalities(x)
+      if (!is.null(temp)) out <- cbind(type="eq", temp)
+    } else {
+      out <- NULL
+    }
+    if (ineq1) {
+      temp <- check_inequalities(x)
+      if (!is.null(temp)) out <- rbind(out, cbind(type="ineq", temp))
+    }
+    if (ineq2) {
+      temp <- check_inequalities2(x)
+      if (!is.null(temp)) out <- rbind(out, cbind(type="ineq2", temp))
+    }
+    out
   }
 
   if (eq || ineq) environment() else NULL

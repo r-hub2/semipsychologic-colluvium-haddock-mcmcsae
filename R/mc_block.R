@@ -100,7 +100,6 @@ create_mc_block <- function(mcs, e=parent.frame()) {
       XX <- crossprod_sym(X, crossprod_sym(Cdiag(runif(e[["n"]], 0.9, 1.1)), e[["Q0"]]))
     } else {
       XX <- economizeMatrix(crossprod_sym(X, e[["Q0"]]),
-        #sparse = if (e$control$expanded.cMVN.sampler) TRUE else NULL,
         symmetric=TRUE, drop.zeros=TRUE
       )
     }
@@ -262,7 +261,7 @@ create_mc_block <- function(mcs, e=parent.frame()) {
         draw <- add(draw, quote(XX <- crossprod_sym(X, e[["Q0"]])))
       }
       draw <- add(draw, quote(Qlist <- update(XX, QT, 1, 1/tau)))
-      if (e$control$expanded.cMVN.sampler) {
+      if (e$control[["cMVN.sampler"]]) {
         draw <- add(draw, bquote(coef <- MVNsampler$draw(p, Xy=Xy, X=X, QT=Qlist[["Q"]])[[.(name)]]))
       } else {
         draw <- add(draw, bquote(coef <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Q=Qlist[["Q"]], Imult=Qlist[["Imult"]], Xy=Xy)[[.(name)]]))
@@ -391,7 +390,7 @@ create_mc_block <- function(mcs, e=parent.frame()) {
   # END draw function
 
   start <- function(p) {}
-  if (is.null(e$control[["CG"]]) && !e$control[["expanded.cMVN.sampler"]]) {
+  if (is.null(e$control[["CG"]]) && !e$control[["cMVN.sampler"]]) {
     if (modus == "regular") {
       start <- add(start, bquote(coef <- MVNsampler$start(p, e[["scale.sigma"]])[[.(name)]]))
     } else {

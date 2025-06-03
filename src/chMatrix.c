@@ -5,7 +5,6 @@
 #include <R_ext/RS.h>
 #include <Matrix/alloca.h>
 #include <Matrix/cholmod.h>
-#define R_MATRIX_INLINE inline
 #include <Matrix/stubs.c>
 
 

@@ -28,7 +28,7 @@ test_that("constrained MVN sampler can be used within block Gibbs sampler", {
     y ~ reg(~x, name="beta")
       + gen(~x, factor=~fA, name="v")
       + gen(factor = ~RW2(fT), name = "u")
-    , data = ex$dat, control = sampler_control(expanded.cMVN.sampler = TRUE)
+    , data = ex$dat, control = sampler_control(cMVN.sampler = TRUE)
   )
   sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=500, verbose=FALSE)
   summ <- summary(sim)

@@ -34,7 +34,7 @@ set_constraints(
 }
 \value{
 An environment with constraint matrices and vectors and a method to check whether a numeric vector
- satisfies all constraints, for use in other functions. Returns \code{NULL} in case of no constraints.
+ satisfies all constraints. Returns \code{NULL} in case of no constraints.
 }
 \description{
 Two-sided inequalities specified by \code{S2, l2, u2} are currently
