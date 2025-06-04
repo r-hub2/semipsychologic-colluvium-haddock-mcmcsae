@@ -169,7 +169,7 @@ create_mc_block <- function(mcs, e=parent.frame()) {
   } else {
     # TODO check that the only constraints are IGMRF equality constraints
     S <- NULL
-    CG_sampler <- setup_CG_sampler(mbs=mcs, X=X, sampler=e, control=e$control[["CG"]])
+    CGsampler <- setup_CG_sampler(mbs=mcs, X=X, sampler=e, control=e$control[["CG"]])
   }
 
   if (e[["compute.weights"]]) {
@@ -270,7 +270,7 @@ create_mc_block <- function(mcs, e=parent.frame()) {
       draw <- add(draw, bquote(CGstart <- numeric(.(q))))
       for (mc in mcs)
         draw <- add(draw, bquote(CGstart[mcs[[.(mc[["name"]])]]$block.i] <- p[[.(mc[["name"]])]]))
-      draw <- add(draw, quote(coef <- CG_sampler$draw(p, Xy, X, QT, e, start=CGstart)))
+      draw <- add(draw, quote(coef <- CGsampler$draw(p, Xy, X, QT, e, start=CGstart)))
     }
   } else {
     if (modus == "var" || modus == "vargamma") {  # variance modelling

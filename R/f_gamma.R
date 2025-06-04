@@ -189,7 +189,6 @@ f_gamma <- function(link="log", shape.vec = ~ 1, shape.prior = pr_gamma(0.1, 0.1
     }
   }
   make_llh_i <- function(y) {
-    n <- length(y)
     if (alpha.fixed) {
       alpha <- get_shape()
       pllh_0 <- alpha * log(alpha) - lgamma(alpha) + (alpha - 1) * log(y)

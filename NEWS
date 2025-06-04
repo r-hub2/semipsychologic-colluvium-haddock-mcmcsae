@@ -2,13 +2,13 @@
 version 0.7.9
 - predict now also works for models with bym2 components
 - improvements to conjugate gradients and constrained multivariate normal
-  (cMVN) sampling methods, which now also work in more cases (e.g. in case of
+  sampling methods, which now also work in more cases (e.g. in case of
   inferred AR1 parameter, local scale parameters or bym2 components)
 - new argument add.eps.I of sampler_control to add a small multiple of the
   identity matrix to the coefficients' posterior precision matrix to avoid
   singularities. Both this option and the constrained multivariate normal
   (cMVN) sampler allow faster sampling for large structured multilevel models
-  with many linear equality constraints.
+  with many identifiability or other linear equality constraints.
 - linear equality and inequality constraints should now be specified using
   function set_constraints, which returns an environment including functions
   to check whether a numeric vector obeys all constraints

@@ -75,7 +75,6 @@ CG <- function(b, env, x=0*b, max.it=length(b), e = 1e6 * length(b), verbose=FAL
 #   for Khatri-Rao etc.; X0 will typically be dense and XA tabMatrix
 # - p >> n case
 setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
-  n <- nrow(X)
   q <- ncol(X)
   control <- check_CG_control(control)
   if (any(b_apply(mbs, function(mc) isTRUE(mc[["strucA"]][["type"]] == "bym2")))) {

@@ -36,7 +36,7 @@ Collate: 'AR1_sampler.R' 'GMRF_extension.R' 'MCMCsim.R' 'MH.R'
         'samplers.R' 'sbc.R' 'set_constraints.R' 'sparse_template.R'
         'utils.R'
 NeedsCompilation: yes
-Packaged: 2025-06-03 21:12:55 UTC; hbta
+Packaged: 2025-06-04 11:44:21 UTC; hbta
 Author: Harm Jan Boonstra [aut, cre],
   Grzegorz Baltissen [ctb]
 Maintainer: Harm Jan Boonstra <hjboonstra@gmail.com>
