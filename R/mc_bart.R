@@ -9,7 +9,7 @@
 #'
 #' @examples
 #' # generate data, based on an example in Friedman (1991)
-#' gendat <- function(n=200L, p=10L, sigma=1) {
+#' gendat <- function(n=150L, p=10L, sigma=1) {
 #'   x <- matrix(runif(n * p), n, p)
 #'   mu <- 10*sin(pi*x[, 1] * x[, 2]) + 20*(x[, 3] - 0.5)^2 + 10*x[, 4] + 5*x[, 5]
 #'   y <- mu + sigma * rnorm(n)
@@ -26,14 +26,14 @@
 #'   data = train
 #' )
 #' # increase burnin and n.iter below to improve MCMC convergence
-#' sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=500, thin=2,
+#' sim <- MCMCsim(sampler, n.chain=2, burnin=100, n.iter=200, thin=2,
 #'   store.all=TRUE, verbose=FALSE)
 #' (summ <- summary(sim))
 #' plot(train$mu, summ$bart[, "Mean"]); abline(0, 1)
 #' # NB prediction is currently slow
 #' \donttest{
 #' pred <- predict(sim, newdata=test,
-#'   iters=sample(seq_len(n_draws(sim)), 100),
+#'   iters=sample(seq_len(n_draws(sim)), 50),
 #'   show.progress=FALSE
 #' )
 #' (summpred <- summary(pred))
@@ -59,8 +59,8 @@
 #'  memory.
 #' @param ... parameters passed to \code{\link[dbarts]{dbarts}}.
 #' @returns An object with precomputed quantities and functions for sampling from
-#'  prior or conditional posterior distributions for this model component. Intended
-#'  for internal use by other package functions.
+#'  prior or conditional posterior distributions for this model component,
+#'  intended for internal use by other package functions.
 #' @references
 #'  H.A. Chipman, E.I. Georgea and R.E. McCulloch (2010).
 #'    BART: Bayesian additive regression trees.
@@ -71,8 +71,14 @@
 #'    The Annals of Statistics 19, 1-67.
 brt <- function(formula, X=NULL, n.trees=75L,
                 name="", debug=FALSE, keepTrees=FALSE, ...) {
+  stop("function 'brt' should only be used inside a formula")
+}
 
-  e <- sys.frame(-2L)
+# additional argument e to pass sampler environment
+# in.block always FALSE for brt
+mc_brt <- function(formula, X=NULL, n.trees=75L,
+                   name="", debug=FALSE, keepTrees=FALSE,
+                   e, in.block, ...) {
   type <- "brt"
   if (name == "") stop("missing model component name")
 
@@ -88,10 +94,9 @@ brt <- function(formula, X=NULL, n.trees=75L,
   }
   X <- economizeMatrix(X, sparse=FALSE, strip.names=FALSE, check=TRUE)
   q <- ncol(X)
+  in.block <- FALSE
 
   control <- dbarts::dbartsControl(n.chains=1L, updateState=FALSE, n.trees=n.trees)
-
-  in_block <- FALSE
 
   name_sampler <- paste0(name, "_sampler_")  # trailing '_' --> not stored by MCMCsim even if store.all=TRUE
   lp <- function(p) copy_vector(p[[name]])
@@ -132,12 +137,18 @@ brt <- function(formula, X=NULL, n.trees=75L,
     p
   }
 
-  if (e$family$family == "multinomial") {
+  if (e$family[["family"]] == "multinomial") {
     edat <- new.env(parent = environment(formula))
     environment(formula) <- edat
   }
 
-  if (keepTrees) name_trees <- paste0(name, "_", "trees_")
+  if (keepTrees) {
+    name_trees <- paste0(name, "_", "trees_")
+    store.default <- name_trees
+  } else {
+    store.default <- NULL
+  }
+
   make_predict <- function(newdata=NULL, Xnew=NULL, verbose=TRUE) {
     if (is.null(newdata) && is.null(Xnew)) {
       # in-sample prediction

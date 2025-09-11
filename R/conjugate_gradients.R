@@ -33,7 +33,7 @@ CG <- function(b, env, x=0*b, max.it=length(b), e = 1e6 * length(b), verbose=FAL
     #if (max(abs(alpha * p)) < 1e-6 || k > max.it) break; this may prevent alpha becoming NA (for small e)?
     r <- r - alpha * Ap
     # if r sufficiently small exit; THIS criterion does not seem to work for non-psd preconditioner
-    #if (mean(abs(r)) < sqrt(.Machine$double.eps)) break
+    #if (mean(abs(r)) < .tol) break
     z <- env$M_solve(r, ...)
     discr <- dotprodC(z, z)
     if (discr < e || k > max.it) {
@@ -77,7 +77,7 @@ CG <- function(b, env, x=0*b, max.it=length(b), e = 1e6 * length(b), verbose=FAL
 setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
   q <- ncol(X)
   control <- check_CG_control(control)
-  if (any(b_apply(mbs, function(mc) isTRUE(mc[["strucA"]][["type"]] == "bym2")))) {
+  if (any(b_apply(mbs, \(mc) isTRUE(mc[["strucA"]][["type"]] == "bym2")))) {
     if (control[["preconditioner"]] != "identity")
       stop("conjugate gradient sampler for models with 'bym2' component currently only allows 'identity' preconditioner")
   }
@@ -108,11 +108,10 @@ setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
       )
     }
   } else {
-    if (sampler$family[["link"]] == "probit") {
+    if (sampler$family[["link"]] == "probit")
       Q_x <- function(p, x) x
-    } else {
+    else
       Q_x <- function(p, x) p[["Q_"]] * x
-    }
   }
 
   # set up / precompute Cholesky factors
@@ -125,7 +124,7 @@ setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
       else
         cholQV[[mc$name]] <- build_chol(runif(mc[["q0"]], 0.5, 1.5))
     } else {
-      if (mc[["type"]] != "reg") stop("TBI")
+      if (mc[["type"]] != "reg") stop("TBI: conjugate gradients for models with terms other than 'reg' and 'gen'")
     }
   }
 
@@ -262,7 +261,7 @@ check_CG_control <- function(control) {
   if (is.null(control)) control <- list()
   if (!is.list(control)) stop("control options must be specified as a list, preferably using the appropriate control setter function")
   defaults <- CG_control()
-  w <- which(!(names(control) %in% names(defaults)))
+  w <- whichv(names(control) %in% names(defaults), FALSE)
   if (length(w)) stop("unrecognized control parameters ", paste0(names(control)[w], collapse=", "))
   control <- modifyList(defaults, control, keep.null=TRUE)
   control$chol.control <- check_chol_control(control[["chol.control"]])

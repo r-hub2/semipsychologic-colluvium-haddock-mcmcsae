@@ -129,17 +129,8 @@ f_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
   }
   set_Vmod <- function(Vmod) {
     Vmod <<- Vmod
-    for (k in seq_along(Vmod)) {
-      mc <- Vmod[[k]]
-      switch(types[k],
-        vreg=, reg = {
-          rprior <<- add(rprior, bquote(p[[.(mc[["name"]])]] <- Vmod[[.(k)]]$rprior(p)))
-        },
-        vfac=, gen = {
-          rprior <<- add(rprior, bquote(p <- Vmod[[.(k)]]$rprior(p)))
-        }
-      )
-    }
+    for (k in seq_along(Vmod))
+      rprior <<- add(rprior, bquote(p <- Vmod[[.(k)]]$rprior(p)))
     rprior <<- add(rprior, quote(p))
     # compute product of precision factors
     compute_Qfactor <<- function(p) {

@@ -50,8 +50,8 @@ with the number of the variance model term attached.}
 }
 \value{
 An object with precomputed quantities and functions for sampling from
- prior or conditional posterior distributions for this model component. Intended
- for internal use by other package functions.
+ prior or conditional posterior distributions for this model component,
+ intended for internal use by other package functions.
 }
 \description{
 This function is intended to be used on the right hand side of the \code{formula.V} argument to

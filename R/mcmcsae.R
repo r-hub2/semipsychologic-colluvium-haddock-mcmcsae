@@ -25,15 +25,13 @@ NULL
 NULL
 
 # other namespace imports
-#' @importFrom Matrix .m2sparse .updateCHMfactor bandSparse bdiag coerce
-#'  diag Diagonal drop0 expand1 forceSymmetric invertPerm isDiagonal KhatriRao
-#'  Matrix nnzero rsparsematrix sparseMatrix
+#' @importFrom Matrix .diag2sparse .m2sparse .M2m .updateCHMfactor
+#'  bandSparse bdiag coerce diag Diagonal drop0 expand1 forceSymmetric
+#'  invertPerm isDiagonal KhatriRao Matrix nnzero rsparsematrix sparseMatrix
 #' @importClassesFrom Matrix CHMfactor dCHMsimpl ddiMatrix CsparseMatrix
 #'  dgCMatrix dsCMatrix generalMatrix sparseMatrix
 #' @importMethodsFrom Matrix %*% as.matrix as.vector Cholesky colSums crossprod
 #'  determinant diag isSymmetric rowSums solve t tcrossprod unname
-## do not import which() S4 generic from Matrix package as it slows down normal use of which
-## @rawNamespace import(Matrix, except = which)
 #' @import GIGrvg
 #' @importFrom collapse allNA allv any_duplicated anyv dapply fdroplevels fmatch
 #'  fmean.default fmean.matrix fquantile fsd.matrix fsum.matrix fvar.matrix qF
@@ -45,6 +43,6 @@ NULL
 #' @importFrom stats acf as.formula density fitted make.link mvfft optim
 #'  pnorm predict rbeta rbinom rchisq residuals rexp rgamma rnbinom rnorm
 #'  rpois runif rWishart sd setNames terms update.formula var weights
-#' @importFrom utils modifyList object.size setTxtProgressBar str tail
-#'  txtProgressBar
+#' @importFrom utils getFromNamespace modifyList object.size setTxtProgressBar
+#'  str tail txtProgressBar
 NULL

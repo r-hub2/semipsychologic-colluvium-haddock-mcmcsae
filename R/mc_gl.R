@@ -88,7 +88,7 @@ glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL, Q0=NULL,
     QA.ext <- crossprod_sym(IU0, e$strucA$update_Q(e[["QA"]], runif(1L, 0.25, 0.75)))
   } else {
     QA.ext <- economizeMatrix(crossprod_sym(IU0, e[["QA"]]),
-      sparse=if (e[["in_block"]]) TRUE else NULL, symmetric=TRUE, drop.zeros=TRUE)
+      sparse=if (e[["in.block"]]) TRUE else NULL, symmetric=TRUE, drop.zeros=TRUE)
   }
   if (!is.null(e[["R"]]))
     R <- economizeMatrix(crossprod(kronecker(IU0, CdiagU(e[["q0"]])), e[["R"]]), allow.tabMatrix=FALSE)

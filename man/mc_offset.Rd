@@ -17,8 +17,8 @@ function \code{\link{MCMCsim}}. By default the name will be 'mc_offset' with the
 }
 \value{
 An model component object with data and methods needed for dealing with an offset term
- in model estimation, and prior and posterior prediction. Intended for internal use by
- other package functions.
+ in model estimation, and prior and posterior prediction,
+ intended for internal use by other package functions.
 }
 \description{
 This function is intended to be used on the right hand side of the \code{formula} argument to

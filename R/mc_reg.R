@@ -1,5 +1,4 @@
-#' Create a model component object for a regression (fixed effects) component
-#' in the linear predictor
+#' Specify a regression (fixed effects) component in the linear predictor
 #'
 #' This function is intended to be used on the right hand side of the
 #' \code{formula} argument to \code{\link{create_sampler}} or
@@ -90,17 +89,24 @@
 #' @param debug if \code{TRUE} a breakpoint is set at the beginning of the posterior
 #'  draw function associated with this model component. Mainly intended for developers.
 #' @returns An object with precomputed quantities and functions for sampling from
-#'  prior or conditional posterior distributions for this model component. Intended
-#'  for internal use by other package functions.
+#'  prior or conditional posterior distributions for this model component,
+#'  intended for internal use by other package functions.
 reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
                 prior=NULL, Q0=NULL, b0=NULL,
                 constraints=NULL,
                 name="", debug=FALSE) {
+  stop("function 'reg' should only be used inside a formula")
+}
 
-  e <- sys.frame(-2L)
-  if (is.null(e[["family"]]) || is.null(e$family[["family"]])) stop("'reg()' should only be used within a formula")
+# additional argument e to pass sampler environment, and in.block
+mc_reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
+                   prior=NULL, Q0=NULL, b0=NULL,
+                   constraints=NULL,
+                   name="", debug=FALSE,
+                   e, in.block) {
   type <- "reg"
   if (name == "") stop("missing model component name")
+  store.default <- name
 
   if (!inherits(formula, "formula")) stop("formula argument of reg() must be a formula")
 
@@ -132,13 +138,13 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
     }
     if (remove.redundant) X <- remove_redundancy(X)
   } else {
+    if (is.vector(X)) X <- matrix(X, ncol = 1L)
     if (is.null(dimnames(X)[[2L]])) colnames(X) <- seq_len(ncol(X))
   }
   if (nrow(X) != e[["n"]]) stop("design matrix with incompatible number of rows")
   e$coef.names[[name]] <- dimnames(X)[[2L]]
   X <- economizeMatrix(X, sparse=sparse, strip.names=TRUE, check=TRUE)
   q <- ncol(X)
-  in_block <- any(name == unlst(e[["block"]])) || any(name == unlst(e[["block.V"]]))
 
   if (!is.null(b0) || !is.null(Q0)) {
     warn("arguments 'b0' and 'Q0' are deprecated; please use argument 'prior' instead")
@@ -165,10 +171,13 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
       prior$init(q)
       informative.prior <- TRUE
       zero.mean <- allv(prior[["value"]], 0)
-      rprior <- function(p) prior$rprior()
+      rprior <- function(p) {
+        p[[name]] <- prior$rprior()
+        p
+      }
     },
     normal = {
-      prior$init(q, e$coef.names[[name]], sparse=if (in_block) TRUE else NULL, sigma=!e[["sigma.fixed"]])
+      prior$init(q, e$coef.names[[name]], sparse=if (in.block) TRUE else NULL, sigma=!e[["sigma.fixed"]])
       informative.prior <- prior[["informative"]]
       if (modus != "regular" && informative.prior) stop("please use 'pr_MLiG' to specify a (conjugate) prior for gamma family or variance modelling")
       Q0 <- prior[["precision"]]
@@ -182,7 +191,10 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
         else
           Q0b0 <- Q0 %m*v% prior[["mean"]]
       }
-      rprior <- function(p) prior$rprior(p)
+      rprior <- function(p) {
+        p[[name]] <- prior$rprior(p)
+        p
+      }
     },
     MLiG = {
       if (modus == "regular") stop("MLiG prior only available in combination with gamma family or variance modelling")
@@ -190,18 +202,28 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
       prior$init(q, e$coef.names[[name]])
       informative.prior <- prior[["informative"]]
       zero.mean <- allv(prior[["mean"]], 0)
-      rprior <- function(p) prior$rprior()
-      if (in_block) {  # block sampler sparse Q0 for template
+      if (in.block) {  # block sampler sparse Q0 for template
         if (length(prior[["precision"]]) == 1L)
           Q0 <- Cdiag(rep.int(prior[["precision"]]/prior[["a"]], q))
         else
           Q0 <- Cdiag(prior[["precision"]]/prior[["a"]])
+      }
+      rprior <- function(p) {
+        p[[name]] <- prior$rprior()
+        p
       }
     },
     stop("'", prior[["type"]], "' is not a supported prior for regression coefficients '", name, "'")
   )
 
   is.proper <- informative.prior
+
+  if (in.block && !e[["prior.only"]]) {
+    if (e[["sigma.fixed"]])
+      get_Q <- function(p) Q0@x
+    else
+      get_Q <- function(p) Q0@x * (1/p[["sigma_"]]^2)
+  }
 
   if (e[["compute.weights"]]) {
     # TODO see if following restriction can be relaxed
@@ -274,7 +296,37 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
     environment()
   }
 
-  if (!in_block && !e[["prior.only"]] && prior[["type"]] != "fixed") {
+  if (!is.null(constraints)) {
+    # R, S, r, s used in mc_block.R, and below in df.add
+    if (constraints[["eq"]]) {
+      R <- constraints[["R"]]
+      r <- constraints[["r"]]
+    }
+    if (constraints[["ineq"]]) {
+      S <- constraints[["S"]]
+      s <- constraints[["s"]]
+    }
+  }
+
+  if (!e[["sigma.fixed"]] && !e[["prior.only"]]) {
+    # in case of a gaussian model the variance of normal priors is taken
+    # proportional to sigma^2 --> define contributions to sigma posterior
+    if (prior[["type"]] == "normal" && informative.prior) {
+      if (!is.null(constraints) && constraints[["eq"]])
+        df.add <- q - constraints[["ncR"]]
+      else
+        df.add <- q
+      SSR_add <- function(p) {
+        delta.beta <- if (zero.mean) p[[name]] else p[[name]] - prior[["mean"]]
+        dotprodC(delta.beta, Q0 %m*v% delta.beta)
+      }
+    } else {
+      df.add <- 0L
+      SSR_add <- NULL
+    }
+  }
+
+  if (!in.block && !e[["prior.only"]] && prior[["type"]] != "fixed") {
 
     draw <- if (debug) function(p) {browser()} else function(p) {}
     if (modus == "var" || modus == "vargamma") {
@@ -374,15 +426,16 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
           update.Q=TRUE, name=name, constraints=constraints,
           chol.control=e$control[["chol.control"]]
         )
-        draw <- add(draw, bquote(p <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Q=mat_sum(XX), Xy=Xy)))
+        draw <- add(draw, quote(MVNsampler$update(Q=mat_sum(XX))))
       } else {
         MVNsampler <- create_TMVN_sampler(
           Q=crossprod_sym(X, crossprod_sym(Cdiag(runif(e[["n"]], 0.9, 1.1)), e[["Q0"]])),
           update.Q=TRUE, name=name, constraints=constraints,
           chol.control=e$control[["chol.control"]]
         )
-        draw <- add(draw, bquote(p <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Q=XX, Xy=Xy)))
+        draw <- add(draw, quote(MVNsampler$update(Q=XX)))
       }
+      draw <- add(draw, bquote(p <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Xy=Xy)))
     } else {  # precision matrix XX + Q0 not updated
       if (modus == "regular") {
         if (e[["single.block"]] && e$family[["link"]] != "probit") {
@@ -447,7 +500,7 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
       }
     }
   } else if (!e[["prior.only"]] && prior[["type"]] == "fixed") {
-    if (in_block) stop("'pr_fixed' not supported for components in a Gibbs block")
+    if (in.block) stop("'pr_fixed' not supported for components in a Gibbs block")
     draw <- function(p) {
       if (debug) browser()
       p[[name]] <- prior$rprior()
@@ -468,7 +521,7 @@ reg <- function(formula = ~ 1, remove.redundant=FALSE, sparse=NULL, X=NULL,
     }
   }
 
-  if (in_block && (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]])) {
+  if (in.block && (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]])) {
     if (informative.prior) {
       cholQV <- build_chol(Q0, control=e$control[["chol.control"]])
       drawMVNvarQ <- function(p) cholQV$Ltimes(Crnorm(q), transpose=FALSE)

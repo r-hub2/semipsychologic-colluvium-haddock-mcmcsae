@@ -79,7 +79,7 @@ f_negbinomial <- function(link="log", shape.vec = ~ 1, inv.shape.prior = pr_invc
       if (!is.numeric(y)) stop("non-numeric target value not allowed in case of negative binomial sampling distribution")
       # NB the algorithm still runs with negative responses, but it probably makes not much sense
       if (any(y < 0)) warn("negative response value(s)")
-      if (any(abs(round(y) - y) > sqrt(.Machine$double.eps))) warn("non-integral values modelled by negative binomial sampling distribution")
+      if (any(abs(round(y) - y) > .tol)) warn("non-integral values modelled by negative binomial sampling distribution")
     }
     y
   }
@@ -216,11 +216,11 @@ check_negbin_control <- function(control) {
   if (is.null(control)) control <- list()
   if (!is.list(control)) stop("control options must be specified as a list, preferably using the appropriate control setter function")
   defaults <- negbin_control()
-  w <- which(!(names(control) %in% names(defaults)))
+  w <- whichv(names(control) %in% names(defaults), FALSE)
   if (length(w)) stop("unrecognized control parameters ", paste0(names(control)[w], collapse=", "))
   control <- modifyList(defaults, control, keep.null=TRUE)
-  control$CRT.approx.m <- as.integer(control$CRT.approx.m)
-  if (length(control$CRT.approx.m) != 1L || control$CRT.approx.m < 1L)
+  control$CRT.approx.m <- as.integer(control[["CRT.approx.m"]])
+  if (length(control[["CRT.approx.m"]]) != 1L || control[["CRT.approx.m"]] < 1L)
     stop("'CRT.approx.m' must be a positive scalar integer")
   control
 }

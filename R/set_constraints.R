@@ -46,7 +46,7 @@ set_constraints <- function(R=NULL, r=NULL,
       if (!is_numeric_scalar(tol) || tol < 0) stop("'tol' must be a single nonnegative number")
       if (length(x) != n) stop("wrong length of input vector")
       dif <- if (is.null(r)) crossprod_mv(R, x) else crossprod_mv(R, x) - r
-      viol <- which(abs(dif) > tol)
+      viol <- whichv(abs(dif) > tol, TRUE)
       if (length(viol)) {
         out <- data.frame(
           constraint_nr = viol, violation = dif[viol]
@@ -89,7 +89,7 @@ set_constraints <- function(R=NULL, r=NULL,
       if (!is_numeric_scalar(tol) || tol < 0) stop("'tol' must be a single nonnegative number")
       if (length(x) != n) stop("wrong length of input vector")
       dif <- if (is.null(s1)) crossprod_mv(S1, x) else crossprod_mv(S1, x) - s1
-      viol <- which(dif < -tol)
+      viol <- whichv(dif < -tol, TRUE)
       if (length(viol)) {
         out <- data.frame(
           constraint_nr = viol, violation = dif[viol]
@@ -131,8 +131,8 @@ set_constraints <- function(R=NULL, r=NULL,
       temp <- crossprod_mv(S2, x)
       dif.l <- temp - l2
       dif.u <- temp - u2
-      viol.l <- which(dif.l < -tol)
-      viol.u <- which(dif.u > tol)
+      viol.l <- whichv(dif.l < -tol, TRUE)
+      viol.u <- whichv(dif.u > tol, TRUE)
       out <- NULL
       if (length(viol.l) || length(viol.u)) {
         if (length(viol.l)) {

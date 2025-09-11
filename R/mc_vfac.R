@@ -21,14 +21,18 @@
 #' @param debug If \code{TRUE} a breakpoint is set at the beginning of the posterior
 #'  draw function associated with this model component. Mainly intended for developers.
 #' @returns An object with precomputed quantities and functions for sampling from
-#'  prior or conditional posterior distributions for this model component. Intended
-#'  for internal use by other package functions.
+#'  prior or conditional posterior distributions for this model component,
+#'  intended for internal use by other package functions.
 # TODO generalize inverse chi-squared (including beta-prime) and exponential priors to generalized hyperbolic
 vfac <- function(factor="local_",
                  prior=pr_invchisq(df=1, scale=1),
                  name="", debug=FALSE) {
+  stop("function 'vfac' should only be used inside a formula")
+}
 
-  e <- sys.frame(-2L)
+mc_vfac <- function(factor="local_",
+                    prior=pr_invchisq(df=1, scale=1),
+                    name="", debug=FALSE, e, in.block) {
   type <- "vfac"
   if (name == "") stop("missing model component name")
 
@@ -51,7 +55,7 @@ vfac <- function(factor="local_",
 
   if (e[["Q0.type"]] == "symm") {
     # check that scale factor is compatible with block-diagonal structure of Q0
-    if (sum(abs(commutator(e[["Q0"]], Cdiag(X %m*v% sin(1.23*seq_len(q)))))) > sqrt(.Machine$double.eps)) stop("'formula.V' incompatible with 'Q0'")
+    if (sum(abs(commutator(e[["Q0"]], Cdiag(X %m*v% sin(1.23*seq_len(q)))))) > .tol) stop("'formula.V' incompatible with 'Q0'")
   }
 
   switch(prior[["type"]],
@@ -131,6 +135,11 @@ vfac <- function(factor="local_",
   )
   rprior <- add(rprior, quote(p))
 
+  if (prior[["type"]] == "invchisq" && is.list(prior[["df"]])) 
+    store.default <- name_df
+  else
+    store.default <- NULL
+
   if (e[["prior.only"]]) return(environment())
 
   # BEGIN draw function
@@ -157,7 +166,7 @@ vfac <- function(factor="local_",
         X.ind <- list()
         fac <- numeric(q)
         for (i in seq_len(q)) {
-          X.ind[[i]] <- which(X@perm == i - 1L)  # NB tabMatrix 0-based
+          X.ind[[i]] <- whichv(X@perm, i - 1L)  # NB tabMatrix 0-based
           Q0.list[[i]] <- e[["Q0"]][X.ind[[i]], X.ind[[i]]]
         }
         get_partial_factor <- function(p) {
@@ -177,14 +186,12 @@ vfac <- function(factor="local_",
         else
           get_partial_factor <- function(p) crossprod_mv(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]] * (1 / p[["sigma_"]]^2)
       },
-      stop("TBI")
+      stop("TBI: 'vfac' term in multi-component variance model in combination with non-diagonal covariance matrix")
     )
   }
 
   switch(prior[["type"]],
-    fixed = {
-      draw <- add(draw, quote(lambda <- prior[["value"]]))
-    },
+    fixed = draw <- add(draw, quote(lambda <- prior[["value"]])),
     invchisq = {
       if (is.list(prior[["df"]])) {
         draw <- add(draw, bquote(p[[.(name_df)]] <- prior$draw_df(p[[.(name_df)]], 1 / p[[.(name)]])))
@@ -221,12 +228,8 @@ vfac <- function(factor="local_",
       }
     )
   } else {
-    switch(e[["Q0.type"]],
-      unit=, diag = {
-        draw <- add(draw, bquote(p$Q_ <- p[["Q_"]] * (X %m*v% (p[[.(name)]] / lambda))))
-      },
-      stop("TBI")
-    )
+    # TODO Q0.type = "symm" case
+    draw <- add(draw, bquote(p$Q_ <- p[["Q_"]] * (X %m*v% (p[[.(name)]] / lambda))))
   }
 
   draw <- draw |>

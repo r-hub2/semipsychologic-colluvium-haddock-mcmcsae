@@ -48,7 +48,7 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
       switch(class(Q)[1L],
         matrix = {
           if (eps1 > 0) I.diag <- seq.int(1L, by=q+1L, length.out=q)
-          I.nz <- which(abs(as.numeric(if (eps1 == 0) Q else Q + eps1 * CdiagU(q))) > .Machine$double.eps)
+          I.nz <- whichv(abs(as.numeric(if (eps1 == 0) Q else Q + eps1 * CdiagU(q))) > .Machine$double.eps, TRUE)
           upper.ind <- upper.tri(Q, diag=TRUE)
           update_Q.expanded <- function(Q) {
             x <- Q[upper.ind]
@@ -58,7 +58,7 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
         },
         ddiMatrix = {
           if (is_unit_ddi(Q)) stop("unit Diagonal matrix not allowed if update.Q = TRUE")
-          if (eps1 == 0) I.nz <- which(abs(Q@x) > .Machine$double.eps)
+          if (eps1 == 0) I.nz <- whichv(abs(Q@x) > .Machine$double.eps, TRUE)
           update_Q.expanded <- function(Q) {
             if (eps1 == 0)
               attr(Q.expanded, "x")[seq_along(I.nz)] <<- Q@x[I.nz]
@@ -67,10 +67,8 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
           }
         },
         dsCMatrix = {
-          if (eps1 > 0) {
-            #I.diag <- which(Q@i == rep.int(seq_len(q), diff(Q@p)) - 1L)
+          if (eps1 > 0)
             matsum <- make_mat_sum(M0 = eps1 * CdiagU(q), M1 = Q, force.sparse=TRUE)
-          }
           update_Q.expanded <- function(Q) {
             if (eps1 > 0) {
               Qplus <- matsum(Q)
@@ -86,13 +84,15 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
   rhs <- c(rep.int(0, q), r)
   Iq <- seq_len(q)
   if (update.Q) {
-    draw <- function(Q, Imult, u) {
-      if (is.null(R)) {
-        cholQ$update(Q, Imult)
-      } else {
+    if (is.null(R)) {
+      update <- function(Q, Imult=0) cholQ$update(Q, Imult)
+    } else {
+      update <- function(Q, Imult=0) {
         update_Q.expanded(Q)
         cholQ$update(Q.expanded, Imult)
       }
+    }
+    draw <- function(u) {
       rhs[Iq] <- u
       cholQ$solve(rhs)[Iq]
     }
@@ -100,7 +100,7 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
     if (is.null(D)) stop("'D' must be provided when update.Q=FALSE")
     qstar <- nrow(D)
     rm(Q.expanded)
-    draw <- function(Q, Imult, u) {
+    draw <- function(u) {
       rhs[Iq] <- crossprod_mv(D, Crnorm(qstar))
       cholQ$solve(rhs)[Iq]
     }
@@ -129,12 +129,12 @@ create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, sampler, name="
 
   chol.control[["LDL"]] <- TRUE
   smplr <- create_cMVN_sampler(D=NULL, Q=Q, update.Q=TRUE, R=R, r=r,
-    eps1=sqrt(.Machine$double.eps), eps2=sqrt(.Machine$double.eps),                           
-    chol.control=chol.control
+    eps1=.tol, eps2=.tol, chol.control=chol.control
   )
+  update <- function(Q, Imult=0) smplr$update(Q, Imult)
 
-  # X, QT passed from block's draw function
-  draw <- function(p, Xy, X, QT, Imult=0) {
+  ## X, QT passed from block's draw function
+  draw <- function(p, Xy, X) {
 
     # Xy is rhs, i.e. X' Qn ytilde (+ possibly prior reg term)
     if (is.null(p[["sigma_"]])) sigma <- 1 else sigma <- p[["sigma_"]]
@@ -146,7 +146,7 @@ create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, sampler, name="
         u[mc$block.i] <- u[mc$block.i] + sigma * mc$drawMVNvarQ(p)
     }
 
-    p[[name]] <- smplr$draw(QT, Imult, u)
+    p[[name]] <- smplr$draw(u)
     p
   }
 

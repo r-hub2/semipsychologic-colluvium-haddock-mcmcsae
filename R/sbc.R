@@ -46,7 +46,7 @@ SBC_test <- function(..., pars, n.draw=25L, n.sim=20L*n.draw, burnin=25L, thin=2
                       n.cores=1L, cl=NULL, seed=NULL, export=NULL) {
   sampler_args <- list(...)
   sampler_args$prior.only <- TRUE
-  sampler <- do.call("create_sampler", sampler_args)
+  sampler <- do.call(create_sampler, sampler_args)
   # TODO: in some cases like TMVN prior draws may not be iid; in that case use burnin and thin here as well
   if (names(sampler_args)[1L] == "") names(sampler_args)[1L] <- "formula"
   sampler_args$formula <- update.formula(sampler_args[["formula"]], y.tilde ~ .)
@@ -64,7 +64,7 @@ SBC_test <- function(..., pars, n.draw=25L, n.sim=20L*n.draw, burnin=25L, thin=2
       # 3. run the posterior sampler based on the generated data
       sampler_args$prior.only <- FALSE
       environment(sampler_args$formula) <- environment()
-      sampler <- do.call("create_sampler", sampler_args)
+      sampler <- do.call(create_sampler, sampler_args)
       sim <- MCMCsim(sampler, pred=pars, burnin=burnin, n.chain=1L, n.iter=thin*n.draw, thin=thin, verbose=FALSE)
       # 4. compute ranks of prior draws in the sets of posterior draws
       for (v in seq_along(pars)) {

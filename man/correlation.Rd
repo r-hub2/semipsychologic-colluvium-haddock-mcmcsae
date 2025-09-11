@@ -129,7 +129,7 @@ to be imposed on the coefficient vector.
 }
 }
 \examples{
-\donttest{
+\dontrun{
 # example of CAR spatial random effects
 if (requireNamespace("sf")) {
   # 1. load a shape file of counties in North Carolina
@@ -154,7 +154,7 @@ if (requireNamespace("sf")) {
     data=nc
   )
   # increase burnin and n.iter below to improve MCMC convergence
-  sim <- MCMCsim(sampler, store.all=TRUE, burnin=100, n.iter=250, n.chain=2, verbose=FALSE)
+  sim <- MCMCsim(sampler, store.all=TRUE, burnin=100, n.iter=200, n.chain=2, verbose=FALSE)
   (summ <- summary(sim))
   nc$vs <- summ$vs[, "Mean"]
   plot(nc[c("vs_true", "vs")])

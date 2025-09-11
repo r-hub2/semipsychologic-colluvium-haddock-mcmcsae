@@ -134,6 +134,23 @@ test_that("fixed prior mean works", {
   expect_equal(unname(generate_data(ml_mod, data=df)$pars$beta), f)
 })
 
+test_that("linear equality restrictions on coefficients work", {
+  mod <- y ~ x1 + x2 + x3 + x4
+  C <- set_constraints(R=cbind(c(0,1,-1,0,0)))
+  ml_mod <- y ~ reg(mod, constraints=C, name="beta")
+  sampler <- create_sampler(ml_mod, data=df)
+  sim <- MCMCsim(sampler, n.iter=10, burnin=0, n.chain=2, verbose=FALSE)
+  summ <- summary(sim)
+  expect_equal(summ$beta["x1", ], summ$beta["x2", ], tol=1e-3)
+  ml_mod <- y ~ reg(mod, prior=pr_normal(0, 1e-2), constraints=C, name="beta")
+  sampler <- create_sampler(ml_mod, data=df)
+  expect_true(sampler$mod$beta$constraints$eq)
+  expect_equal(sampler$mod$beta$df.add, sampler$mod$beta$q - 1)
+  sim <- MCMCsim(sampler, n.iter=10, burnin=0, n.chain=2, verbose=FALSE)
+  summ <- summary(sim)
+  expect_equal(summ$beta["x1", ], summ$beta["x2", ], tol=1e-3)
+})
+
 n <- 1000
 sd0 <- 0.41
 y <- 1 + rnorm(n, sd=sd0)

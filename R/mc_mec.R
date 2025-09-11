@@ -85,8 +85,8 @@
 #' @param debug if \code{TRUE} a breakpoint is set at the beginning of the posterior
 #'  draw function associated with this model component. Mainly intended for developers.
 #' @returns An object with precomputed quantities and functions for sampling from
-#'  prior or conditional posterior distributions for this model component. Intended
-#'  for internal use by other package functions.
+#'  prior or conditional posterior distributions for this model component,
+#'  intended for internal use by other package functions.
 #' @references
 #'  L.M. Ybarra and S.L. Lohr (2008).
 #'    Small area estimation when auxiliary information is measured with error.
@@ -99,11 +99,19 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
                 prior=NULL, Q0=NULL, b0=NULL,
                 constraints=NULL,
                 name="", debug=FALSE) {
+  stop("function 'mec' should only be used inside a formula")
+}
 
-  e <- sys.frame(-2L)
+# additional argument e to pass sampler environment, and in.block
+mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
+                   prior=NULL, Q0=NULL, b0=NULL,
+                   constraints=NULL,
+                   name="", debug=FALSE, e, in.block) {
   type <- "mec"
   if (name == "") stop("missing model component name")
-  remove.redundant <- FALSE
+  store.default <- name
+
+  if (e$family[["family"]] == "multinomial") stop("TBI: 'mec' term in multinomial model")
 
   if (is.null(X)) {
     # TODO: warn if formula contains explicit intercept or categorical terms
@@ -133,7 +141,6 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
   e$coef.names[[name]] <- dimnames(X)[[2L]]
   X <- economizeMatrix(X, sparse=sparse, strip.names=TRUE, check=TRUE)
   q <- ncol(X)
-  in_block <- any(name == unlst(e[["block"]]))
 
   if (!V.in.formula) {
     if (is.null(V)) stop("no measurement error variances supplied in mec component")
@@ -147,7 +154,7 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
   # determine units with measurement error
   V <- unname(V)
   if (any(V < 0)) stop("negative measurement error variance(s)")
-  i.me <- which(dapply(V, \(x) all(x > 0), MARGIN=1L))  # TODO add tolerance + allow list of matrix
+  i.me <- whichv(dapply(V, \(x) all(x > 0), MARGIN=1L), TRUE)  # TODO add tolerance + allow list of matrix
   nme <- length(i.me)
   if (nme == e[["n"]]) i.me <- seq_len(e[["n"]])
   if (q == 1L) {
@@ -171,7 +178,7 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
     if (is.null(prior)) prior <- pr_normal(mean=0, precision=0)
   }
   if (prior[["type"]] != "normal") stop("only a normal prior is currently supported for 'mec' model component effects")
-  prior$init(q, e$coef.names[[name]], sparse=if (in_block) TRUE else NULL, sigma=!e$sigma.fixed)  # mc_block uses x-slot of precision matrix
+  prior$init(q, e$coef.names[[name]], sparse=if (in.block) TRUE else NULL, sigma=!e$sigma.fixed)  # mc_block uses x-slot of precision matrix
   informative.prior <- prior[["informative"]]
   Q0 <- prior[["precision"]]
   zero.mean <- !informative.prior || allv(prior[["mean"]], 0)
@@ -186,6 +193,13 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
   }
 
   is.proper <- informative.prior
+
+  if (in.block && !e[["prior.only"]]) {
+    if (e[["sigma.fixed"]])
+      get_Q <- function(p) Q0@x
+    else
+      get_Q <- function(p) Q0@x * (1/p[["sigma_"]]^2)
+  }
 
   if (!zero.mean && e[["compute.weights"]]) stop("weights cannot be computed if some coefficients have non-zero prior means")
 
@@ -231,7 +245,7 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
         linpred <- function(p) (Xnew + SEnew * Crnorm(length(SEnew))) %m*v% p[[name]]
         linpred_update <- function(x, plus=TRUE, p) mv_update(x, plus, Xnew + SEnew * Crnorm(length(SEnew)), p[[name]])
       } else {
-        i.me.new <- which(dapply(SEnew, \(x) all(x > 0), MARGIN=1L))  # TODO add tolerance + allow list of matrix
+        i.me.new <- whichv(dapply(SEnew, \(x) all(x > 0), MARGIN=1L), TRUE)  # TODO add tolerance + allow list of matrix
         if (length(i.me.new) == nrow(newdata)) i.me.new <- seq_len(nrow(newdata))
         SEnew <- SEnew[i.me.new, ]
         linpred <- function(p) {
@@ -263,10 +277,37 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
     add(bquote(p[[.(name)]] <- prior$rprior(p))) |>
     add(quote(p))
 
+  if (!is.null(constraints)) {
+    # R, S, r, s used in mc_block.R
+    if (constraints[["eq"]]) {
+      R <- constraints[["R"]]
+      r <- constraints[["r"]]
+    }
+    if (constraints[["ineq"]]) {
+      S <- constraints[["S"]]
+      s <- constraints[["s"]]
+    }
+  }
 
   if (!e[["prior.only"]]) {
 
-    if (q > 1L) base_tcrossprod <- base::tcrossprod
+    if (!e[["sigma.fixed"]]) {
+      # in case of a gaussian model the variance of normal priors is taken
+      # proportional to sigma^2 --> define contributions to sigma posterior
+      if (prior[["type"]] == "normal" && informative.prior) {
+        if (!is.null(constraints) && constraints[["eq"]])
+          df.add <- q - constraints[["ncR"]]
+        else
+          df.add <- q
+        SSR_add <- function(p) {
+          delta.beta <- if (zero.mean) p[[name]] else p[[name]] - prior[["mean"]]
+          dotprodC(delta.beta, Q0 %m*v% delta.beta)
+        }
+      } else {
+        df.add <- 0L
+        SSR_add <- NULL
+      }
+    }
 
     draw <- if (debug) function(p) {browser()} else function(p) {}
     if (e[["single.block"]] && length(e[["mod"]]) == 1L) {
@@ -280,14 +321,24 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
 
     # 1. draw covariates p[[name_X]]
     # for now we assume that X is dense
+    if (!e[["e.is.res"]] && e[["single.block"]] && length(e[["mod"]]) > 1L) {
+      # need to correct Q_e function; cf gen component with PX
+      if (e$family[["link"]] == "probit")
+        draw <- add(draw, quote(Qe <- e$Q_e(p) - p[["e_"]]))
+      else
+        draw <- add(draw, quote(Qe <- e$Q_e(p) - p[["Q_"]] * p[["e_"]]))
+    } else {
+      draw <- add(draw, quote(Qe <- e$Q_e(p)))
+    }
+    if (e[["modeled.Q"]])
+      draw <- add(draw, quote(v0 <- 1/p[["Q_"]][i.me]))
     draw <- add(draw, bquote(scale <- .(if (e[["sigma.fixed"]]) quote(v0) else quote(v0 * p[["sigma_"]]^2))))
     if (q == 1L) {
       draw <- add(draw, bquote(Vscaled <- 1 / (QME * scale + p[[.(name)]]^2)))
-      if (nme == e[["n"]]) {
-        draw <- add(draw, bquote(p[[.(name_X)]] <- X + Vscaled * p[[.(name)]] * (p[["e_"]] - p[[.(name)]] * X) + sqrt(scale * Vscaled) * Crnorm(.(nme))))
-      } else {
-        draw <- add(draw, bquote(p[[.(name_X)]][i.me] <- X[i.me] + Vscaled * p[[.(name)]] * (p[["e_"]][i.me] - p[[.(name)]] * X[i.me]) + sqrt(scale * Vscaled) * Crnorm(.(nme))))
-      }
+      if (nme == e[["n"]])
+        draw <- add(draw, bquote(p[[.(name_X)]] <- X + Vscaled * p[[.(name)]] * (v0 * Qe - p[[.(name)]] * X) + sqrt(scale * Vscaled) * Crnorm(.(nme))))
+      else
+        draw <- add(draw, bquote(p[[.(name_X)]][i.me] <- X[i.me] + Vscaled * p[[.(name)]] * (v0 * Qe[i.me] - p[[.(name)]] * X[i.me]) + sqrt(scale * Vscaled) * Crnorm(.(nme))))
     } else {
       # V-form (independent m.e.)
       draw <- add(draw, bquote(
@@ -303,25 +354,20 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
       # TODO use Rcpp, and use Q-form at least for cases where all QME[i, ] > 0, and handle list-of-matrix (correlated m.e.)
     }
 
-    if (!in_block) {
+    if (!in.block) {
       # 2. draw coefficients p[[name]]
       if (allv(Q0b0, 0))
-        draw <- add(draw, bquote(Xy <- crossprod_mv(p[[.(name_X)]], e$Q_e(p))))
+        draw <- add(draw, bquote(Xy <- crossprod_mv(p[[.(name_X)]], Qe)))
       else
-        draw <- add(draw, bquote(Xy <- crossprod_mv(p[[.(name_X)]], e$Q_e(p)) + Q0b0))
+        draw <- add(draw, bquote(Xy <- crossprod_mv(p[[.(name_X)]], Qe) + Q0b0))
 
-      # TODO modeled.Q case: use p[["Q_"]]
-      #if (e$modeled.Q) {  # in this case both XX and Xy must be updated in each iteration
-      if (e[["Q0.type"]] == "symm") {
-        # TODO this case not (yet) supported!
-        draw <- add(draw, bquote(XX <- crossprod_sym(p[[.(name_X)]], p[["QM_"]])))
+      if (e[["modeled.Q"]]) {
+        if (e[["Q0.type"]] == "symm")
+          draw <- add(draw, bquote(XX <- crossprod_sym(p[[.(name_X)]], p[["QM_"]])))
+        else
+          draw <- add(draw, bquote(XX <- crossprod_sym(p[[.(name_X)]], p[["Q_"]])))
       } else {
-        #draw <- add(draw, quote(XX <- crossprod_sym(p[[name_X]], p[["Q_"]])))
-        if (informative.prior) {
-          # TODO matsum template? or can we always assume dense matrices?
-          draw <- add(draw, bquote(XX <- crossprod_sym(p[[.(name_X)]], e[["Q0"]]) + Q0))
-        } else
-          draw <- add(draw, bquote(XX <- crossprod_sym(p[[.(name_X)]], e[["Q0"]])))
+        draw <- add(draw, bquote(XX <- crossprod_sym(p[[.(name_X)]], e[["Q0"]])))
       }
       if (informative.prior) {
         # TODO instead of runif(n, ...) account for the structure in Qmod; lambda may not vary per unit!
@@ -331,15 +377,16 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
           Q=mat_sum(crossprod_sym(X, crossprod_sym(Cdiag(runif(e[["n"]], 0.9, 1.1)), e[["Q0"]]))),
           update.Q=TRUE, name=name, constraints=constraints
         )
-        draw <- add(draw, bquote(p[[.(name)]] <- MVNsampler$draw(p, .(if (e$sigma.fixed) 1 else quote(p[["sigma_"]])), Q=mat_sum(XX), Xy=Xy)[[.(name)]]))
+        draw <- add(draw, quote(MVNsampler$update(mat_sum(XX))))
       } else {
         MVNsampler <- create_TMVN_sampler(
           Q=crossprod_sym(X, crossprod_sym(Cdiag(runif(e[["n"]], 0.9, 1.1)), e[["Q0"]])),
           update.Q=TRUE, name=name, constraints=constraints
         )
-        draw <- add(draw, bquote(p[[.(name)]] <- MVNsampler$draw(p, .(if (e$sigma.fixed) 1 else quote(p[["sigma_"]])), Q=XX, Xy=Xy)[[.(name)]]))
+        draw <- add(draw, quote(MVNsampler$update(XX)))
       }
-    }  # END if (!in_block)
+      draw <- add(draw, bquote(p[[.(name)]] <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Xy=Xy)[[.(name)]]))
+    }  # END if (!in.block)
 
     # compute full residuals/fitted values
     if (e[["e.is.res"]])
@@ -349,7 +396,7 @@ mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
     draw <- add(draw, quote(p))
 
     start <- function(p) {
-      if (!in_block) p <- MVNsampler$start(p)
+      if (!in.block) p <- MVNsampler$start(p)
       p[[name_X]] <- X
       p
     }

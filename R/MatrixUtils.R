@@ -22,7 +22,7 @@ detect_redundancy <- function(X, method="chol", tol=NULL) {
   if (method == "chol" && class(X)[1L] == "dsCMatrix") {
     test <- Cholesky_dsC(X, LDL=TRUE)
     if (is.null(tol)) tol <- .Machine$double.eps^0.7
-    rcols <- which(expand1(test, "D")@x <= tol)
+    rcols <- whichv(expand1(test, "D")@x <= tol, TRUE)
     return(if (length(rcols)) rcols else NULL)
   }
   if (method == "chol") {
@@ -47,7 +47,7 @@ detect_redundancy <- function(X, method="chol", tol=NULL) {
 ## @rdname redundancy
 remove_redundancy <- function(X, method="chol", tol=NULL) {
   # first remove trivial redundancy: zero columns
-  zerocols <- which(zero_col(X))
+  zerocols <- whichv(zero_col(X), TRUE)
   if (length(zerocols)) X <- X[, -zerocols, drop=FALSE]
   # remove remaining redundancy
   # assuming X is n x p with n > p --> detect redundancy in X'X typically more efficient
@@ -85,6 +85,9 @@ upper_part <- function(M, diag=FALSE) M[upper.tri(M, diag=diag)]
 # RcppEigen 'knows' dgC, but not dsC --> represent dsC as dgC
 .dgC.class.attr <- class(.m2sparse(matrix(0), "dgC"))
 .dsC.class.attr <- class(.m2sparse(matrix(0), "dsC"))
+
+# another constant, a positive numeric tolerance used in many places
+.tol <- sqrt(.Machine[["double.eps"]])
 
 #' Fast matrix-vector multiplications
 #' 
@@ -488,6 +491,8 @@ setMethod("tcrossprod", signature("matrix", "ddiMatrix"), \(x, y) {
   if (y@diag == "U") x else x * rep_each(y@x, dim(x)[1L])
 })
 
+base_tcrossprod <- base::tcrossprod
+
 # (unary) crossprod method for tabMatrix
 #' @rdname Matrix-methods
 setMethod("crossprod", signature=c("tabMatrix", "missing"),
@@ -666,6 +671,31 @@ setMethod("solve", signature("ddiMatrix", "matrix"), \(a, b)
   )
 )
 
+# block diagonal composition of a list of ddi/dsC matrices
+bdiag_ddidsC <- function(lst) {
+  if (all(b_apply(lst, \(Q) class(Q)[[1L]] == "ddiMatrix"))) {
+    Cdiag(unlst(lapply(lst, \(Q) ddi_diag(Q))))
+  } else {
+    x <- NULL
+    i <- NULL
+    size <- 0L
+    p <- 0L
+    for (Q in lst) {
+      if (class(Q)[1L] == "ddiMatrix") {
+        x <- c(x, ddi_diag(Q))
+        i <- c(i, size + seq_len(nrow(Q)) - 1L)
+        p <- c(p, p[length(p)] + seq_len(nrow(Q)))
+      } else {
+        x <- c(x, Q@x)
+        i <- c(i, size + Q@i)
+        p <- c(p, p[length(p)] + Q@p[-1L])
+      }
+      size <- size + nrow(Q)
+    }
+    new("dsCMatrix", i=i, p=p, x=x, uplo="U", Dim=c(size, size))
+  }
+}
+
 #' Combine factors into a single factor variable representing the interaction of the factors
 #'
 #' @noRd
@@ -701,10 +731,10 @@ cross <- function(Q1, Q2) {
     if (Q1@diag == "U" && Q2@diag == "U")
       return(CdiagU(nrow(Q1)*nrow(Q2)))
     else
-      return(Cdiag(as.numeric(base::tcrossprod(ddi_diag(Q1), ddi_diag(Q2)))))
+      return(Cdiag(as.numeric(base_tcrossprod(ddi_diag(Q1), ddi_diag(Q2)))))
   }
   if (all(c(c1, c2) %in% c("ddiMatrix", "dsCMatrix"))) return(forceSymmetric(as(kronecker(Q2, Q1), "CsparseMatrix"), uplo="U"))
-  return(as(kronecker(Q2, Q1), "CsparseMatrix"))  # at least one matrix is dgC
+  as(kronecker(Q2, Q1), "CsparseMatrix")  # at least one matrix is dgC
 }
 
 #' Utility function to construct a sparse aggregation matrix from a factor

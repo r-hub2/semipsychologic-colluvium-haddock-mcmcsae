@@ -338,8 +338,40 @@ test_that("prec2se_cor works", {
   expect_equal(cov2cor(V)[row(V) < col(V)], sc$cor)
 })
 
+test_that("bdiag_ddidsC works", {
+  Q1 <- CdiagU(3)
+  x <- runif(12)
+  Q2 <- Cdiag(x)
+  expect_equal(bdiag_ddidsC(list(Q1, Q2)), Cdiag(c(1, 1, 1, x)))
+  Q3 <- rsparsematrix(10, 10, nnz=10, symmetric=TRUE)
+  expect_equal(0, sum(abs(bdiag_ddidsC(list(Q1, Q3, Q2)) - bdiag(Q1, Q3, Q2))))
+})
+
 test_that("rowVarsC works", {
   n <- 20; m <- 14
   M <- matrix(runif(n*m), n, m)
   expect_equal(rowVarsC(M), apply(M, 1L, var))
+})
+
+test_that("dgC_is_tabMatrix works", {
+  M <- .m2sparse(cbind(c(0, 1, 0), c(0, 0, 1)))
+  expect_true(dgC_is_tabMatrix(M))
+  M <- .m2sparse(cbind(c(0,0,0,1), c(0,0,0,1)))
+  expect_false(dgC_is_tabMatrix(M))
+})
+
+test_that("scale_mat works", {
+  n <- 8
+  M <- matrix(rnorm(n^2), n, n)
+  s <- runif(n)
+  Ds <- diag(x=s)
+  expect_equal(scale_mat(M, s), Ds %*% M %*% Ds)
+  s1 <- runif(1)
+  expect_equal(scale_mat(M, s1), s1^2 * M)
+  MdsC <- .m2sparse(crossprod(M), class="dsC")
+  expect_equal(.M2m(scale_mat(MdsC, s)), Ds %*% .M2m(MdsC) %*% Ds)
+  expect_equal(.M2m(scale_mat(MdsC, s1)), s1^2 * .M2m(MdsC))
+  Q <- Cdiag(x=runif(n))
+  expect_equal(.M2m(scale_mat(Q, s)), Ds %*% .M2m(Q) %*% Ds)
+  expect_equal(.M2m(scale_mat(Q, s1)), s1^2 * .M2m(Q))
 })

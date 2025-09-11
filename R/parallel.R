@@ -17,7 +17,7 @@ setup_cluster <- function(n.cores=NULL, seed=NULL, export=NULL) {
   message("setting up cluster on ", n.cores, " cores")
   cl <- parallel::makeCluster(n.cores)
   # make sure the same libPaths are set, so that packages are found
-  parallel::clusterCall(cl, function(x) .libPaths(x), .libPaths())
+  parallel::clusterCall(cl, \(x) .libPaths(x), .libPaths())
   parallel::clusterEvalQ(cl, library(mcmcsae))
   # set up independent RNG streams, selecting L'Ecuyer-CMRG RNG
   if (!is.null(seed)) parallel::clusterSetRNGStream(cl, seed)
@@ -50,30 +50,30 @@ combine_chains <- function(...) {
   out[["_info"]] <- dotargs[[1L]][["_info"]]
   out[["_info"]]$n.chain <- sum(i_apply(dotargs, n_chains))
   out[["_model"]] <- dotargs[[1L]][["_model"]]
-  out[["_state"]] <- do.call("c", lapply(dotargs, `[[`, "_state"))
+  out[["_state"]] <- do.call(c, lapply(dotargs, `[[`, "_state"))
   if (!is.null(dotargs[[1L]][["_accept"]])) {
     out[["_accept"]] <- list()
     for (v in names(dotargs[[1L]][["_accept"]]))
-      out[["_accept"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_accept"]][[v]]))
+      out[["_accept"]][[v]] <- do.call(c, lapply(dotargs, \(x) x[["_accept"]][[v]]))
   }
   if (!is.null(dotargs[[1L]][["_means"]])) {
     out[["_means"]] <- list()
     for (v in names(dotargs[[1L]][["_means"]]))
-      out[["_means"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_means"]][[v]]))
+      out[["_means"]][[v]] <- do.call(c, lapply(dotargs, \(x) x[["_means"]][[v]]))
   }
   if (!is.null(dotargs[[1L]][["_sds"]])) {
     out[["_sds"]] <- list()
     for (v in names(dotargs[[1L]][["_sds"]]))
-      out[["_sds"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_sds"]][[v]]))
+      out[["_sds"]][[v]] <- do.call(c, lapply(dotargs, \(x) x[["_sds"]][[v]]))
   }
   for (v in par_names(dotargs[[1L]])) {
-    out[[v]] <- do.call("c", lapply(dotargs, `[[`, v))
+    out[[v]] <- do.call(c, lapply(dotargs, `[[`, v))
     if (!is.null(attr(dotargs[[1L]][[v]], "labels"))) attr(out[[v]], "labels") <- attr(dotargs[[1L]][[v]], "labels")
     class(out[[v]]) <- "dc"
   }
   if (!is.null(dotargs[[1L]][["_info"]][["list.pars"]])) {
     for (v in dotargs[[1L]][["_info"]][["list.pars"]])
-      out[[v]] <- do.call("c", lapply(dotargs, `[[`, v))
+      out[[v]] <- do.call(c, lapply(dotargs, `[[`, v))
   }
   class(out) <- "mcdraws"
   out
@@ -159,12 +159,12 @@ combine_iters <- function(...) {
   if (!is.null(dotargs[[1L]][["_means"]])) {
     out[["_means"]] <- list()
     for (v in names(dotargs[[1L]][["_means"]]))
-      out[["_means"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_means"]][[v]]))
+      out[["_means"]][[v]] <- do.call(c, lapply(dotargs, \(x) x[["_means"]][[v]]))
   }
   if (!is.null(dotargs[[1L]][["_sds"]])) {
     out[["_sds"]] <- list()
     for (v in names(dotargs[[1L]][["_sds"]]))
-      out[["_sds"]][[v]] <- do.call("c", lapply(dotargs, \(x) x[["_sds"]][[v]]))
+      out[["_sds"]][[v]] <- do.call(c, lapply(dotargs, \(x) x[["_sds"]][[v]]))
   }
   for (v in par_names(dotargs[[1L]])) {
     out[[v]] <- dotargs[[1L]][[v]]

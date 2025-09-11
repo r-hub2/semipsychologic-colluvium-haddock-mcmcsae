@@ -21,7 +21,7 @@ f_poisson <- function(link="log", control=poisson_control()) {
     if (!is.null(y)) {
       if (!is.numeric(y)) stop("non-numeric target value not allowed in case of Poisson sampling distribution")
       if (any(y < 0)) warn("negative response value(s)")
-      if (any(abs(round(y) - y) > sqrt(.Machine$double.eps))) warn("non-integral values modelled by Poisson sampling distribution")
+      if (any(abs(round(y) - y) > .tol)) warn("non-integral values modelled by Poisson sampling distribution")
     }
     y
   }
@@ -74,11 +74,11 @@ check_poisson_control <- function(control) {
   if (is.null(control)) control <- list()
   if (!is.list(control)) stop("control options must be specified as a list, preferably using the appropriate control setter function")
   defaults <- poisson_control()
-  w <- which(!(names(control) %in% names(defaults)))
+  w <- whichv(names(control) %in% names(defaults), FALSE)
   if (length(w)) stop("unrecognized control parameters ", paste0(names(control)[w], collapse=", "))
   control <- modifyList(defaults, control, keep.null=TRUE)
-  control$nb.shape <- as.numeric(control$nb.shape)
-  if (length(control$nb.shape) != 1L || is.na(control$nb.shape) || control$nb.shape <= 0)
+  control$nb.shape <- as.numeric(control[["nb.shape"]])
+  if (length(control[["nb.shape"]]) != 1L || is.na(control[["nb.shape"]]) || control[["nb.shape"]] <= 0)
     stop("'nb.shape' must be a positive numerical scalar")
   control
 }

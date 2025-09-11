@@ -131,7 +131,7 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
     } else {
       mc$QA <- economizeMatrix(
         prior[["value"]] * mc[["QA"]] + (1 - prior[["value"]]) * CdiagU(mc[["l"]]),
-        symmetric=TRUE, sparse=if (mc[["in_block"]]) TRUE else NULL
+        symmetric=TRUE, sparse=if (mc[["in.block"]]) TRUE else NULL
       )
     }
   } else {  # bym2
@@ -139,7 +139,7 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
     if (!is.null(mc[["RA"]])) {
       mc$RA <- economizeMatrix(
         rbind(zeroMatrix(nrow(mc[["RA"]]), ncol(mc[["RA"]])), mc[["RA"]]),
-        sparse = if (mc[["in_block"]]) TRUE else NULL, allow.tabMatrix = FALSE
+        sparse = if (mc[["in.block"]]) TRUE else NULL, allow.tabMatrix = FALSE
       )
     }
     if (update.Q) {
@@ -149,12 +149,12 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
           cbind((1/(1-0.5))*idL, -(sqrt(0.5)/(1-0.5))*idL),
           cbind(-(sqrt(0.5)/(1-0.5))*idL, mc[["QA"]] + (0.5/(1-0.5))*idL)
         ),
-        symmetric=TRUE, sparse=if (mc[["in_block"]]) TRUE else NULL
+        symmetric=TRUE, sparse=if (mc[["in.block"]]) TRUE else NULL
       )
       ind1 <- seq_len(l)  # indices for 1/(1-phi) I in upper-left quadrant
       j <- get_col_ind(QA.template)
-      ind2 <- which(QA.template@i == j - l)  # indices for -sqrt(phi)/(1-phi) I in upper-right quadrant
-      ind3 <- which(QA.template@i == j & j >= l)  # indices for term phi/(1-phi) I in lower-right quadrant
+      ind2 <- whichv(QA.template@i, j - l)  # indices for -sqrt(phi)/(1-phi) I in upper-right quadrant
+      ind3 <- whichv(QA.template@i == j & j >= l, TRUE)  # indices for term phi/(1-phi) I in lower-right quadrant
       rm(j)
       update_Q <- function(QA, phi) {
         out <- QA.template
@@ -169,7 +169,7 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
           cbind(idL, idL),
           cbind(idL, idL)
         ),
-        symmetric=TRUE, sparse=if (mc[["in_block"]]) TRUE else NULL
+        symmetric=TRUE, sparse=if (mc[["in.block"]]) TRUE else NULL
       )
       ind.diff2 <- seq.int(l + 1L, by=2L, length.out=l)  # upper-right quadrant
       ind.diff3 <- seq.int(l + 2L, by=2L, length.out=l)  # lower-right quadrant
@@ -212,7 +212,7 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
             cbind((1/(1 - pv)) * CdiagU(l), -(sqrt(pv)/(1 - pv)) * CdiagU(l)),
             cbind(-(sqrt(pv)/(1 - pv)) * CdiagU(l), mc[["QA"]] + (pv/(1 - pv)) * CdiagU(l))
           ),
-          symmetric=TRUE, sparse=if (mc[["in_block"]]) TRUE else NULL
+          symmetric=TRUE, sparse=if (mc[["in.block"]]) TRUE else NULL
         )
       })
     }

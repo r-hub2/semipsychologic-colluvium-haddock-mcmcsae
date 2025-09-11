@@ -56,9 +56,9 @@ AR1_sampler <- function(mc) {
     # independent truncated normal proposal, no adaptation in this case
     # here we need Q0.25 and Q0.5 to build up a template
     # row indices for -phi:
-    ind1 <- which(abs(Q0.25@x - 0.5 * Q0.5@x) < sqrt(.Machine$double.eps))
+    ind1 <- whichv(abs(Q0.25@x - 0.5 * Q0.5@x) < .tol, TRUE)
     # row indices for 1 + phi^2:
-    ind2 <- which(abs(Q0.25@x - ((1 + 0.25^2) / (1 + 0.5^2)) * Q0.5@x) < sqrt(.Machine$double.eps))
+    ind2 <- whichv(abs(Q0.25@x - ((1 + 0.25^2) / (1 + 0.5^2)) * Q0.5@x) < .tol, TRUE)
     col.ind <- get_col_ind(Q0.5, zero.based=FALSE)
     # row, col indices of -phi elements
     i1 <- Q0.5@i[ind1] + 1L
@@ -67,7 +67,7 @@ AR1_sampler <- function(mc) {
     # row, col indices of (1 + phi^2) elements
     i2 <- Q0.5@i[ind2] + 1L
     j2 <- col.ind[ind2]
-    diag.elements <- which(i2 == j2)
+    diag.elements <- whichv(i2, j2)
     i2.diag <- i2[diag.elements]
     j2.diag <- j2[diag.elements]
     i2 <- i2[-diag.elements]
@@ -84,7 +84,7 @@ AR1_sampler <- function(mc) {
       # phi ~ p(phi) (1 - phi^2)^(q0 * l/l_AR1) exp(-0.5 * (alpha * phi^2 - 2 * beta * phi))
       prec <- (dotprodC(v[i2.diag], Qx[ind2.diag] * v[j2.diag]) +
                  2 * dotprodC(v[i2], Qx[ind2] * v[j2]) ) / (1 + phi^2)
-      if (abs(phi) < sqrt(.Machine$double.eps))
+      if (abs(phi) < .tol)
         beta <- 0
       else
         beta <- - dotprodC(v[i1], Qx[ind1] * v[j1]) / phi

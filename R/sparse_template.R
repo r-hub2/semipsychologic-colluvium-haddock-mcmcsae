@@ -16,7 +16,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
     } else if (mc$strucA[["update.Q"]]) {
       QA <- mc$strucA$update_Q(mc[["QA"]], runif(1L, 0.25, 0.75))
     } else if (is.null(mc[["priorA"]])) {
-      QA <- if (is.null(mc[["AR1.inferred"]])) mc[["QA"]] else mc$QA.template$QA0.5
+      QA <- if (is.null(mc[["AR1.inferred"]])) mc[["QA"]] else mc$QA.template[["QA0.5"]]
     } else {
       if (is.null(mc[["AR1.inferred"]]))
         QA <- crossprod_sym(mc[["DA"]], runif(mc[["lD"]], 0.75, 1.25))
@@ -28,14 +28,17 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
       M1.fixed = is.null(mc[["priorA"]]) && !mc$strucA[["update.Q"]] && is.null(mc[["AR1.inferred"]])
     )
     Q <- kron_prod(QA, Qv)
-    if (mc[["in_block"]]) {
-      if (is.matrix(Q)) Q <- as(as(Q, "CsparseMatrix"), "symmetricMatrix")
+    if (mc[["in.block"]]) {
+      if (is.matrix(Q)) Q <- .m2sparse(Q, class="dsC")
       assign("Q", Q, envir=mc)  # only for single-time use in create_mc_block
+    } else {
+      # if QA is unit-ddi, Q is passed as unit-ddi to mat_sum(XX, Q, ...)
+      if (mc[["var"]] == "scalar" && is_unit_ddi(QA)) Q <- QA
     }
     keep.kp <- TRUE
   }
 
-  if (mc[["type"]] == "block" || !mc[["in_block"]]) {
+  if (mc[["type"]] == "block" || !mc[["in.block"]]) {
     if (mc[["type"]] == "gen" && mc[["gl"]]) {
       XX <- mc$glp[["XX.ext"]]
       R <- mc$glp[["R"]]
@@ -55,14 +58,14 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
         mat_sum <- make_mat_sum(M0=XX, M1=Q, force.sparse=TRUE)
         XX_Q <- mat_sum(Q)
       }
-      mc$MVNsampler <- create_block_cMVN_sampler(
+      MVNsampler <- create_block_cMVN_sampler(
         mbs=mc[["mcs"]], X=mc[["X"]], Q=XX_Q,
         R=R, r=mc[["r"]],
         sampler=mc[["e"]],
         name=mc[["name"]], chol.control=mc[["e"]]$control[["chol.control"]]
       )
     } else {
-      mc$MVNsampler <- NULL
+      MVNsampler <- NULL
       R0 <- R
       if (is.null(add.outer.R)) {
         # unresolved singularities usually only occur when at least two components are improper
@@ -80,7 +83,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
         }
       }
 
-      # possibly affecting constraints: IGMRF factors, user-defined constraints, bym2, gl
+      # constraints dependent on IGMRF factors, user-defined constraints, bym2, gl
       constraints <- set_constraints(R=R, r=mc[["r"]], S=mc[["S"]], s=mc[["s"]])
 
       if (!add.outer.R || is.null(R)) {
@@ -93,7 +96,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
         }
         tryCatch(
           suppressWarnings(
-            mc$MVNsampler <- create_TMVN_sampler(
+            MVNsampler <- create_TMVN_sampler(
               Q=XX_Q, update.Q=TRUE, name=mc[["name"]],
               constraints=constraints,
               chol.control=mc[["e"]]$control[["chol.control"]]
@@ -130,7 +133,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
           }
         )
       }
-      if (is.null(mc[["MVNsampler"]])) {  # 2nd attempt or add.outer.R
+      if (is.null(MVNsampler)) {  # 2nd attempt or add.outer.R
         if (is.null(R)) stop("singular precision matrix and no constraints")
         if (update.XX) {
           if (add.eps.I)
@@ -147,7 +150,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
         }
         tryCatch(
           suppressWarnings(
-            mc$MVNsampler <- create_TMVN_sampler(
+            MVNsampler <- create_TMVN_sampler(
               Q=XX_Q, update.Q=TRUE, name=mc[["name"]],
               constraints=constraints,
               chol.control=mc[["e"]]$control[["chol.control"]]
@@ -171,41 +174,42 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
     }
 
     keep.ms <- TRUE
+    mc$MVNsampler <- MVNsampler
     if (mc[["type"]] == "gen" && mc[["unit_Q"]]) {  # unit QA, scalar Qv (with unit Q0), and no constraints
       if (is_unit_diag(XX)) {
         # TODO cleaner and more efficient handling of unit XX case (unit_Q + unit XX --> scalar update)
         XX.expanded <- if (is_unit_ddi(XX)) expand_unit_ddi(XX) else XX
-        mc$update <- function(XX, QA, Qv, w) list(Q=XX.expanded, Imult=Qv*w)
+        mc$update <- function(XX, QA, Qv, w) MVNsampler$update(Q=XX.expanded, Imult=Qv*w)
         keep.kp <- keep.ms <- FALSE
       } else {
         if (class(XX)[1L] == class(if (update.XX) mat_sum(XX, Q) else mat_sum(Q))[1L]) {
           keep.kp <- keep.ms <- FALSE
-          mc$update <- function(XX, QA, Qv, w) list(Q=XX, Imult=Qv*w)
+          mc$update <- function(XX, QA, Qv, w) MVNsampler$update(Q=XX, Imult=Qv*w)
         } else {  # keep mat_sum, kron_prod because for some reason XX has type incompatible with ch
           if (update.XX)
-            mc$update <- function(XX, QA, Qv, w) list(Q=mat_sum(XX, kron_prod(QA, Qv * w)), Imult=0)
+            mc$update <- function(XX, QA, Qv, w) MVNsampler$update(Q=mat_sum(XX, kron_prod(QA, Qv * w)), Imult=0)
           else
-            mc$update <- function(XX, QA, Qv, w) list(Q=mat_sum(kron_prod(QA, Qv * w)), Imult=0)
+            mc$update <- function(XX, QA, Qv, w) MVNsampler$update(Q=mat_sum(kron_prod(QA, Qv * w)), Imult=0)
         }
       }
     } else {
       if (mc[["type"]] == "block" || mc[["q0"]] == 1L) {  # scalar Qv, or block
         if (mc[["type"]] != "block" && is.null(mc[["AR1.inferred"]])) keep.kp <- FALSE
         if (update.XX)
-          mc$update <- function(XX, QA, Qv, w) list(Q=mat_sum(XX, QA, w2=Qv*w), Imult=0)
+          mc$update <- function(XX, QA, Qv, w) MVNsampler$update(Q=mat_sum(XX, QA, w2=Qv*w), Imult=0)
         else
-          mc$update <- function(XX, QA, Qv, w) list(Q=mat_sum(QA, w1=Qv*w), Imult=0)
+          mc$update <- function(XX, QA, Qv, w) MVNsampler$update(Q=mat_sum(QA, w1=Qv*w), Imult=0)
       } else {  # q0 > 1, no block
         if (update.XX)
-          mc$update <- function(XX, QA, Qv, w) list(Q=mat_sum(XX, kron_prod(QA, Qv), w2=w), Imult=0)
+          mc$update <- function(XX, QA, Qv, w) MVNsampler$update(Q=mat_sum(XX, kron_prod(QA, Qv), w2=w), Imult=0)
         else
-          mc$update <- function(XX, QA, Qv, w) list(Q=mat_sum(kron_prod(QA, Qv), w1=w), Imult=0)
+          mc$update <- function(XX, QA, Qv, w) MVNsampler$update(Q=mat_sum(kron_prod(QA, Qv), w1=w), Imult=0)
       }
     }
     if (keep.ms) mc$mat_sum <- mat_sum
   }
 
-  if (mc[["type"]] != "block" && mc[["in_block"]]) keep.kp <- TRUE
+  if (mc[["type"]] != "block" && mc[["in.block"]]) keep.kp <- TRUE
   if (keep.kp) mc$kron_prod <- kron_prod
 
 }

@@ -200,8 +200,9 @@ setMethod("coerce", c("dgCMatrix", "tabMatrix"), \(from, to="tabMatrix", strict=
 
 tab_is_zero <- function(x) (x@reduced && all(x@perm == -1L)) || (x@num && all(x@x == 0))
 
-dgC_is_tabMatrix <- function(M) if (length(M@i) > nrow(M)) FALSE else any_duplicated(M@i)
-  
+# explicit zeros in dgC are ignored by dgC_is_tabMatrix; first use drop0 if required
+dgC_is_tabMatrix <- function(M) if (length(M@i) > nrow(M)) FALSE else !any_duplicated(M@i)
+
 # see whether tabMatrix is actually a permutation matrix
 tab_isPermutation <- function(M) {
   M@Dim[1L] == M@Dim[2L] && !M@num && identical(sort(M@perm), 0:(M@Dim[1L] - 1L))
@@ -225,7 +226,7 @@ get_ind <- function(index, M, type="row") {
     ind <- fmatch(index, if (type == "row") dimnames(M)[[1L]] else dimnames(M)[[2L]])
   } else if (is.logical(index)) {
     if (length(index) != M@Dim[if (type == "row") 1L else 2L]) stop("incompatible index vector")
-    ind <- base::which(index)
+    ind <- whichv(index, TRUE)
   } else {
     ind <- as.integer(index)
     if (anyNA(ind)) stop("index vector with NAs not allowed")
@@ -448,8 +449,7 @@ tables2tabM <- function(formula, data, ...) {
   }
   tnames <- dimnames(tmat)[[2L]]
   vnames <- dimnames(tmat)[[1L]]
-  qvar <- !catvars(trms, data)  # quantitative variables
-  qvar <- vnames[which(qvar)]
+  qvar <- vnames[!catvars(trms, data)]  # quantitative variables
   out <- setNames(vector(mode="list", length(tnames)), tnames)
   for (k in seq_along(tnames)) {
     countvars <- intersect(vnames[tmat[, k] > 0L], qvar)

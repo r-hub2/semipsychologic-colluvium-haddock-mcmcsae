@@ -11,10 +11,15 @@
 #' @param name the name of the model component. This name is used in the output of the MCMC simulation
 #'  function \code{\link{MCMCsim}}. By default the name will be 'mc_offset' with the number of the model term attached.
 #' @returns An model component object with data and methods needed for dealing with an offset term
-#'  in model estimation, and prior and posterior prediction. Intended for internal use by
-#'  other package functions.
+#'  in model estimation, and prior and posterior prediction,
+#'  intended for internal use by other package functions.
 mc_offset <- function(formula, value=NULL, name="") {
-  e <- sys.frame(-2L)
+  stop("function 'mc_offset' should only be used inside a formula")
+}
+
+# additional argument e to pass sampler environment
+# in.block not used for mc_offset
+mc_mc_offset <- function(formula, value=NULL, name="", e, in.block) {
   type <- "mc_offset"
   if (name == "") stop("missing model component name")
   n <- e[["n"]]

@@ -42,8 +42,8 @@ memory.}
 }
 \value{
 An object with precomputed quantities and functions for sampling from
- prior or conditional posterior distributions for this model component. Intended
- for internal use by other package functions.
+ prior or conditional posterior distributions for this model component,
+ intended for internal use by other package functions.
 }
 \description{
 This function is intended to be used on the right hand side of the
@@ -54,7 +54,7 @@ to have R package \pkg{dbarts} installed.
 }
 \examples{
 # generate data, based on an example in Friedman (1991)
-gendat <- function(n=200L, p=10L, sigma=1) {
+gendat <- function(n=150L, p=10L, sigma=1) {
   x <- matrix(runif(n * p), n, p)
   mu <- 10*sin(pi*x[, 1] * x[, 2]) + 20*(x[, 3] - 0.5)^2 + 10*x[, 4] + 5*x[, 5]
   y <- mu + sigma * rnorm(n)
@@ -71,14 +71,14 @@ sampler <- create_sampler(
   data = train
 )
 # increase burnin and n.iter below to improve MCMC convergence
-sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=500, thin=2,
+sim <- MCMCsim(sampler, n.chain=2, burnin=100, n.iter=200, thin=2,
   store.all=TRUE, verbose=FALSE)
 (summ <- summary(sim))
 plot(train$mu, summ$bart[, "Mean"]); abline(0, 1)
 # NB prediction is currently slow
 \donttest{
 pred <- predict(sim, newdata=test,
-  iters=sample(seq_len(n_draws(sim)), 100),
+  iters=sample(seq_len(n_draws(sim)), 50),
   show.progress=FALSE
 )
 (summpred <- summary(pred))

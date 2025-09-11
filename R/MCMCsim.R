@@ -514,9 +514,9 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
   tryCatch({
     out[["_state"]] <- p  # store the final state(s) p
     if (!is.null(store.mean)) {
-      out[["_means"]] <- lapply(out[["_means"]], \(x) lapply(x, function(y) y / n.draw))
+      out[["_means"]] <- lapply(out[["_means"]], \(x) lapply(x, \(y) y / n.draw))
       if (store.sds) {
-        out[["_sds"]] <- lapply(out[["_sds"]], \(x) lapply(x, function(y) y / n.draw))
+        out[["_sds"]] <- lapply(out[["_sds"]], \(x) lapply(x, \(y) y / n.draw))
         for (v in store.mean) {
           for (ch in seq_along(out[["_sds"]][[v]]))
             out[["_sds"]][[v]][[ch]] <- sqrt(out[["_sds"]][[v]][[ch]] - out[["_means"]][[v]][[ch]]^2)
@@ -561,10 +561,10 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
 #' as defined in package \pkg{posterior}.
 #'
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' data(iris)
 #' sampler <- create_sampler(Sepal.Length ~ reg(~ Petal.Length + Species, name="beta"), data=iris)
-#' sim <- MCMCsim(sampler, burnin=100, n.chain=2, n.iter=300)
+#' sim <- MCMCsim(sampler, burnin=100, n.chain=2, n.iter=200)
 #' summary(sim)
 #' if (require("coda", quietly=TRUE)) {
 #'   mcbeta <- to_mcmc(sim$beta)
@@ -585,7 +585,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
 #' gd <- generate_data(~ reg(~ x + f, prior=pr_normal(precision=1), name="beta"), data=dat)
 #' dat$y <- gd$y
 #' sampler <- create_sampler(y ~ reg(~ x + f, name="beta"), data=dat)
-#' sim <- MCMCsim(sampler, n.chain=2, n.iter=300)
+#' sim <- MCMCsim(sampler, burnin=100, n.chain=2, n.iter=300)
 #' str(sim$beta)
 #' str(as.array(sim$beta))
 #' bayesplot::mcmc_hist(as.array(sim$beta))
@@ -597,7 +597,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
 #' ex <- mcmcsae_example()
 #' plot(ex$dat$fT, ex$dat$y)
 #' sampler <- create_sampler(ex$model, data=ex$dat)
-#' sim <- MCMCsim(sampler, n.chain=2, n.iter=300, store.all=TRUE)
+#' sim <- MCMCsim(sampler, burnin=100, n.chain=2, n.iter=200, store.all=TRUE)
 #' str(sim$beta)
 #' str(as.matrix(sim$beta))
 #' # fake data simulation check:
@@ -669,7 +669,7 @@ as.matrix.dc <- function(x, colnames=TRUE, ...) {
   dimx <- dim(x[[1L]])
   nv <- dimx[2L]
   if (nv < 100L) {
-    out <- do.call("rbind", x)
+    out <- do.call(rbind, x)
   } else {
     nch <- length(x)
     nit <- dimx[1L]

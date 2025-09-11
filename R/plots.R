@@ -31,7 +31,7 @@ plot.dc <- function(x, nrows, ncols, ask=FALSE, ...) {
   labs <- labels(x)
   for (i in seq_len(n_vars(x))) {
     drawsi <- get_from(x, i)
-    drawsi <- do.call("cbind", drawsi)  # niter x nchain matrix
+    drawsi <- do.call(cbind, drawsi)  # niter x nchain matrix
     lab <- if (is.null(labs)) "" else labs[i]
     trace_plot(drawsi, ylab=lab)
     drawsi <- as.vector(drawsi)  # concatenate the chains
@@ -92,7 +92,7 @@ plot.mcdraws <- function(x, vnames, nrows, ncols, ask=FALSE, ...) {
 #' @param xlab x-axis label.
 #' @param ylab y-axis label.
 trace_plot <- function(dc1, xlab="iterations", ylab="") {
-  if (!is.matrix(dc1)) dc1 <- do.call("cbind", dc1)  # niter x nchain matrix
+  if (!is.matrix(dc1)) dc1 <- do.call(cbind, dc1)  # niter x nchain matrix
   matplot(seq_len(nrow(dc1)), dc1, xlab=xlab, ylab=ylab, type="l", col=seq_len(ncol(dc1)))
 }
 

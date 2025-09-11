@@ -103,8 +103,8 @@
 #' @param control a list with further computational options. These options can
 #'  be specified using function \code{\link{gen_control}}.
 #' @returns An object with precomputed quantities and functions for sampling from
-#'  prior or conditional posterior distributions for this model component. Intended
-#'  for internal use by other package functions.
+#'  prior or conditional posterior distributions for this model component,
+#'  intended for internal use by other package functions.
 #' @references
 #'  J. Besag and C. Kooperberg (1995).
 #'    On Conditional and Intrinsic Autoregression.
@@ -142,8 +142,19 @@ gen <- function(formula = ~ 1, factor=NULL,
                 constraints0=NULL, constraintsA=NULL,
                 formula.gl=NULL, a=1000,
                 name="", sparse=NULL, control=gen_control(), debug=FALSE) {
+  stop("function 'gen' should only be used inside a formula")
+}
 
-  e <- sys.frame(-2L)
+# additional argument e to pass sampler environment, and in.block
+mc_gen <- function(formula = ~ 1, factor=NULL,
+                   remove.redundant=FALSE, drop.empty.levels=FALSE, X=NULL,
+                   var=NULL, prior=NULL, Q0=NULL, PX=NULL,
+                   priorA=NULL,
+                   strucA=GMRF_structure(), GMRFconstr=NULL,
+                   constraints0=NULL, constraintsA=NULL,
+                   formula.gl=NULL, a=1000,
+                   name="", sparse=NULL, control=gen_control(),
+                   debug=FALSE, e, in.block) {
   type <- "gen"  # for generic (random effects)
   if (name == "") stop("missing model component name")
 
@@ -195,7 +206,7 @@ gen <- function(formula = ~ 1, factor=NULL,
     varnames <- dimnames(X0)[[2L]]
     if (!is.null(XA)) {
       if (drop.empty.levels) {
-        factor.cols.removed <- which(zero_col(XA))
+        factor.cols.removed <- whichv(zero_col(XA), TRUE)
         if (length(factor.cols.removed)) XA <- XA[, -factor.cols.removed, drop=FALSE]
       }
       if (strucA[["type"]] == "bym2") XA <- cbind(XA, zeroMatrix(e[["n"]], ncol(XA)))
@@ -213,31 +224,26 @@ gen <- function(formula = ~ 1, factor=NULL,
   e$coef.names[[name]] <- dimnames(X)[[2L]]
   X <- economizeMatrix(X, sparse=sparse, strip.names=TRUE, check=TRUE)
   q <- ncol(X)
-  in_block <- any(name == unlst(e[["block"]])) || any(name == unlst(e[["block.V"]]))
 
   self <- environment()
 
-  is.proper <- all(info[["types"]] %in% c("iid", "AR1")) || strucA[["type"]] == "leroux"
+  is.proper <- is.null(info) || info[["is.proper"]] || strucA[["type"]] == "leroux"
   # by default, IGMRF constraints are imposed, unless the GMRF is proper
   # NB constr currently only refers to QA, not Q0
   if (is.null(GMRFconstr)) GMRFconstr <- !is.proper
   # fastGMRFprior currently only for IGMRF without user-defined constraints
-  #   and currently only used for IGMRFs
   #   and not possible for spatial as typically n_edges > n_vertices
   #   and only if any custom factor has (incidence) matrix D specified
-  fastGMRFprior <- !is.null(info) && is.null(priorA) && modus == "regular" &&
-    is.null(constraints0) && is.null(constraintsA) && strucA[["type"]] == "default" &&
-    !all(info[["types"]] %in% c("iid", "AR1")) && all(info[["types"]] != "spatial") &&
-    all(b_apply(info[["factors"]][info[["types"]] == "custom"], \(x) !is.null(x[["D"]]))) &&
-    !any(b_apply(info[["factors"]], \(x) isTRUE(x[["circular"]])))
+  fastGMRFprior <- !is.null(info) && info[["fastGMRFprior"]] &&
+    modus == "regular" && strucA[["type"]] == "default" &&
+    is.null(constraints0) && is.null(constraintsA)
   GMRFmats <- compute_GMRF_matrices(info, e[["data"]],
     D=fastGMRFprior || !is.null(priorA) || !is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]],
-    Q=!(fastGMRFprior || !is.null(priorA)),
-    R=GMRFconstr, sparse=if (in_block) TRUE else NULL,
-    cols2remove=factor.cols.removed, scale.precision=strucA$scale.precision, drop.zeros=TRUE
+    R=GMRFconstr, sparse=if (in.block) TRUE else NULL,
+    cols2remove=factor.cols.removed, scale.precision=strucA[["scale.precision"]], drop.zeros=TRUE
   )
 
-  AR1.inferred <- which(info[["types"]] == "AR1" & !b_apply(info[["extra"]], is.null))
+  AR1.inferred <- whichv(info[["types"]] == "AR1" & !b_apply(info[["extra"]], is.null), TRUE)
   if (length(AR1.inferred) == 1L) {
     if (!is.null(formula.gl)) stop("AR1 with non-trivial parameter prior not supported in combination with group-level effects")
     if (strucA[["type"]] != "default") stop("AR1 with non-trivial parameter prior not supported in combination with GMRF extension")
@@ -260,7 +266,7 @@ gen <- function(formula = ~ 1, factor=NULL,
     }
     if (is.null(priorA)) {
       if (is.null(AR1.inferred)) {
-        QA <- economizeMatrix(crossprod(DA), sparse=if (in_block) TRUE else NULL, symmetric=TRUE, check=TRUE)
+        QA <- economizeMatrix(crossprod(DA), sparse=if (in.block) TRUE else NULL, symmetric=TRUE, check=TRUE)
       } else {
         QA.template <- QA_AR1_template(info,
           economizeMatrix(crossprod(DA.template[["DA0.5"]]), sparse=TRUE, symmetric=TRUE, check=TRUE),
@@ -270,7 +276,7 @@ gen <- function(formula = ~ 1, factor=NULL,
     }
   } else {  # compute precision matrix QA only
     if (is.null(AR1.inferred)) {
-      QA <- economizeMatrix(GMRFmats[["Q"]], sparse=if (in_block) TRUE else NULL, symmetric=TRUE, check=TRUE)
+      QA <- economizeMatrix(GMRFmats[["Q"]], sparse=if (in.block) TRUE else NULL, symmetric=TRUE, check=TRUE)
       l <- nrow(QA)
     } else {
       QA.template <- QA_AR1_template(info, GMRFmats[["Q"]], AR1.inferred)
@@ -327,8 +333,6 @@ gen <- function(formula = ~ 1, factor=NULL,
       normal = {
         if (modus != "regular") stop("please use 'pr_MLiG' to specify a (conjugate) prior for gamma family or variance modelling")
         PX$prior$init(n=PX[["dim"]], sparse=PX[["sparse"]], sigma=PX[["data.scale"]])
-        if (PX[["vector"]])
-          base_tcrossprod <- base::tcrossprod  # faster access (Matrix promotes tcrossprod to S4 generic)
         PX_Q0 <- PX$prior[["precision"]]
         if (length(PX$prior[["mean"]]) == 1L)
           PX_Qmu0 <- PX_Q0 %m*v% rep.int(PX$prior[["mean"]], PX$prior[["n"]])
@@ -406,9 +410,8 @@ gen <- function(formula = ~ 1, factor=NULL,
     FALSETRUE = kronecker(RA, CdiagU(q0)),
     FALSEFALSE = cbind(kronecker(CdiagU(l), R0), kronecker(RA, CdiagU(q0)))
   )
-  if (!is.null(R)) {
+  if (!is.null(R))
     R <- economizeMatrix(R, allow.tabMatrix=FALSE, check=TRUE)
-  }
   if (!is.null(R0) && !is.null(RA)) R <- remove_redundancy(R)
 
   # construct inequality restriction matrix
@@ -516,11 +519,11 @@ gen <- function(formula = ~ 1, factor=NULL,
   if (gl) {  # group-level covariates
     glp <- eval(glp)
     sparse_template(self, update.XX=e[["modeled.Q"]])
-    if (!in_block && !e[["prior.only"]]) glp$R <- NULL
+    if (!in.block && !e[["prior.only"]]) glp$R <- NULL
   } else if (modus == "regular") {
     sparse_template(self, update.XX=e[["modeled.Q"]])
   } else {
-    if (in_block) {
+    if (in.block) {
       Q <- Cdiag(rep.int(1/a, q))  # to construct QT template in mc_block
     } else {
       if (modus == "vargamma")
@@ -742,16 +745,18 @@ gen <- function(formula = ~ 1, factor=NULL,
     }
   } else {
     if (fastGMRFprior) {
-      rGMRFprior <- NULL  # to be created at the first call of rprior
-      rprior <- rprior |>
-        add(quote(if (is.null(rGMRFprior)) setup_priorGMRFsampler(self, Qv))) |>
-        add(bquote(p[[.(name)]] <- rGMRFprior(Qv)))
+      rGMRFprior <- NULL  # create at the first call of rprior
+      rprior <- add(rprior, quote(if (is.null(rGMRFprior)) setup_priorGMRFsampler(self, Qv)))
+      if (is.null(priorA))
+        rprior <- add(rprior, bquote(p[[.(name)]] <- rGMRFprior(Qv)))
+      else
+        rprior <- add(rprior, bquote(p[[.(name)]] <- rGMRFprior(Qv, p[[.(name_omega)]])))
     } else {
       if (q0 == 1L)
-        rprior <- add(rprior, quote(Q <- Qv * QA))
+        rprior <- add(rprior, quote(Q <- scale_mat(QA, sqrt(Qv))))
       else
         rprior <- add(rprior, quote(Q <- kron_prod(QA, Qv)))
-      rMVNprior <- NULL  # to be created at the first call of rprior
+      rMVNprior <- NULL  # create at the first call of rprior
       rprior <- rprior |>
         add(quote(if (is.null(rMVNprior)) setup_priorMVNsampler(self, Q))) |>
         add(bquote(p[[.(name)]] <- rMVNprior(p, Q)))
@@ -767,7 +772,38 @@ gen <- function(formula = ~ 1, factor=NULL,
   rprior <- add(rprior, quote(p))
   # END rprior function
 
+  store.default <- name_sigma
+  if (var == "unstructured") store.default <- c(store.default, name_rho)
+  if (gl) store.default <- c(store.default, name_gl)
+  if (strucA[["update.Q"]]) store.default <- c(store.default, strucA[["name_ext"]])
+  if (!is.null(priorA) && is.list(priorA[["df"]])) store.default <- c(store.default, name_df)
+  if (!is.null(AR1.inferred)) store.default <- c(store.default, name_AR1)
+
   if (e[["prior.only"]]) return(self)  # no need for posterior draw function in this case
+
+  if (!e[["sigma.fixed"]]) {
+    # in case of a gaussian model PX and group-level effect priors
+    # by default depend on sigma^2 --> define contributions to sigma posterior
+    if (usePX && PX[["data.scale"]]) {
+      df.add <- PX[["dim"]]
+      SSR_add <- function(p) {
+        out <- dotprodC(p[[name_xi]], PX_Q0 %m*v% p[[name_xi]])
+      }
+    } else {
+      df.add <- 0
+      SSR_add <- function(p) {
+        out <- 0
+      }
+    }
+    if (gl && glp[["informative.prior"]]) {
+      df.add <- df.add + glp[["q"]]
+      #draw_sigma <- add(draw_sigma, bquote(delta.beta <- p[[.(mc$name_gl)]] - mod[[.(k)]]$glp$b0))
+      SSR_add <- SSR_add |>
+        add(bquote(delta.beta <- p[[.(name_gl)]])) |>
+        add(bquote(out <- out + dotprodC(delta.beta, glp[["Q0"]] %m*v% delta.beta)))
+    }
+    SSR_add <- add(SSR_add, quote(out))
+  }
 
   if (!is.null(priorA) || is.list(prior[["scale"]]) || strucA[["update.Q"]]) {
     # store Qraw in state p --> no need to recompute at next MCMC iteration
@@ -776,10 +812,11 @@ gen <- function(formula = ~ 1, factor=NULL,
 
   # BEGIN draw function
   draw <- if (debug) function(p) {browser()} else function(p) {}
-  if (in_block || !is.null(AR1.inferred)) {
+  if (in.block || !is.null(AR1.inferred)) {
     # store QA x Qv for use in block sampler, and/or AR1 parameter sampler
     name_Q <- paste0(name, "_Q_")  # trailing "_" --> only temporary storage
   }
+  if (in.block) get_Q <- function(p) p[[name_Q]]
   if (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]] ||
       (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
     name_Qv <- paste0(name, "_Qv_")
@@ -881,7 +918,7 @@ gen <- function(formula = ~ 1, factor=NULL,
   else
     draw <- add(draw, bquote(M_coef_raw <- matrix(coef_raw, nrow=.(l), byrow=TRUE)))
 
-  draw <- add(draw, bquote(tau <- .(if (e$sigma.fixed) 1 else quote(1 / p[["sigma_"]]^2))))
+  draw <- add(draw, bquote(tau <- .(if (e[["sigma.fixed"]]) 1 else quote(1 / p[["sigma_"]]^2))))
 
   if (usePX) {
     if (PX[["vector"]]) {
@@ -915,7 +952,7 @@ gen <- function(formula = ~ 1, factor=NULL,
           draw <- draw |>
             add(quote(V <- 1 / (dotprodC(coef_raw, XX %m*v% coef_raw) + PX_Q0))) |>
             add(quote(E <- V * (dotprodC(coef_raw, Xy) + PX_Qmu0))) |>
-            add(bquote(xi <- rnorm(1L, mean=E, sd=.(if (e$sigma.fixed) quote(sqrt(V)) else quote(p[["sigma_"]] * sqrt(V))))))
+            add(bquote(xi <- rnorm(1L, mean=E, sd=.(if (e[["sigma.fixed"]]) quote(sqrt(V)) else quote(p[["sigma_"]] * sqrt(V))))))
         } else {
           draw <- draw |>
             add(quote(V <- 1 / (dotprodC(coef_raw, XX %m*v% coef_raw) * tau + PX_Q0))) |>
@@ -1181,9 +1218,9 @@ gen <- function(formula = ~ 1, factor=NULL,
   # draw coefficients
   if (gl) {
     i.v <- seq_len(q)  # indices for random effect vector in u=(v, alpha)
-    i.alpha <- (q + 1L):(q + glp$p0 * q0)  # indices for group-level effect vector in u=(v, alpha)
+    i.alpha <- (q + 1L):(q + glp[["p0"]] * q0)  # indices for group-level effect vector in u=(v, alpha)
   }
-  if (in_block) {
+  if (in.block) {
     if (gl) {
       draw <- add(draw, bquote(p[[.(name_Q)]] <- kron_prod(glp[["QA.ext"]], Qv, values.only=TRUE)))
     } else {
@@ -1204,7 +1241,7 @@ gen <- function(formula = ~ 1, factor=NULL,
         if (class(glp[["XX.ext"]])[1L] == "ddiMatrix")
           update.ind <- seq_len(q)
         else
-          update.ind <- seq_along(which(glp[["XX.ext"]]@i < q))
+          update.ind <- seq_along(whichv(glp[["XX.ext"]]@i < q, TRUE))
         if (length(update.ind) == length(glp[["XX.ext"]]@x)) {
           rm(update.ind)
           draw <- add(draw, quote(attr(glp[["XX.ext"]], "x") <- XX@x))
@@ -1215,15 +1252,15 @@ gen <- function(formula = ~ 1, factor=NULL,
       if (strucA[["update.Q"]])
         draw <- add(draw, quote(glp[["QA.ext"]] <- crossprod_sym(glp[["IU0"]], QA)))
       draw <- draw |>
-        add(quote(Qlist <- update(glp[["XX.ext"]], glp[["QA.ext"]], Qv, 1/tau))) |>
-        add(bquote(coef <- MVNsampler$draw(p, .(if (e$sigma.fixed) 1 else quote(p[["sigma_"]])), Q=Qlist[["Q"]], Imult=Qlist[["Imult"]], Xy=c(Xy, glp[["Q0b0"]]))[[.(name)]])) |>
+        add(quote(update(glp[["XX.ext"]], glp[["QA.ext"]], Qv, 1/tau))) |>
+        add(bquote(coef <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Xy=c(Xy, glp[["Q0b0"]]))[[.(name)]])) |>
         add(bquote(p[[.(name)]] <- coef[i.v])) |>
         add(bquote(p[[.(name_gl)]] <- coef[i.alpha]))
     } else {  # no blocking, no group-level component
       if (modus == "regular") {
         draw <- draw |>
-          add(quote(Qlist <- update(XX, QA, Qv, 1/tau))) |>
-          add(bquote(p[[.(name)]] <- MVNsampler$draw(p, .(if (e$sigma.fixed) 1 else quote(p[["sigma_"]])), Q=Qlist[["Q"]], Imult=Qlist[["Imult"]], Xy=Xy)[[.(name)]]))
+          add(quote(update(XX, QA, Qv, 1/tau))) |>
+          add(bquote(p[[.(name)]] <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Xy=Xy)[[.(name)]]))
       } else {
         if (modus == "var" || modus == "vargamma")
           draw <- add(draw, bquote(Hz <- crossprod_mv(X, rMLiG(.(e[["n"]]), 0.5, vkappa))))
@@ -1268,7 +1305,7 @@ gen <- function(formula = ~ 1, factor=NULL,
   start <- function(p) {}
 
   # TODO check formats of user-provided start values
-  if (!in_block) {
+  if (!in.block) {
     if (gl) {
       # TODO conditional sampling if one of p[[.(name)]] and p[[.(name_gl)]] is provided
       start <- start |>
@@ -1333,7 +1370,7 @@ gen <- function(formula = ~ 1, factor=NULL,
 
   start <- add(start, quote(p))
 
-  if (in_block && (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]])) {
+  if (in.block && (!is.null(e$control[["CG"]]) || e$control[["cMVN.sampler"]])) {
     # TODO avoid recomputing DA here in inferred AR1 parameter case
     if (q0 == 1L) {
       drawMVNvarQ <- function(p) {
@@ -1368,24 +1405,26 @@ gen <- function(formula = ~ 1, factor=NULL,
 
 
 setup_priorGMRFsampler <- function(mc, Qv) {
-  # TODO
-  # - support local scale parameters DA --> diag(omega_i)^-1/2 DA
-  # - in some cases perm=TRUE may be more efficient
+  # in some cases perm=TRUE may be more efficient
   mc$cholDD <- build_chol(tcrossprod(mc[["DA"]]), control=chol_control(perm=FALSE))
-  mc$cholQv <- build_chol(Qv, control=chol_control(perm=FALSE))
-  rGMRF <- function(Qv) {}
-  rGMRF <- add(rGMRF, quote(cholQv$update(Qv)))
+  rGMRF <- function(Qv, omega) {}
   if (mc[["q0"]] == 1L) {
-    rGMRF <- rGMRF |>
-      add(bquote(Z <- Crnorm(.(nrow(mc[["DA"]]))))) |>
-      add(quote(Z <- cholQv$solve(Z, system="Lt"))) |>
-      add(quote(crossprod_mv(DA, cholDD$solve(Z))))
+    if (is.null(mc[["priorA"]]))
+      rGMRF <- add(rGMRF, bquote(Z <- (1/sqrt(Qv)) * Crnorm(.(mc[["lD"]]))))
+    else
+      rGMRF <- add(rGMRF, bquote(Z <- (1/sqrt(Qv * omega)) * Crnorm(.(mc[["lD"]]))))
+    rGMRF <- add(rGMRF, quote(crossprod_mv(DA, cholDD$solve(Z))))
   } else {
+    mc$cholQv <- build_chol(Qv, control=chol_control(perm=FALSE))
     rGMRF <- rGMRF |>
-      add(bquote(Z <- matrix(Crnorm(.(mc[["q0"]] * nrow(mc[["DA"]]))), nrow=.(mc[["q0"]])))) |>
-      add(quote(Z <- cholQv$solve(Z, system="Lt"))) |>
-      add(quote(coef <- crossprod(DA, cholDD$solve(t.default(Z))))) |>
-      add(quote(as.numeric(t.default(coef))))
+      add(quote(cholQv$update(Qv))) |>
+      add(bquote(Z <- matrix(Crnorm(.(mc[["q0"]] * mc[["lD"]])), nrow=.(mc[["q0"]])))) |>
+      add(quote(Z <- cholQv$solve(Z, system="Lt")))
+    if (is.null(mc[["priorA"]]))
+      rGMRF <- add(rGMRF, quote(coef <- crossprod(DA, cholDD$solve(t.default(Z)))))
+    else
+      rGMRF <- add(rGMRF, quote(coef <- crossprod(DA, cholDD$solve((1/sqrt(omega)) * t.default(Z)))))
+    rGMRF <- add(rGMRF, quote(as.numeric(t.default(coef))))
   }
   mc$rGMRFprior <- rGMRF
   environment(mc$rGMRFprior) <- mc
@@ -1404,7 +1443,9 @@ setup_priorMVNsampler <- function(mc, Q) {
     mc$priorMVNsampler <- create_TMVN_sampler(mc$mat_sum_prior(Q), update.Q=TRUE, update.mu=FALSE, name="coef", constraints=set_constraints(R=mc[["R"]]))
     rMVN <- add(rMVN, quote(Q <- mat_sum_prior(Q)))
   }
-  rMVN <- add(rMVN, quote(priorMVNsampler$draw(p, Q=Q)[["coef"]]))
+  rMVN <- rMVN |>
+    add(quote(priorMVNsampler$update(Q=Q))) |>
+    add(quote(priorMVNsampler$draw(p)[["coef"]]))
   mc$rMVNprior <- rMVN
   environment(mc$rMVNprior) <- mc
 }

@@ -84,7 +84,7 @@ fitted_res <- function(obj, mean.only=FALSE, units=NULL, chains=seq_len(n_chains
     out <- get_from(obj[["e_"]], chains=chains, draws=draws, vars=units)
     if (smplr[["e.is.res"]]) {
       # change to linear predictor as code below assumes that
-      out <- lapply(out, function(x) rep_each(smplr[["y"]][units], nrow(x)) - x)
+      out <- lapply(out, \(x) rep_each(smplr[["y"]][units], nrow(x)) - x)
     }
   }
   if (type == "response") {
@@ -97,7 +97,7 @@ fitted_res <- function(obj, mean.only=FALSE, units=NULL, chains=seq_len(n_chains
     if (matrix)
       out <- rep_each(smplr[["y"]][units], nrow(out)) - out
     else
-      out <- lapply(out, function(x) rep_each(smplr[["y"]][units], nrow(x)) - x)
+      out <- lapply(out, \(x) rep_each(smplr[["y"]][units], nrow(x)) - x)
   }
   if (matrix) {
     dimnames(out) <- list(NULL, units)
@@ -263,13 +263,23 @@ compute_DIC <- function(x, use.pV=FALSE) {
   c(DIC=deviance.at.mean + 2 * pDIC, p_DIC=pDIC)
 }
 
+all_coef_names_present <- function(mod, names) {
+  all(unlst(lapply(mod, \(mc)
+      if (mc[["type"]] == "s")
+        c(mc[["name.f"]], mc[["name.r"]])
+      else if (mc[["type"]] != "mc_offset")
+        mc[["name"]]))
+      %in% names
+  )
+}
+
 get_lppd_function <- function(x) {
   llh_i <- x[["_model"]]$llh_i
   if (is.null(llh_i)) stop("pointwise log-likelihood function not implemented; cannot compute WAIC")
-  if (!(any("e_" == par_names(x)) || all(names(Filter(\(mc) mc[["type"]] != "mc_offset", x[["_model"]]$mod)) %in% par_names(x))))
-    stop("WAIC can only be computed if all coefficients are stored. Please use 'store.all=TRUE' in MCMCsim.")
+  if (!(any("e_" == par_names(x)) || all_coef_names_present(x[["_model"]][["mod"]], par_names(x))))
+    stop("WAIC/LOO can only be computed if all coefficients are stored. Please use 'store.all=TRUE' in MCMCsim.")
   if (x[["_model"]]$modeled.Q && x[["_model"]]$family$family == "gaussian" && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", x[["_model"]]$Vmod)) %in% par_names(x)))
-    stop("WAIC can only be computed if all modelled variance factors are stored. Please use 'store.all=TRUE' in MCMCsim.")
+    stop("WAIC/LOO can only be computed if all modelled variance factors are stored. Please use 'store.all=TRUE' in MCMCsim.")
   llh_i
 }
 
@@ -332,8 +342,8 @@ compute_WAIC <- function(x, diagnostic=FALSE, batch.size=NULL, show.progress=TRU
       avg <- (nA * avg + o[["nS"]] * o[["mean"]]) / nAB
       nA <- nAB
     }
-    lppd <- lppd.max + log(lppd)
-    lppd_sum <- sum(lppd) - length(lppd) * log(nA)
+    lppd <- lppd.max + log(lppd/nA)
+    lppd_sum <- sum(lppd)
     pWAIC1 <- 2 * (lppd_sum - sum(avg))
     pWAIC2 <- sum(pwaic)
   } else {
@@ -362,8 +372,8 @@ compute_WAIC <- function(x, diagnostic=FALSE, batch.size=NULL, show.progress=TRU
     if (show.progress) close(pb)
     pWAIC1 <- 2 * (lppd_sum - pWAIC1)
   }
-  WAIC1 <- -2 * lppd_sum + 2 * pWAIC1
-  WAIC2 <- -2 * lppd_sum + 2 * pWAIC2
+  WAIC1 <- 2 * (pWAIC1 - lppd_sum)
+  WAIC2 <- 2 * (pWAIC2 - lppd_sum)
   if (diagnostic)
     list(lppd=lppd, pwaic=pwaic, WAIC1=WAIC1, p_WAIC1=pWAIC1, WAIC2=WAIC2, p_WAIC2=pWAIC2)
   else

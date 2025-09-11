@@ -12,6 +12,7 @@ dat <- generate_data(~ reg(~ x + f, prior=pr_normal(precision=1)),
 test_that("generated data based on vfac model is OK", {
   expect_length(dat$y, n)
   expect_false(anyNA(dat$y))
+  expect_error(vfac(factor="f", prior=pr_invchisq(df=5)), "inside a formula")
 })
 
 test_that("modelling vfac variance structure works", {
@@ -100,8 +101,10 @@ test_that("vreg variance model works", {
   expect_is(sim$varf, "dc")
   summ <- summary(sim)
   expect_between(summ$varf[, "Mean"], 0.4, 2.5)
-  compute_DIC(sim)
-  compute_WAIC(sim)
+  DIC <- compute_DIC(sim)
+  WAIC <- compute_WAIC(sim)
+  expect_equal(unname(DIC["DIC"]), unname(WAIC["WAIC1"]), tolerance=0.25)
+  expect_equal(unname(WAIC["WAIC1"]), unname(WAIC["WAIC2"]), tolerance=0.25)
 })
 
 n <- 900
@@ -121,8 +124,10 @@ test_that("reg variance model works", {
   summ <- summary(sim)
   expect_between(summ$beta[, "q0.5"], 0.3 * c(1, 1, 1), 3 * c(1, 1, 1))
   expect_between(summ$vbeta[, "q0.5"], c(0.5 * 0.3, -0.5 * 3), c(0.5 * 3, -0.5 * 0.3))
-  compute_DIC(sim)
-  compute_WAIC(sim)
+  DIC <- compute_DIC(sim)
+  WAIC <- compute_WAIC(sim)
+  expect_equal(unname(DIC["DIC"]), unname(WAIC["WAIC1"]), tolerance=0.25)
+  expect_equal(unname(WAIC["WAIC1"]), unname(WAIC["WAIC2"]), tolerance=0.25)
 })
 
 n <- 1200

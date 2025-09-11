@@ -91,7 +91,7 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
     j <- get_col_ind(template)
     switch(class1,
       ddi = {
-        ind1 <- which(template@i == j & ddi_diag(M1)[j + 1L] != 0) - 1L
+        ind1 <- whichv(template@i == j & ddi_diag(M1)[j + 1L] != 0, TRUE) - 1L
         if (anyv(M1@x, 0)) {
           nz1 <- whichv(M1@x, 0, invert=TRUE)
           getM1x <- function(M) M@x[nz1]
@@ -100,7 +100,7 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
         }
       },
       mat = {
-        Mind1 <- which(upper.tri(M1, diag=TRUE) & M1 != 0)
+        Mind1 <- whichv(upper.tri(M1, diag=TRUE) & M1 != 0, TRUE)
         ind1 <- fmatch(Mind1 - 1L, template@i + q * j) - 1L
         getM1x <- function(M) M[Mind1]
       },
@@ -112,7 +112,7 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
     if (doM2) {
       switch(class2,
         ddi = {
-          ind2 <- which(template@i == j & ddi_diag(M2)[j + 1L] != 0) - 1L
+          ind2 <- whichv(template@i == j & ddi_diag(M2)[j + 1L] != 0, TRUE) - 1L
           if (anyv(M2@x, 0)) {
             nz2 <- whichv(M2@x, 0, invert=TRUE)
             getM2x <- function(M) M@x[nz2]
@@ -121,7 +121,7 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
           }
         },
         mat = {
-          Mind2 <- which(upper.tri(M2, diag=TRUE) & M2 != 0)
+          Mind2 <- whichv(upper.tri(M2, diag=TRUE) & M2 != 0, TRUE)
           ind2 <- fmatch(Mind2 - 1L, template@i + q * j) - 1L
           getM2x <- function(M) M[Mind2]
           if (class1 == "mat") {
@@ -172,7 +172,7 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
         j1 <- get_col_ind(M1)
         ind1 <- 1L + M1@i + q * j1
         update <- add(update, quote(x[ind1] <- x[ind1] + w1 * M1@x))
-        ind1.nd <- which(j1 != M1@i)
+        ind1.nd <- whichv(j1, M1@i, invert=TRUE)
         ind1.lower <- 1L + j1[ind1.nd] + q * M1@i[ind1.nd]
         update <- add(update, quote(x[ind1.lower] <- x[ind1.lower] + w1 * M1@x[ind1.nd]))
       }
@@ -186,7 +186,7 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
         j2 <- get_col_ind(M2)
         ind2 <- 1L + M2@i + q * j2
         update <- add(update, quote(x[ind2] <- x[ind2] + w2 * M2@x))
-        ind2.nd <- which(j2 != M2@i)
+        ind2.nd <- whichv(j2, M2@i, invert=TRUE)
         ind2.lower <- 1L + j2[ind2.nd] + q * M2@i[ind2.nd]
         update <- add(update, quote(x[ind2.lower] <- x[ind2.lower] + w2 * M2@x[ind2.nd]))
       }

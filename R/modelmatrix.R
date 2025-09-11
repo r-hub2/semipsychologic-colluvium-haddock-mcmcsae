@@ -81,7 +81,7 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
   # 1. analyse
   # which variables are quantitative
   qvar <- !catvars(trms, data)
-  qvar <- vnames[which(qvar)]
+  qvar <- vnames[whichv(qvar, TRUE)]
   q <- if (has_intercept) 1L else 0L  # nr of columns
   qd <- q  # equivalent nr of dense columns, for estimation of sparseness
   if (!is.list(contrasts.arg)) {
@@ -297,7 +297,7 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
 catvars <- function(trms, data) {
   enclos <- environment(trms)
   vnames <- dimnames(terms_matrix(trms))[[1L]]
-  vapply(vnames, function(x) {
+  vapply(vnames, \(x) {
       temp <- eval_in(x, data, enclos)
       is.factor(temp) || is.character(temp)
     }, FALSE

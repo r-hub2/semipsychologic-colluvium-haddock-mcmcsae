@@ -53,6 +53,32 @@ test_that("binomial multilevel model with non-zero prior mean in regression comp
   #plot(vf, summ$v[, "Mean"]); abline(0, 1)
 })
 
+test_that("a (binomial) multilevel model with constraints works", {
+  RA <- cbind(rep(1, 25), c(1, rep(0, 24)))
+  sampler <- create_sampler(
+    y ~ reg(~ 1 + x, prior=pr_normal(mean=c(0, 0.5), precision=c(0, 1e6)),
+            constraints = set_constraints(R=cbind(c(0, 1)), r=0.45)) +
+      gen(factor = ~ f, name="v", constraintsA=set_constraints(R=RA)),
+    data=df, family="binomial"
+  )
+  expect_length(sampler$block[[1L]], 2L)
+  sim <- MCMCsim(sampler, n.chain=2, burnin=50, n.iter=100, store.all=TRUE, verbose=FALSE)
+  summ <- summary(sim)
+  expect_between(summ$reg1["x", "Mean"], 0.445, 0.455)
+  expect_equal(crossprod_mv(RA, summ$v[, "Mean"]), c(0, 0), tolerance=1e-3)
+  sampler <- create_sampler(
+    y ~ reg(~ 1 + x, prior=pr_normal(mean=c(0, 0.5), precision=c(0, 1e6)),
+            constraints = set_constraints(R=cbind(c(0, 1)), r=0.45)) +
+      gen(factor = ~ f, name="v", constraintsA=set_constraints(R=RA)),
+    data=df, family="binomial", control=sampler_control(block=FALSE)
+  )
+  expect_length(sampler$block, 0L)
+  sim <- MCMCsim(sampler, n.chain=2, burnin=50, n.iter=100, store.all=TRUE, verbose=FALSE)
+  summ <- summary(sim)
+  expect_between(summ$reg1["x", "Mean"], 0.445, 0.455)
+  expect_equal(crossprod_mv(RA, summ$v[, "Mean"]), c(0, 0), tolerance=1e-3)
+})
+
 n <- 2000L
 m <- 100L
 df <- data.frame(

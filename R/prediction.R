@@ -111,7 +111,7 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
     if (is.null(X.)) stop("one of 'newdata' and 'X.' must be supplied")
     if (identical(X., "in-sample")) {
       use.linpred_ <- any("linpred_" == par.names) && model[["do.linpred"]] && is.null(model[["linpred"]])
-      if (!use.linpred_ && !all(names(Filter(\(mc) mc[["type"]] != "mc_offset", model[["mod"]])) %in% par.names))
+      if (!use.linpred_ && !all_coef_names_present(model[["mod"]], par.names))
         stop("for prediction all coefficients must be stored in 'object' (use 'store.all=TRUE' in MCMCsim)")
       X. <- list()
       for (mc in model[["mod"]]) X.[[mc[["name"]]]] <- mc$make_predict(verbose=verbose)
@@ -164,7 +164,7 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
     X. <- list()
     if (verbose && nrow(newdata) > 5e4L) message("setting up model design matrices for 'newdata'")
     for (mc in model[["mod"]]) X.[[mc$name]] <- mc$make_predict(newdata, verbose=verbose)
-    if (!is.null(X.) && !all(names(Filter(\(mc) mc[["type"]] != "mc_offset", model[["mod"]])) %in% par.names))
+    if (!is.null(X.) && !all_coef_names_present(model[["mod"]], par.names))
       stop("for prediction all coefficients must be stored in 'object' (use 'store.all=TRUE' in MCMCsim)")
     if (fam[["family"]] == "multinomial")
       n <- nrow(newdata) * model[["Km1"]]

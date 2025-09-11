@@ -29,8 +29,8 @@
 #'  MCMC simulation function \code{\link{MCMCsim}}. By default the name will be 'vreg'
 #'  with the number of the variance model term attached.
 #' @returns An object with precomputed quantities and functions for sampling from
-#'  prior or conditional posterior distributions for this model component. Intended
-#'  for internal use by other package functions.
+#'  prior or conditional posterior distributions for this model component,
+#'  intended for internal use by other package functions.
 #' @references
 #'  E. Cepeda and D. Gamerman (2000).
 #'    Bayesian modeling of variance heterogeneity in normal regression models.
@@ -42,10 +42,14 @@
 #'    Journal of Statistical Planning and Inference 141(4), 1543-1553.
 vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
                  prior=NULL, Q0=NULL, b0=NULL, name="") {
+  stop("function 'vreg' should only be used inside a formula")
+}
 
-  e <- sys.frame(-2L)
+mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
+                    prior=NULL, Q0=NULL, b0=NULL, name="", e, in.block) {
   type <- "vreg"
   if (name == "") stop("missing model component name")
+  store.default <- name
 
   if (e[["Q0.type"]] == "symm") stop("TBI: vreg component with (compatible) non-diagonal sampling variance matrix")
 
@@ -69,10 +73,7 @@ vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
       prior <- pr_normal(mean=0, precision=0)
   }
   switch(prior[["type"]],
-    fixed = {
-      prior$init(q)
-      rprior <- function(p) prior$rprior()
-    },
+    fixed = prior$init(q),
     normal = {
       prior$init(q, e$coef.names[[name]])
       informative.prior <- prior[["informative"]]
@@ -87,10 +88,13 @@ vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
         else
           Q0b0 <- Q0 %m*v% prior[["mean"]]
       }
-      rprior <- function(p) prior$rprior(p)
     },
     stop("'vreg' priors must be specified using one of pr_normal and pr_fixed functions")
   )
+  rprior <- function(p) {
+    p[[name]] <- prior$rprior()
+    p
+  }
 
   if (is_ind_matrix(X) && q < e[["n"]])
     compute_Qfactor <- function(p) X %m*v% exp(-p[[name]])

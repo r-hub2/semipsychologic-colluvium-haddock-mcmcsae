@@ -27,7 +27,7 @@ check_chol_control <- function(control) {
   if (is.null(control)) control <- list()
   if (!is.list(control)) stop("control options must be specified as a list, preferably using the appropriate control setter function")
   defaults <- chol_control()
-  w <- which(!(names(control) %in% names(defaults)))
+  w <- whichv(names(control) %in% names(defaults), FALSE)
   if (length(w)) stop("unrecognized control parameters ", paste0(names(control)[w], collapse=", "))
   control <- modifyList(defaults, control, keep.null=TRUE)
   control$ordering <- as.integer(control[["ordering"]])

@@ -83,13 +83,13 @@ f_multinomial <- function(link="logit", n.trial=NULL, K=NULL) {
       if (is.null(K)) stop("for prior multinomial sampling the number of categories must be specified through argument 'K' of f_multinomial")
       cats <<- as.character(seq_len(K))
     }
-    if (any(abs(ny0 - round(ny0)) > sqrt(.Machine$double.eps))) {
+    if (any(abs(ny0 - round(ny0)) > .tol)) {
       warn("one or more non-integral number of trials")
     } else {
       ny0 <<- as.integer(ny0)  # ensures that generated multinomial data is integer!
     }
     if (!is.null(y)) {
-      if (any(abs(y - round(y)) > sqrt(.Machine$double.eps))) warn("one or more non-integral number of successes")
+      if (any(abs(y - round(y)) > .tol)) warn("one or more non-integral number of successes")
       if (any(y > ny)) stop("number of successes must not exceed number of trials")  # NB algorithm may still run
     }
     y
@@ -129,7 +129,7 @@ f_multinomial <- function(link="logit", n.trial=NULL, K=NULL) {
       }
     }
     if (!is.null(weights)) size <- weights * size
-    if (any(abs(size - round(size)) > sqrt(.Machine$double.eps))) {
+    if (any(abs(size - round(size)) > .tol)) {
       warn("non-integral values for number of trials are rounded")
       size <- round(size)
     }

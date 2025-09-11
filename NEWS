@@ -1,4 +1,15 @@
 
+version 0.8.0
+- support added for smooth term specification using mgcv::s()
+- measurement error component mec() now also works for non-gaussian
+  families
+- fixed a bug introduced in v0.7.9 in internal dgC_is_tabMatrix function
+  that could affect results from models with RW2 components
+- solved several other smaller bugs
+- more input checks
+- many tests added
+
+
 version 0.7.9
 - predict now also works for models with bym2 components
 - improvements to conjugate gradients and constrained multivariate normal

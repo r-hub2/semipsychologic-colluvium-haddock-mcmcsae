@@ -15,16 +15,13 @@ create_projector <- function(cholQ=NULL, V=NULL, update.Q=FALSE, R) {
     # TODO allow chol control options to be passed
     #cholRVR <- build_chol(crossprod_sym2(R, cholQ$solve(R)))
     cholRVR <- build_chol(crossprod_sym2(cholQ$solve(R, system="L")))
-    cholQ.changed <- FALSE
-    if (update.Q)
-      signal_cholQ_change <- function() cholQ.changed <<- TRUE
     if (prod(dim(R)) > 1e5 && ncol(R) > 5L) {
       # this seems faster for large R
-      project <- function(x, cholQ, r=NULL) {
-        if (cholQ.changed) {
+      if (update.Q) {
+        update <- function(cholQ)
           cholRVR$update(crossprod_sym2(cholQ$solve(R, system="L")))
-          cholQ.changed <<- FALSE
-        }
+      }
+      project <- function(x, cholQ, r=NULL) {
         if (is.vector(x)) {
           if (is.null(r))
             x - cholQ$solve(R %m*v% cholRVR$solve(crossprod_mv(R, x)))
@@ -38,12 +35,13 @@ create_projector <- function(cholQ=NULL, V=NULL, update.Q=FALSE, R) {
       # x + cholQ$solve(cholV.R %m*v% cholRVR$solve(r - crossprod_mv(R, x)), system="Lt")
     } else {
       VR <- cholQ$solve(R)
-      project <- function(x, cholQ, r=NULL) {
-        if (cholQ.changed) {
+      if (update.Q) {
+        update <- function(cholQ) {
           VR <<- cholQ$solve(R)
           cholRVR$update(crossprod_sym2(R, VR))
-          cholQ.changed <<- FALSE
         }
+      }
+      project <- function(x, cholQ, r=NULL) {
         if (is.vector(x)) {
           if (is.null(r))
             x - VR %m*v% cholRVR$solve(crossprod_mv(R, x))

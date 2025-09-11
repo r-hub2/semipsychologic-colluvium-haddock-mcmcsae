@@ -44,7 +44,7 @@ test_that("spatial model works", {
                  store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
   expect_identical(nrow(summ$vs), nrow(nc))
-  expect_lt(sum(summ$vs[, "Mean"]), sqrt(.Machine$double.eps))
+  expect_lt(sum(summ$vs[, "Mean"]), .tol)
   sampler <- create_sampler(
     BIR74 ~ SID74 + gen(factor = ~ spatial(CNTY_ID), name="vs"),
     data=nc
@@ -54,7 +54,7 @@ test_that("spatial model works", {
                  store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
   expect_identical(nrow(summ$vs), nrow(nc))
-  expect_lt(sum(summ$vs[, "Mean"]), sqrt(.Machine$double.eps))
+  expect_lt(sum(summ$vs[, "Mean"]), .tol)
 })
 
 test_that("arguments of spatial() are looked up in the right environment", {

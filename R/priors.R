@@ -153,7 +153,7 @@ pr_fixed <- function(value=1) {
   init <- function(n=1L) {
     n <<- as.integer(n)
     if (all(length(value) != c(1L, n))) stop("value parameter has wrong length")
-    if (n > length(value)) value <- rep.int(value, n)
+    if (n > length(value)) value <<- rep.int(value, n)
     rprior <<- function() value
   }
   type <- "fixed"
@@ -457,9 +457,9 @@ pr_invwishart <- function(df=NULL, scale=NULL) {
   if (!is.null(scale)) {
     if (is.character(scale) && any(scale == c("modeled", "modelled"))) scale <- list()
     if (is.list(scale)) {  # Huang-Wand prior
-      if (is.null(scale$df)) scale$df <- 1
-      if (is.null(scale$scale)) scale$scale <- 1
-      if (is.null(scale$common)) scale$common <- FALSE  # by default (HW prior)
+      if (is.null(scale[["df"]])) scale$df <- 1
+      if (is.null(scale[["scale"]])) scale$scale <- 1
+      if (is.null(scale[["common"]])) scale$common <- FALSE  # by default (HW prior)
     }
   }
   init <- function(n=2L) {
@@ -472,10 +472,10 @@ pr_invwishart <- function(df=NULL, scale=NULL) {
       scale <<- diag(n)
     } else {
       if (is.list(scale)) {  # Huang-Wand prior
-        if (all(length(scale$df) != c(1L, n))) stop("degrees of freedom parameter has wrong length")
-        if (all(length(scale$scale) != c(1L, n))) stop("scale parameter has wrong length")
-        if (scale$common) {
-          if (length(scale$df) != 1L || length(scale$scale) != 1L) stop("scalar 'df' and 'scale' expected in common scale model")
+        if (all(length(scale[["df"]]) != c(1L, n))) stop("degrees of freedom parameter has wrong length")
+        if (all(length(scale[["scale"]]) != c(1L, n))) stop("scale parameter has wrong length")
+        if (scale[["common"]]) {
+          if (length(scale[["df"]]) != 1L || length(scale[["scale"]]) != 1L) stop("scalar 'df' and 'scale' expected in common scale model")
         }
       } else {
         if (!identical(dim(scale), c(n, n))) stop("incompatible scale matrix")

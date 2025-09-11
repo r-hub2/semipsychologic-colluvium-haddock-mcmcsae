@@ -19,8 +19,8 @@ create_mc_block <- function(mcs, e=parent.frame()) {
 
   if (e$control[["auto.order.block"]]) {
     mcs <- local({
-      # order the components such that sparse matrices come first; may help find a better Cholesky permutation
-      o <- unname(which(vapply(mcs, \(mc) isDiagonal(mc[["X"]]), TRUE)))  # start with diagonal matrices
+      # order the components such that sparse matrices come first, to help find a better Cholesky permutation
+      o <- whichv(vapply(mcs, \(mc) isDiagonal(mc[["X"]]), TRUE), TRUE)  # start with diagonal matrices
       if (length(o))
         o <- c(o, seq_along(mcs)[-o][order(vapply(mcs[-o], \(mc) sparsity(mc[["X"]]), 1), decreasing=TRUE)])
       else
@@ -45,41 +45,15 @@ create_mc_block <- function(mcs, e=parent.frame()) {
 
   # template for (updating) blocked precision matrix
   # each mc$Q for gen is either ddi or dsC; the same holds true for mc$Q0 for reg and mec
-  get_Q <- function(mc) if (mc[["type"]] == "gen") mc[["Q"]] else mc[["Q0"]]
-  if (all(b_apply(mcs, \(mc) class(get_Q(mc))[[1L]] == "ddiMatrix"))) {
-    QT <- Cdiag(unlst(lapply(mcs, \(mc) ddi_diag(get_Q(mc)))))
-  } else {
-    QT <- local({
-      x <- NULL
-      i <- NULL
-      size <- 0L
-      p <- 0L
-      for (mc in mcs) {
-        Q <- get_Q(mc)
-        if (class(Q)[1L] == "ddiMatrix") {
-          x <- c(x, ddi_diag(Q))
-          i <- c(i, size + seq_len(nrow(Q)) - 1L)
-          p <- c(p, p[length(p)] + seq_len(nrow(Q)))
-        } else {
-          x <- c(x, Q@x)
-          i <- c(i, size + Q@i)
-          p <- c(p, p[length(p)] + Q@p[-1L])
-        }
-        size <- size + nrow(Q)
-      }
-      new("dsCMatrix", i=i, p=p, x=x, uplo="U", Dim=c(size, size))
-    })
-  }
-  rm(get_Q)
+  QT <- local({
+    Qlist <- lapply(mcs, \(mc) if (mc[["type"]] == "gen") mc[["Q"]] else mc[["Q0"]])
+    bdiag_ddidsC(Qlist)
+  })
   # individual Q matrices no longer needed (we still have kron_prod closures)
   for (mc in mcs) if (mc[["type"]] == "gen") rm("Q", envir=mc)
-  get_Qvector <- function(p, tau) {
-    Qvector <- NULL
-    for (mc in mcs)
-      if (mc[["type"]] == "gen")
-        Qvector <- c(Qvector, p[[mc$name_Q]])
-      else
-        Qvector <- c(Qvector, tau * mc[["Q0"]]@x)
+  get_Qvector <- function(p) {
+    Qvector <- mcs[[1L]]$get_Q(p)
+    for (mc in mcs[-1L]) Qvector <- c(Qvector, mc$get_Q(p))
     Qvector
   }
 
@@ -206,10 +180,8 @@ create_mc_block <- function(mcs, e=parent.frame()) {
         draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], FALSE, p)))
     }
   }
-  draw <- draw |>
-    add(bquote(tau <- .(if (e[["sigma.fixed"]]) 1 else quote(1 / p[["sigma_"]]^2)))) |>
-    # update the block-diagonal joint precision matrix
-    add(quote(attr(QT, "x") <- get_Qvector(p, tau)))
+  # update the block-diagonal joint precision matrix
+  draw <- add(draw, quote(attr(QT, "x") <- get_Qvector(p)))
 
   if (modus == "regular") {
     if (!is.null(S)) {  # need to reconstruct coef_ as input to TMVN sampler
@@ -260,12 +232,11 @@ create_mc_block <- function(mcs, e=parent.frame()) {
       } else if (any(s_apply(mcs, `[[`, "type") == "mec")) {
         draw <- add(draw, quote(XX <- crossprod_sym(X, e[["Q0"]])))
       }
-      draw <- add(draw, quote(Qlist <- update(XX, QT, 1, 1/tau)))
-      if (e$control[["cMVN.sampler"]]) {
-        draw <- add(draw, bquote(coef <- MVNsampler$draw(p, Xy=Xy, X=X, QT=Qlist[["Q"]])[[.(name)]]))
-      } else {
-        draw <- add(draw, bquote(coef <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Q=Qlist[["Q"]], Imult=Qlist[["Imult"]], Xy=Xy)[[.(name)]]))
-      }
+      draw <- add(draw, bquote(update(XX, QT, 1, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]]^2)))))
+      if (e$control[["cMVN.sampler"]])
+        draw <- add(draw, bquote(coef <- MVNsampler$draw(p, Xy=Xy, X=X)[[.(name)]]))
+      else
+        draw <- add(draw, bquote(coef <- MVNsampler$draw(p, .(if (e[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Xy=Xy)[[.(name)]]))
     } else {
       draw <- add(draw, bquote(CGstart <- numeric(.(q))))
       for (mc in mcs)
@@ -346,11 +317,20 @@ create_mc_block <- function(mcs, e=parent.frame()) {
 
   # split coef and assign to the separate coefficient batches
   for (m in seq_along(mcs)) {
-    if (mcs[[m]]$type == "gen" && mcs[[m]]$gl) {
+    if (mcs[[m]][["type"]] == "gen" && mcs[[m]][["gl"]]) {
       draw <- draw |>
-        add(bquote(u <- coef[mcs[[.(m)]]$block.i])) |>
-        add(bquote(p[[.(mcs[[m]]$name)]] <- u[mcs[[.(m)]]$i.v])) |>
-        add(bquote(p[[.(mcs[[m]]$name_gl)]] <- u[mcs[[.(m)]]$i.alpha]))
+        add(bquote(u <- coef[mcs[[.(m)]][["block.i"]]])) |>
+        add(bquote(p[[.(mcs[[m]]$name)]] <- u[mcs[[.(m)]][["i.v"]]])) |>
+        add(bquote(p[[.(mcs[[m]]$name_gl)]] <- u[mcs[[.(m)]][["i.alpha"]]]))
+    } else if (mcs[[m]][["type"]] == "s") {
+      if (mcs[[m]][["qf"]] > 0L) {
+        draw <- draw |>
+          add(bquote(u <- coef[mcs[[.(m)]][["block.i"]]])) |>
+          add(bquote(p[[.(mcs[[m]]$name.f)]] <- u[mcs[[.(m)]][["i.f"]]])) |>
+          add(bquote(p[[.(mcs[[m]]$name.r)]] <- u[mcs[[.(m)]][["i.r"]]]))
+      } else {
+        draw <- add(draw, bquote(p[[.(mcs[[m]]$name.r)]] <- coef[mcs[[.(m)]][["block.i"]]]))
+      }
     } else {
       draw <- add(draw, bquote(p[[.(mcs[[m]]$name)]] <- coef[mcs[[.(m)]]$block.i]))
     }
@@ -374,7 +354,7 @@ create_mc_block <- function(mcs, e=parent.frame()) {
   }
   if (e[["compute.weights"]]) {
     # TODO solve-sparse method that returns dense
-    draw <- add(draw, quote(p$weights_ <- X %m*m% as.matrix(MVNsampler$cholQ$solve(linpred))))
+    draw <- add(draw, quote(p$weights_ <- X %m*m% as.matrix(MVNsampler[["cholQ"]]$solve(linpred))))
     if (e[["modeled.Q"]]) {
       if (e[["Q0.type"]] == "symm")
         draw <- add(draw, quote(p$weights_ <- p[["QM_"]] %m*m% p[["weights_"]]))
@@ -400,9 +380,17 @@ create_mc_block <- function(mcs, e=parent.frame()) {
     start <- add(start, quote(
       for (mc in mcs) {
         if (mc[["type"]] == "gen" && mc[["gl"]]) {
-          u <- coef[mc$block.i]
-          if (is.null(p[[mc$name]])) p[[mc$name]] <- u[mc$i.v]
-          if (is.null(p[[mc$name_gl]])) p[[mc$name_gl]] <- u[mc$i.alpha]
+          u <- coef[mc[["block.i"]]]
+          if (is.null(p[[mc$name]])) p[[mc$name]] <- u[mc[["i.v"]]]
+          if (is.null(p[[mc$name_gl]])) p[[mc$name_gl]] <- u[mc[["i.alpha"]]]
+        } else if (mc[["type"]] == "s") {
+          if (mc[["qf"]] > 0L) {
+            u <- coef[mc[["block.i"]]]
+            p[[mc$name.f]] <- u[mc[["i.f"]]]
+            p[[mc$name.r]] <- u[mc[["i.r"]]]
+          } else {
+            p[[mc$name.r]] <- coef[mc[["block.i"]]]
+          }
         } else {
           if (is.null(p[[mc$name]])) p[[mc$name]] <- coef[mc$block.i]
         }
@@ -415,7 +403,10 @@ create_mc_block <- function(mcs, e=parent.frame()) {
           Qv <- rexp(1L)
           if (is.null(mc$rGMRFprior))
             setup_priorGMRFsampler(mc, Qv)
-          p[[mc[["name"]]]] <- mc$rGMRFprior(Qv)
+          if (is.null(mc[["priorA"]]))
+            p[[mc[["name"]]]] <- mc$rGMRFprior(Qv)
+          else
+            p[[mc[["name"]]]] <- mc$rGMRFprior(Qv, rep.int(1, mc[["lD"]]))
         } else {
           p[[mc[["name"]]]] <- Crnorm(mc[["q"]], sd=e[["scale.sigma"]])
         }

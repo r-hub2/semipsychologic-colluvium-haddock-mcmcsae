@@ -50,7 +50,6 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
     rm(M1, M2, M1.fixed)
     return(update)
   }
-  base_tcrossprod <- base::tcrossprod
   type <- paste0(substr(class(M1)[1L], 1L, 3L), substr(class(M2)[1L], 1L, 3L))
   switch(type,
     matmat = update <- function(M1, M2x, values.only=FALSE) Cdense_kron(M1, M2x),
@@ -86,7 +85,7 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
     ddimat = {  # block diagonal case --> dsCMatrix
       template <- kron_ddimat(M1, M2)
       attr(template, "x") <- NULL
-      upper <- which(row(M2) <= col(M2))
+      upper <- whichv(row(M2) <= col(M2), TRUE)
       if (is_unit_ddi(M1)) {
         q1 <- nrow(M1)
         update <- function(M1, M2x, values.only=FALSE) {
@@ -116,8 +115,8 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       expand <- q2 > length(M2)  # scalar M2
       template <- forceSymmetric(as(kronecker(M1, Cdiag(if (expand) rep.int(M2, q2) else M2)), "CsparseMatrix"), uplo="U")
       attr(template, "x") <- NULL
-      M1dsC <- forceSymmetric(as(M1, "CsparseMatrix"), uplo="U")
-      w <- which(as.matrix(M1dsC) != 0 & row(M1) <= col(M1))
+      M1dsC <- .m2sparse(M1, class="dsC")
+      w <- whichv(.M2m(M1dsC) != 0 & row(M1) <= col(M1), TRUE)
       d <- diff.default(M1dsC@p)
       d <- d[d > 0L]
       rm(M1dsC)
@@ -180,7 +179,7 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
     },
     matdsC = {
       template <- forceSymmetric(as(kronecker(M1, M2), "CsparseMatrix"), uplo="U")
-      upper <- which(row(M1) <= col(M1))
+      upper <- whichv(row(M1) <= col(M1), TRUE)
       prod.table <- base_tcrossprod(M1[upper], M2@x)
       ind <- arrayInd(fmatch(template@x, prod.table), dim(prod.table))
       ind1 <- upper[ind[, 1L]]
@@ -217,7 +216,7 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
     },
     dsCmat = {
       template <- forceSymmetric(as(kronecker(M1, M2), "CsparseMatrix"), uplo="U")
-      upper <- which(row(M2) <= col(M2))
+      upper <- whichv(row(M2) <= col(M2), TRUE)
       x1 <- unique(M1@x)
       x1.ind <- fmatch(x1, M1@x)
       prod.table <- base_tcrossprod(x1, M2[upper])
@@ -302,7 +301,7 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
 # Kronecker product of ddiMatrix with matrix
 # NB Mmat assumed symmetric
 kron_ddimat <- function(Mddi, Mmat) {
-  upper <- which(row(Mmat) <= col(Mmat))
+  upper <- whichv(row(Mmat) <= col(Mmat), TRUE)
   rmat <- as.integer(row(Mmat) - 1L)[upper]
   n.ddi <- nrow(Mddi)
   n.mat <- nrow(Mmat)
@@ -311,7 +310,7 @@ kron_ddimat <- function(Mddi, Mmat) {
   if (is_unit_ddi(Mddi))
     x <- rep.int(Mmat[upper], n.ddi)
   else
-    x <- as.numeric(tcrossprod(Mmat[upper], Mddi@x))
+    x <- as.numeric(base_tcrossprod(Mmat[upper], Mddi@x))
   size <- n.ddi * n.mat
   new("dsCMatrix", i=i, p=p, x=x, uplo="U", Dim=c(size, size))
 }

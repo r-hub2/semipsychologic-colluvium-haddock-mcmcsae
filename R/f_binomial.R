@@ -78,9 +78,9 @@ f_binomial <- function(link=c("logit", "probit"), n.trial=NULL) {
         ny <<- as.numeric(ny)  # both CrPGapprox and BayesLogit::rpg require doubles
       }
     }
-    if (any(abs(ny - round(ny)) > sqrt(.Machine$double.eps))) warn("one or more non-integral number of trials")
+    if (any(abs(ny - round(ny)) > .tol)) warn("one or more non-integral number of trials")
     if (!is.null(y)) {
-      if (any(abs(y - round(y)) > sqrt(.Machine$double.eps))) warn("one or more non-integral number of successes")
+      if (any(abs(y - round(y)) > .tol)) warn("one or more non-integral number of successes")
       if (any(y > ny)) stop("number of successes must not exceed number of trials")  # NB algorithm may still run
     }
     y
@@ -88,9 +88,7 @@ f_binomial <- function(link=c("logit", "probit"), n.trial=NULL) {
   make_llh <- function(y) {
     llh_0 <- sum(binomial_coef(ny, y))  # zero in case of binary data
     if (link == "probit") {
-      function(p) {
-        sum(pnorm((2*y - 1) * p[["e_"]], log.p=TRUE))
-      }
+      function(p) sum(pnorm((2*y - 1) * p[["e_"]], log.p=TRUE))
     } else {
       function(p) {
         neg_fitted <- -p[["e_"]]
@@ -132,7 +130,7 @@ f_binomial <- function(link=c("logit", "probit"), n.trial=NULL) {
         size <- get_var_from_formula(n.trial, newdata)
     }
     if (!is.null(weights)) size <- weights * size
-    if (any(abs(size - round(size)) > sqrt(.Machine$double.eps))) {
+    if (any(abs(size - round(size)) > .tol)) {
       warn("non-integral values for number of trials are rounded")
       size <- round(size)
     }

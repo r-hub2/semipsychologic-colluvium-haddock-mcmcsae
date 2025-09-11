@@ -164,10 +164,11 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     if (method[["name"]] == "softTMVN") stop("method 'softTMVN' can only be used for inequality constrained sampling")
   }
 
-  if (is.null(reduce))
+  if (is.null(reduce)) {
     reduce <- eq && method[["name"]] == "Gibbs"
-  else if (eq && method[["name"]] == "Gibbs" && !reduce)
+  } else if (eq && method[["name"]] == "Gibbs" && !reduce) {
     stop("for method 'Gibbs' equality restrictions are only supported with 'reduce=TRUE'")
+  }
   if (update.Q || update.mu) {
     if (all(method[["name"]] != c("direct", "HMC"))) stop("'update.Q=TRUE' or 'update.mu=TRUE' only supported for methods 'direct' and 'HMC'")
     if (reduce) stop("'update.Q=TRUE' or 'update.mu=TRUE' not supported in combination with 'reduce=TRUE'")
@@ -283,29 +284,35 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
   }
 
   if (method[["name"]] == "direct") {
-    if (update.Q) draw <- add(draw, quote(cholQ$update(Q, Imult)))
+    if (update.Q) {
+      if (eq && !reduce)
+        update <- function(Q, Imult=0) {
+          cholQ$update(Q, Imult)
+          projector$update(cholQ)
+        }
+      else
+        update <- function(Q, Imult=0) cholQ$update(Q, Imult)
+    }
     if (zero.mu)
       if (method[["use.cholV"]])
         draw <- add(draw, bquote(x <- drawMVN_cholV(.(n), cholV, scale)))
       else
         draw <- add(draw, quote(x <- drawMVN_cholQ(cholQ, sd=scale)))
     else {
-      if (update.mu)
+      if (update.mu) {
         if (method[["use.cholV"]])
           draw <- add(draw, bquote(x <- V %m*v% Xy + drawMVN_cholV(.(n), cholV, scale)))
         else
           draw <- add(draw, quote(x <- drawMVN_cholQ(cholQ, Xy, sd=scale)))
-      else
+      } else {
         if (method[["use.cholV"]])
           draw <- add(draw, bquote(x <- mu + drawMVN_cholV(.(n), cholV, scale)))
         else
           draw <- add(draw, quote(x <- mu + drawMVN_cholQ(cholQ, sd=scale)))
+      }
     }
-    if (eq && !reduce) {
-      if (update.Q)
-        draw <- add(draw, quote(projector$signal_cholQ_change()))
+    if (eq && !reduce)
       draw <- add(draw, quote(x <- projector$project(x, cholQ, r=r)))
-    }
   }  # END direct
 
   if (method[["name"]] == "Gibbs") {
@@ -443,7 +450,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         draw <- add(draw, quote(x <- drawMVN_cholQ(ch, Xy)))
         if (eq && !reduce) {
           draw <- draw |>
-            add(quote(projector$signal_cholQ_change())) |>
+            add(quote(projector$update(ch))) |>
             add(quote(x <- projector$project(x, ch, r)))
         }
       } else {
@@ -485,8 +492,8 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       } else {
         VS <- NULL
       }
-      if (class(S)[1L] == "ddiMatrix") S <- as(as(S, "CsparseMatrix"), "generalMatrix")
-      if (!is.null(VS) && class(VS)[1L] == "ddiMatrix") VS <- as(as(VS, "CsparseMatrix"), "generalMatrix")
+      if (class(S)[1L] == "ddiMatrix") S <- .diag2sparse(S, shape="g", repr="C")
+      if (!is.null(VS) && class(VS)[1L] == "ddiMatrix") VS <- .diag2sparse(VS, shape="g", repr="C")
       if (update.Q) {
         simplified <- FALSE
       } else {
@@ -510,14 +517,15 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     }
 
     if (update.Q) {
-      draw <- draw |>
-        add(quote(cholQ$update(Q, Imult))) |>
-        add(VS <- cholQ$solve(S))
-      if (eq) {
-        draw <- add(draw, quote(projector$signal_cholQ_change()))
-        draw <- add(draw, quote(VS <- projector$project(VS, cholQ, r)))
+      update <- function(Q, Imult=0) {
+        cholQ$update(Q, Imult)
+        VS <<- cholQ$solve(S)
+        if (eq) {
+          projector$update(cholQ)
+          VS <<- projector$project(VS, cholQ, r)
+        }
+        refl.fac <<- 2 / colSums(S * VS)
       }
-      draw <- add(draw, quote(refl.fac <- 2 / colSums(S * VS)))  # 2 / vector of normal' Q normal for all inequalities
     }
     if (update.mu) {
       draw <- add(draw, quote(mu <- cholQ$solve(Xy)))
@@ -566,8 +574,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
   if (method[["name"]] == "HMCZigZag") {
     # TODO: update.Q and update.mu cases
 
-    base_which <- base::which  # faster, in case Matrix::which is loaded
-    eps <- sqrt(.Machine$double.eps)
+    eps <- .tol
     negeps <- -eps
 
     if (class(Q)[1L] != "matrix") {
@@ -580,7 +587,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     }
 
     if (ineq) {
-      if (class(S)[1L] == "ddiMatrix") S <- as(as(S, "CsparseMatrix"), "generalMatrix")
+      if (class(S)[1L] == "ddiMatrix") S <- .diag2sparse(S, shape="g", repr="C")
       if (class(S)[1L] == "dgCMatrix") {
         # store nonzero indices for each column
         inds <- list()
@@ -663,15 +670,15 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       repeat {
         # compute gradient event time dt.gr, and possibly boundary event times
         discr <- Qx*Qx + 2*Qv*pM
-        iposD <- base_which(discr > 0)
+        iposD <- whichv(discr > 0, TRUE)
         dt.gr <- Inf
         gradient.event <- TRUE
         if (length(iposD)) {
           sqrtD <- sqrt(discr[iposD])
           t1 <- (-Qx[iposD] - sqrtD) / Qv[iposD]
-          ind1 <- base_which(t1 > 0)
+          ind1 <- whichv(t1 > 0, TRUE)
           t2 <- (-Qx[iposD] + sqrtD) / Qv[iposD]
-          ind2 <- base_which(t2 > 0)
+          ind2 <- whichv(t2 > 0, TRUE)
           if (length(ind1) && length(ind2)) {
             i1 <- ind1[which.min(t1[ind1])]
             i2 <- ind2[which.min(t2[ind2])]
@@ -700,7 +707,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
 
           # ignore inequality boundaries at which the particle currently is (including previously hit walls) while moving to the interior
           # use negeps here, as small round-off like violations of inequalities are bound to occur
-          iS <- base_which(dtS > negeps & Sv < 0)  # allow passing to the right side
+          iS <- whichv(dtS > negeps & Sv < 0, TRUE)  # allow passing to the right side
           if (length(iS)) {
             jstar <- iS[which.min(dtS[iS])]
             dt.bd <- dtS[jstar]  # first boundary event time
@@ -745,7 +752,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
           # this guarantees that sum(Sj * v) > 0 after the bounce
           # TODO check whether other options e.g. including permutations are valid
           if (class(S)[1L] == "matrix")
-            ind <- base_which(S[, jstar, drop=TRUE] != 0)
+            ind <- whichv(S[, jstar, drop=TRUE] != 0, TRUE)
           else
             ind <- inds[[jstar]]
           pM[ind] <- -pM[ind]
@@ -800,14 +807,10 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
   }
   draw <- add(draw, quote(p))
   # set function signature (avoiding check NOTE)
-  if (update.Q) {
-    # total precision matrix to use in chol is Q + Imult*I
-    formals(draw) <- alist(p=, scale=1, Q=, Imult=0, Xy=)
+  if (update.Q || update.mu) {
+    formals(draw) <- alist(p=, scale=1, Xy=)
   } else {
-    if (update.mu)
-      formals(draw) <- alist(p=, scale=1, Xy=)
-    else
-      formals(draw) <- alist(p=, scale=1)
+    formals(draw) <- alist(p=, scale=1)
   }
   # END draw function
 
@@ -876,11 +879,10 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         start <- add(start, bquote(x <- mu + drawMVN_cholV(.(n), cholV, scale)))
       }
     } else {
-      if (zero.mu || update.Q) {
+      if (zero.mu || update.Q)
         start <- add(start, quote(x <- drawMVN_cholQ(cholQ, sd=scale)))
-      } else {
+      else
         start <- add(start, quote(x <- mu + drawMVN_cholQ(cholQ, sd=scale)))
-      }
     }
     if (eq && !reduce) {
       if (method[["name"]] == "softTMVN") {

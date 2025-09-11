@@ -26,12 +26,11 @@ has_explicit_intercept <- function(formula) {
 standardize_formula <- function(formula, default="reg", data=NULL, internal.offset=FALSE) {
   # interpret everything not in special terms as a default component
   tf <- terms(formula, keep.order=TRUE, specials=.mod.specials, data=data)
-  # NB ~ . - var does not warn if var is not in data
   idx <- unlst(attr(tf, "specials"))  # variable indices of special terms
   if (length(idx)) {
     fac <- attr(tf, "factors")
     for (i in seq_along(idx)) {
-      term.idx <- which(fac[idx[i], ] > 0L)  # translate to term indices
+      term.idx <- whichv(fac[idx[i], ] > 0L, TRUE)  # translate to term indices
       if (length(term.idx) != 1L) stop("cannot parse formula")
       idx[i] <- term.idx
     }
