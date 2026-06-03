@@ -20,6 +20,9 @@ test_that("logistic regression works", {
   expect_between(summ$reg1[, "Mean"], 0.3*b, 3*b)
   compute_DIC(sim)
   compute_WAIC(sim, show.progress=FALSE)
+  yhat <- colMeans(as.matrix(fitted(sim, type="response")))
+  expect_true(all(0 <= yhat & yhat <= 1))
+  expect_gt(cor(df$y, yhat), 0.25)
 })
 
 test_that("matrix specification of response variable is possible", {
@@ -30,30 +33,43 @@ test_that("matrix specification of response variable is possible", {
   summ <- summary(sim)
   expect_between(summ$reg1[, "Mean"], 0.3*b, 3*b)
 })
-  
-test_that("logistic regression with non-zero prior mean", {
+
+test_that("logistic regression with non-zero prior mean works", {
   sampler <- create_sampler(y ~ reg(~ x1+x2, prior=pr_normal(mean=c(0, 0, b[3]), precision=c(0, 0, 1e6))),
     family="binomial", data=df)
   expect_length(sampler$block, 0L)
   sim <- MCMCsim(sampler, n.iter=500, burnin=200, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$reg1["x2", "Mean"], 0.9*b[3], 1.1*b[3])
+  expect_warning(sampler <- create_sampler(y ~ reg(~ x1+x2, prior=pr_normal(mean=c(0, 0, b[3]), precision=c(0, 0, 1e6))),
+    family=f_binomial(link="probit"), data=df), "probit.HaarPXDA")
+  expect_true(sampler$family$link == "probit")
+  expect_true(sampler$family$control$probit.HaarPXDA)
+  sampler <- create_sampler(y ~ reg(~ x1+x2, prior=pr_normal(mean=c(0, 0, b[3]), precision=c(0, 0, 1e6))),
+    family=f_binomial(link="probit", control=binomial_control(probit.HaarPXDA=FALSE)), data=df)
+  expect_false(sampler$family$control$probit.HaarPXDA)
 })
 
 df$y <- rbinom(n, 1, prob=pnorm(b[1] + b[2]*df$x1 + b[3]*df$x2))
 test_that("probit regression works", {
   sampler <- create_sampler(y ~ reg(~ x1 + x2), family=f_binomial(link="probit"), data=df)
   expect_equal(sampler$family$ny, 1)
+  expect_true(sampler$family$control$probit.HaarPXDA)
   sim <- MCMCsim(sampler, n.iter=600, burnin=250, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$reg1[, "Mean"], 0.3*b, 3*b)
   compute_DIC(sim)
   compute_WAIC(sim, show.progress=FALSE)
+  sampler <- create_sampler(y ~ reg(~ x1 + x2), data=df,
+    family=f_binomial(link="probit", control=binomial_control(probit.HaarPXDA=FALSE))
+  )
+  expect_false(sampler$family$control$probit.HaarPXDA)
 })
 
 y <- rbinom(1000L, 1L, prob=0.3)
 test_that("minimal probit binary regression prediction example works", {
   sampler <- create_sampler(y ~ 1, family=f_binomial(link="probit"))
+  expect_true(sampler$family$control$probit.HaarPXDA)
   sim <- MCMCsim(sampler, n.iter=500, burnin=200, n.chain=2, verbose=FALSE)
   summ <- summary(transform_dc(sim$reg1, fun=function(x) pnorm(x)))
   expect_between(summ[, "Mean"], 0.2, 0.4)
@@ -120,4 +136,7 @@ test_that("binomial multilevel model runs", {
   sampler <- create_sampler(ex$model, data=ex$dat, family="binomial",
     control=sampler_control(block=list(c("v", "u"))))
   expect_identical(sort(names(sampler$mbs[[1]]$mcs)), c("u", "v"))
+  sampler <- create_sampler(ex$model, data=ex$dat, family=binomial(link="probit"),
+    control=sampler_control(block=list(c("v", "u"))))
+  expect_true(sampler$family$control$probit.HaarPXDA)
 })

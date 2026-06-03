@@ -57,7 +57,7 @@ CG <- function(b, env, x=0*b, max.it=length(b), e = 1e6 * length(b), verbose=FAL
 #' @keywords internal
 #' @param mbs block component containing several model components.
 #' @param X design matrix.
-#' @param sampler sampler object as created by \code{\link{create_sampler}}.
+#' @param fam family object.
 #' @param control a list of options for the conjugate gradient algorithm that can be passed
 #'   using function \code{\link{CG_control}}.
 #' @returns An environment with precomputed quantities and functions for multiplication
@@ -74,7 +74,7 @@ CG <- function(b, env, x=0*b, max.it=length(b), e = 1e6 * length(b), verbose=FAL
 #   and for each component use X0 and XA instead of X, using mixed product relations
 #   for Khatri-Rao etc.; X0 will typically be dense and XA tabMatrix
 # - p >> n case
-setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
+setup_CG_sampler <- function(mbs, X, fam, control=CG_control()) {
   q <- ncol(X)
   control <- check_CG_control(control)
   if (any(b_apply(mbs, \(mc) isTRUE(mc[["strucA"]][["type"]] == "bym2")))) {
@@ -94,21 +94,21 @@ setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
     if (!is_numeric_scalar(control[["stop.criterion"]]) || control[["stop.criterion"]] <= 0) stop("stop.criterion must be a single positive integer")
   }
 
-  if (any(sampler$family[["family"]] == c("gaussian", "gaussian_gamma"))) {
-    if (sampler[["modeled.Q"]]) {
-      Q_x <- switch(sampler[["Q0.type"]],
+  if (any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma"))) {
+    if (fam[["modeled.Q"]]) {
+      Q_x <- switch(fam[["Q0.type"]],
         unit=, diag = function(p, x) p[["Q_"]] * x,
         symm = function(p, x) p[["QM_"]] %m*v% x
       )
     } else {
-      Q_x <- switch(sampler[["Q0.type"]],
+      Q_x <- switch(fam[["Q0.type"]],
         unit = function(p, x) x,
-        diag = function(p, x) sampler[["Q0"]]@x * x,
-        symm = function(p, x) sampler[["Q0"]] %m*v% x
+        diag = function(p, x) fam[["Q0"]]@x * x,
+        symm = function(p, x) fam[["Q0"]] %m*v% x
       )
     }
   } else {
-    if (sampler$family[["link"]] == "probit")
+    if (fam[["link"]] == "probit")
       Q_x <- function(p, x) x
     else
       Q_x <- function(p, x) p[["Q_"]] * x
@@ -129,7 +129,7 @@ setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
   }
 
   # QT = oplus_k QA x QV is created in parent's draw function
-  if (sampler[["sigma.fixed"]])
+  if (fam[["sigma.fixed"]])
     A_times <- function(x, X, QT, cholQV, p)
       crossprod_mv(X, Q_x(p, X %m*v% x)) + QT %m*v% x
   else
@@ -158,7 +158,7 @@ setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
       # regression usually uses non- or weakly-informative prior -->
       # use simple regression posterior variances in preconditioner, as suggested in NS paper
       # TODO more efficient computation of diagonal values only
-      mc$gamma <- 2*diag(solve(crossprod_sym(mc[["X"]], sampler[["Q0"]])))
+      mc$gamma <- 2*diag(solve(crossprod_sym(mc[["X"]], fam[["Q0"]])))
     }
   }
 
@@ -217,10 +217,11 @@ setup_CG_sampler <- function(mbs, X, sampler, control=CG_control()) {
   )
   self <- environment()
   # X, QT passed from block's draw function
-  draw <- function(p, Xy, X, QT, sampler, start=NULL) {
-    # Xy is rhs, i.e. X' Qn ytilde (+ possibly prior reg term)
+  # Xy is rhs, i.e. X' Qn ytilde (+ possibly prior reg term)
+  # for multi-response family there is no global sigma_ parameter
+  draw <- function(p, Xy, X, QT, fam, start=NULL) {
     if (is.null(p[["sigma_"]])) sigma <- 1 else sigma <- p[["sigma_"]]
-    u <- Xy + sigma * crossprod_mv(X, sampler$drawMVNvarQ(p))
+    u <- Xy + sigma * crossprod_mv(X, fam$drawMVNvarQ(p))
     for (mc in mbs) {
       if (mc[["type"]] == "gen")
         u[mc$block.i] <- u[mc$block.i] + sigma^2 * mc$drawMVNvarQ(p)

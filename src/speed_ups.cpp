@@ -4,13 +4,13 @@
 using namespace Rcpp;
 
 
-//’ Copy an existing numeric vector
+//’ Copy an object in R
 //’ 
-//’ @param x a vector to be copied.
-//’ @returns A newly allocated copy of the vector.
+//’ @param x an R object, e.g. a vector, to be copied.
+//’ @returns A newly allocated copy of the object.
 // [[Rcpp::export(rng=false)]]
-NumericVector copy_vector(const NumericVector & x) {
-  return clone(x);
+SEXP copy_obj(SEXP x) {
+  return Rf_duplicate(x);
 }
 
 //’ Add or subtract a numeric vector or scalar from an existing numeric vector, in-place.
@@ -18,20 +18,25 @@ NumericVector copy_vector(const NumericVector & x) {
 //’ @param y a numeric vector to be updated in-place.
 //’ @param plus whether the matrix-vector product is to be added or subtracted.
 //’ @param x a numeric vector, of length equal to that of y, or length 1.
-//’ @returns No return value, but x is updated in-place to x + y.
+//’ @returns No return value, but y is updated in-place to x + y.
 // [[Rcpp::export(rng=false)]]
-void v_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const Eigen::Map<Eigen::VectorXd> & x) {
-  if (x.size() == y.size()) {
+void v_update(SEXP ySEXP, const bool plus, const SEXP xSEXP) {
+  const int ysize = Rf_length(ySEXP);
+  const int xsize = Rf_length(xSEXP);
+  Eigen::Map<Eigen::VectorXd> y(REAL(ySEXP), ysize);
+  Eigen::Map<Eigen::VectorXd> x(REAL(xSEXP), xsize);
+  if (xsize == ysize) {
     if (plus) {
       y += x;
     } else {
       y -= x;
     }
-  } else if (x.size() == 1) {
+  } else if (xsize == 1) {
+    const double val = x.coeff(0);
     if (plus) {
-      y.array() += x.coeff(0);
+      y.array() += val;
     } else {
-      y.array() -= x.coeff(0);
+      y.array() -= val;
     }
   } else {
     stop("incompatible dimensions");
@@ -45,24 +50,30 @@ void v_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const Eigen::Map
 //’ @param plus whether the matrix-vector product is to be added or subtracted.
 //’ @param M a matrix object.
 //’ @param x a numeric vector.
-//’ @returns No return value, but y is updated in-place to y +/- Mx.
+//’ @returns No return value, but y is updated in-place.
 // [[Rcpp::export(rng=false)]]
-void mv_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const SEXP M, const Eigen::Map<Eigen::VectorXd> & x) {
+void mv_update(SEXP ySEXP, const bool plus, const SEXP M, const SEXP xSEXP) {
+  const int ysize = Rf_length(ySEXP);
+  const int xsize = Rf_length(xSEXP);
+  Eigen::Map<Eigen::VectorXd> y(REAL(ySEXP), ysize);
+  Eigen::Map<Eigen::VectorXd> x(REAL(xSEXP), xsize);
   if (Rf_isS4(M)) {
-    const S4 M_S4(M);
-    IntegerVector Dim = M_S4.slot("Dim");
-    if (Dim[0] != y.size() || Dim[1] != x.size()) stop("incompatible dimensions");
+    int* Dim = INTEGER(R_do_slot(M, Rf_install("Dim")));
+    if (Dim[0] != ysize || Dim[1] != xsize) stop("incompatible dimensions");
     if (Rf_inherits(M, "dgCMatrix")) {
+      Eigen::Map<Eigen::SparseMatrix<double>> M_sparse = as<Eigen::Map<Eigen::SparseMatrix<double>>>(M);
       if (plus) {
-        y.noalias() += as<Eigen::Map<Eigen::SparseMatrix<double> > >(M) * x;
+        y.noalias() += M_sparse * x;
       } else {
-        y.noalias() -= as<Eigen::Map<Eigen::SparseMatrix<double> > >(M) * x;
+        y.noalias() -= M_sparse * x;
       }
     } else if (Rf_inherits(M, "ddiMatrix")) {
-      Eigen::Map<Eigen::VectorXd> Mxslot = as<Eigen::Map<Eigen::VectorXd> >(M_S4.slot("x"));
-      if (Mxslot.size() == 0) {
+      SEXP mx_slot = R_do_slot(M, Rf_install("x"));
+      R_xlen_t mx_len = Rf_xlength(mx_slot);
+      if (mx_len == 0) {
         if (plus) y += x; else y -= x;
       } else {
+        Eigen::Map<Eigen::VectorXd> Mxslot(REAL(mx_slot), mx_len);
         if (plus) {
           y.array() += Mxslot.array() * x.array();
         } else {
@@ -71,36 +82,58 @@ void mv_update(Eigen::Map<Eigen::VectorXd> & y, const bool plus, const SEXP M, c
       }
     } else {
       if (!Rf_inherits(M, "tabMatrix")) stop("unexpected matrix type");
-      const IntegerVector perm(M_S4.slot("perm"));
-      const int n = perm.size();
-      const bool reduced(::Rf_asLogical(M_S4.slot("reduced")));
-      const bool num(::Rf_asLogical(M_S4.slot("num")));
+      SEXP perm_slot = R_do_slot(M, Rf_install("perm"));
+      int* p_perm = INTEGER(perm_slot);
+      int n = Rf_length(perm_slot);
+      bool reduced = LOGICAL(R_do_slot(M, Rf_install("reduced")))[0];
+      bool num = LOGICAL(R_do_slot(M, Rf_install("num")))[0];
+      double* p_y = y.data();
+      const double* p_x = x.data();
       if (reduced) {
         if (plus) {
-          for (int i = 0; i < n; i++) if (perm[i] >= 0) y[i] += x[perm[i]];
+          for (int i = 0; i < n; i++) {
+            int p = p_perm[i];
+            if (p >= 0) p_y[i] += p_x[p];
+          }
         } else {
-          for (int i = 0; i < n; i++) if (perm[i] >= 0) y[i] -= x[perm[i]];
+          for (int i = 0; i < n; i++) {
+            int p = p_perm[i];
+            if (p >= 0) p_y[i] -= p_x[p];
+          }
         }
       } else if (num) {
-        const NumericVector Mxslot(M_S4.slot("x"));
+        double* p_Mxslot = REAL(R_do_slot(M, Rf_install("x")));
         if (plus) {
-          for (int i = 0; i < n; i++) y[i] += Mxslot[i] * x[perm[i]];
+          for (int i = 0; i < n; i++) p_y[i] += p_Mxslot[i] * p_x[p_perm[i]];
         } else {
-          for (int i = 0; i < n; i++) y[i] -= Mxslot[i] * x[perm[i]];
+          for (int i = 0; i < n; i++) p_y[i] -= p_Mxslot[i] * p_x[p_perm[i]];
         }
       } else {
         if (plus) {
-          for (int i = 0; i < n; i++) y[i] += x[perm[i]];
+          for (int i = 0; i < n; i++) p_y[i] += p_x[p_perm[i]];
         } else {
-          for (int i = 0; i < n; i++) y[i] -= x[perm[i]];
+          for (int i = 0; i < n; i++) p_y[i] -= p_x[p_perm[i]];
         }
       }
     }
   } else {
-    Eigen::Map<Eigen::MatrixXd> MM = as<Eigen::Map<Eigen::MatrixXd> >(M);
-    if (MM.cols() != x.size() || MM.rows() != y.size()) stop("incompatible dimensions");
+    int rows = Rf_nrows(M);
+    int cols = Rf_ncols(M);
+    if (cols != xsize || rows != ysize) stop("incompatible dimensions");
+    Eigen::Map<Eigen::MatrixXd> MM(REAL(M), rows, cols);
     if (plus) y.noalias() += MM * x; else y.noalias() -= MM * x;
   }
+}
+
+// set x[i:(i + length(z) - 1)] to z in-place
+// [[Rcpp::export(rng=false)]]
+void set_in_place(SEXP xSEXP, const int i, const SEXP zSEXP) {
+  const int xsize = Rf_length(xSEXP);
+  const int zsize = Rf_length(zSEXP);
+  if (i < 0 || i + zsize > xsize) stop("index out of bounds");
+  Eigen::Map<Eigen::VectorXd> x(REAL(xSEXP), xsize);
+  Eigen::Map<Eigen::VectorXd> z(REAL(zSEXP), zsize);
+  x.segment(i, z.size()) = z;
 }
 
 
@@ -400,34 +433,42 @@ Eigen::SparseMatrix<double> Cdiag_sparse_prod(const Eigen::Map<Eigen::VectorXd> 
 // Used in closure for sparse matrix addition to compute x-slot.
 // [[Rcpp::export(rng=false)]]
 NumericVector sparse_sum_x(const int n,
-      const IntegerVector & ind1, const IntegerVector & ind2,
-      const NumericVector & M1x, const NumericVector & M2x,
-      const bool UD1, const bool UD2,
-      const double w1, const double w2) {
+                           const IntegerVector ind1, const IntegerVector ind2,
+                           const NumericVector M1x, const NumericVector M2x,
+                           const bool UD1, const bool UD2,
+                           const double w1, const double w2) {
   NumericVector out(n);
+  double* p_out = REAL(out);
   const int n1 = ind1.size();
+  const int* p_ind1 = INTEGER(ind1);
+  const double* p_M1x = REAL(M1x);
+
   if (UD1) {
     for (int i = 0; i < n1; i++) {
-      out[ind1[i]] = w1;
+      p_out[p_ind1[i]] = w1;
     }
   } else {
     for (int i = 0; i < n1; i++) {
-      out[ind1[i]] = w1 * M1x[i];
+      p_out[p_ind1[i]] = w1 * p_M1x[i];
     }
   }
+
   const int n2 = ind2.size();
   if (n2 > 0) {
+    const int* p_ind2 = INTEGER(ind2);
+    const double* p_M2x = REAL(M2x);
     if (UD2) {
       for (int i = 0; i < n2; i++) {
-        out[ind2[i]] += w2;
+        p_out[p_ind2[i]] += w2;
       }
     } else {
       for (int i = 0; i < n2; i++) {
-        out[ind2[i]] += w2 * M2x[i];
+        p_out[p_ind2[i]] += w2 * p_M2x[i];
       }
     }
   }
-  return(out);
+
+  return out;
 }
 
 //’ Extract the diagonal of a dense matrix
@@ -439,17 +480,26 @@ Eigen::VectorXd diagC(const Eigen::Map<Eigen::MatrixXd> & A) {
   return A.diagonal();
 }
 
-//’ Add a vector to the diagonal of a dense matrix
+//’ Add a vector to the diagonal of a dense matrix after copying it
 //’
 //’ @param A a numeric dense matrix.
 //’ @param d a numeric vector.
 //’ @returns Matrix A with x added to its diagonal.
 // [[Rcpp::export(rng=false)]]
-Eigen::MatrixXd add_diagC(const Eigen::Map<Eigen::MatrixXd> & A, const Eigen::Map<Eigen::VectorXd> & d) {
-  if (d.size() != A.rows()) stop("incompatible dimensions");
-  Eigen::MatrixXd out = A;
-  out.diagonal() += d;
-  return out;
+SEXP add_diagC(SEXP A, SEXP d) {
+  SEXP A_ = Rf_duplicate(A);
+  NumericMatrix M(A_);
+  NumericVector d_(d);
+  const int n = M.nrow();
+  if (d_.size() == 1) {
+    const double v = d_[0];
+    for (int i = 0; i < n; ++i)
+      M(i, i) += v;
+  } else {
+    for (int i = 0; i < n; ++i)
+      M(i, i) += d_[i];
+  }
+  return A_;
 }
 
 //’ Compute the symmetric crossprod \code{M'M} for dense matrix \code{M}
@@ -522,7 +572,7 @@ SEXP Cdiag(const NumericVector x) {
 // [[Rcpp::export(rng=false)]]
 Eigen::MatrixXd Cscale_dense(const Eigen::Map<Eigen::MatrixXd> & A, const Eigen::Map<Eigen::VectorXd> & d) {
   if (d.size() == 1) {
-    return std::pow(d[0], 2) * A;
+    return (d[0] * d[0]) * A;
   } else {
     return d.asDiagonal() * A * d.asDiagonal();
   }
@@ -536,7 +586,7 @@ Eigen::MatrixXd Cscale_dense(const Eigen::Map<Eigen::MatrixXd> & A, const Eigen:
 // [[Rcpp::export(rng=false)]]
 Eigen::SparseMatrix<double> Cscale_sparse(const Eigen::MappedSparseMatrix<double> & A, const Eigen::Map<Eigen::VectorXd> & d) {
   if (d.size() == 1) {
-    return std::pow(d[0], 2) * A;
+    return (d[0] * d[0]) * A;
   } else {
     return d.asDiagonal() * A * d.asDiagonal();
   }
@@ -763,6 +813,7 @@ Eigen::SparseMatrix<double> Ccreate_sparse_crossprod_sym_template(
 //’ Compute variances of each row of a dense matrix
 //’
 //’ @param M a (dense) matrix.
+//’ @returns A vector containing the row variance.
 // [[Rcpp::export(rng=false)]]
 Eigen::VectorXd rowVarsC(const Eigen::Map<Eigen::MatrixXd> & M) {
   const int n_rows = M.rows();
@@ -777,6 +828,93 @@ Eigen::VectorXd rowVarsC(const Eigen::Map<Eigen::MatrixXd> & M) {
     }
     vars[i] = var / (n_cols - 1); // sample variance (not population variance)
   }
-  
   return vars;
+}
+
+// helper function for BART prediction: recursive traversal
+int predict_tree_rec(
+    const IntegerVector& var,
+    const NumericVector& value,
+    const NumericMatrix& X,
+    NumericVector& pred,
+    const std::vector<int>& idx,
+    int node
+) {
+  // Leaf
+  if (var[node] == -1) {
+    double v = value[node];
+    for (int i : idx)
+      pred[i] += v;
+    return 1;
+  }
+  
+  int split_var = var[node] - 1;
+  double split_val = value[node];
+  
+  std::vector<int> left;
+  std::vector<int> right;
+  left.reserve(idx.size());
+  right.reserve(idx.size());
+  
+  for (int i : idx) {
+    if (X(i, split_var) <= split_val)
+      left.push_back(i);
+    else
+      right.push_back(i);
+  }
+  
+  int n_left = predict_tree_rec(
+    var, value, X, pred, left, node + 1
+  );
+  
+  int n_right = predict_tree_rec(
+    var, value, X, pred, right, node + 1 + n_left
+  );
+  
+  return 1 + n_left + n_right;
+}
+
+//’ Compute predictions for a BART component
+//’
+//’ @param tree tree column of dbarts trees data frame.
+//’ @param var var column of dbarts trees data frame.
+//’ @param value value column of dbarts trees data frame.
+//’ @param Xnew matrix of BART covariates to predict for.
+//’ @returns A vector with raw BART predictions corresponding.
+// based on code translated from R by chatGPT
+// [[Rcpp::export(rng=false)]]
+NumericVector tree_predictC(
+    IntegerVector tree, IntegerVector var,
+    NumericVector value, NumericMatrix Xnew,
+    int n_trees) {
+
+  int n = Xnew.nrow();
+  NumericVector pred(n);
+
+  std::vector<int> all_idx(n);
+  for (int i = 0; i < n; ++i) all_idx[i] = i;
+
+  for (int t = 1; t <= n_trees; ++t) {
+
+    // collect rows for this tree
+    std::vector<int> rows;
+    for (int i = 0; i < tree.size(); ++i)
+      if (tree[i] == t) rows.push_back(i);
+    if (rows.empty()) continue;
+      
+    // create compact views
+    IntegerVector var_t(rows.size());
+    NumericVector value_t(rows.size());
+    
+    for (size_t i = 0; i < rows.size(); ++i) {
+      var_t[i]   = var[rows[i]];
+      value_t[i] = value[rows[i]];
+    }
+
+    predict_tree_rec(
+      var_t, value_t, Xnew, pred, all_idx, 0
+    );
+  }
+
+  return pred;
 }

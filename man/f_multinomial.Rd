@@ -4,7 +4,12 @@
 \alias{f_multinomial}
 \title{Specify a multinomial sampling distribution}
 \usage{
-f_multinomial(link = "logit", n.trial = NULL, K = NULL)
+f_multinomial(
+  link = "logit",
+  n.trial = NULL,
+  K = NULL,
+  control = multinomial_control()
+)
 }
 \arguments{
 \item{link}{the name of a link function. Currently the only allowed link function
@@ -15,6 +20,9 @@ a formula for a variable number of trials, or as a scalar value for a common
 number of trials for all units.}
 
 \item{K}{number of categories for multinomial model; only used for prior predictive sampling.}
+
+\item{control}{a list with computational options. These options can
+be specified using function \code{\link{multinomial_control}}.}
 }
 \value{
 A family object.
@@ -23,4 +31,27 @@ A family object.
 This function can be used in the \code{family} argument of \code{\link{create_sampler}}
 or \code{\link{generate_data}} to specify a multinomial sampling distribution. This
 includes the special case of categorical (multinoulli) data.
+}
+\details{
+For the multinomial family, the left hand side of the \code{formula} argument of
+\code{\link{create_sampler}} can be specified in one of the following ways:
+\describe{
+  \item{1}{as a single factor, character, boolean or integer variable, say \code{y}.
+    The categories then correspond to the levels of \code{as.factor(y)}. This option
+    can only be used for categorical data.}
+  \item{2}{as a n x (K-1) numeric matrix with values between 0 and 1, where n is the
+    number of observations and K the number of categories. The values are interpreted
+    as proportions of observations in each category. This requires specifying the number
+    of multinomial trials through argument \code{n.trial}.}
+  \item{3}{a K-column integer matrix, where K is the number of categories, each
+    column contaning the number of 'successes' for the corresponding category.}
+}
+}
+\examples{
+y <- factor(sample(c("a", "b", "c"), 800, prob=c(0.3, 0.5, 0.2), replace=TRUE))
+sampler <- create_sampler(y ~ 0 + cat_, family=f_multinomial())
+sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=300, verbose=FALSE)
+summary(sim)
+summary(predict(sim, newdata=data.frame(id=1:5)))
+
 }

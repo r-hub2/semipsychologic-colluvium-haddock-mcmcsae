@@ -44,7 +44,7 @@ Summarise an mcdraws object
 \donttest{
 ex <- mcmcsae_example()
 sampler <- create_sampler(ex$model, data=ex$dat)
-sim <- MCMCsim(sampler, store.all=TRUE)
+sim <- MCMCsim(sampler, store.all=TRUE, n.chain=2, n.iter=500)
 summary(sim)
 par_names(sim)
 summary(sim, c("beta", "v_sigma", "u_sigma"))

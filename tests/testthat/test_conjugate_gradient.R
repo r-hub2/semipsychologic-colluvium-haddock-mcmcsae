@@ -60,7 +60,7 @@ test_that("conjugate gradient sampler for a simple regression model works", {
     y ~ reg(~ x1 + x2, name="b"), data=df,
     control=list(CG=TRUE)
   )
-  expect_length(sampler$block, 1L)  # for CG need mc_block
+  expect_length(sampler$control$block, 1L)  # for CG need mc_block
   sim <- MCMCsim(sampler, verbose=FALSE, n.chain=2L, n.iter=700L)
   summ <- summary(sim)
   expect_between(summ$b[, "Mean"], 0.5*dat$pars$b, 2*dat$pars$b)

@@ -116,16 +116,16 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
       X. <- list()
       for (mc in model[["mod"]]) X.[[mc[["name"]]]] <- mc$make_predict(verbose=verbose)
       if (fam[["family"]] == "multinomial" && type == "data_cat")
-        n <- model[["n0"]]
+        n <- fam[["n0"]]
       else
-        n <- model[["n"]]
+        n <- fam[["n"]]
     } else {
       if (type == "data") {
         if (fam[["family"]] == "gamma") {
           # currently disallow vector shape parameter for X.="linpred" and custom X.
           if (!fam[["alpha.scalar"]]) stop("cannot derive vector shape")
         }
-        if (any(fam[["family"]] == c("gaussian", "gaussian_gamma"))) {
+        if (any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma"))) {
           if (fam[["modeled.Q"]] || fam[["Q0.type"]] != "unit") stop("for prediction based on a model with non-trivial variance structure, please use argument 'newdata'")
         }
       }
@@ -167,7 +167,7 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
     if (!is.null(X.) && !all_coef_names_present(model[["mod"]], par.names))
       stop("for prediction all coefficients must be stored in 'object' (use 'store.all=TRUE' in MCMCsim)")
     if (fam[["family"]] == "multinomial")
-      n <- nrow(newdata) * model[["Km1"]]
+      n <- nrow(newdata) * fam[["Km1"]]
     else
       n <- nrow(newdata)
   }
@@ -194,14 +194,14 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
   if (!is.null(labels) && length(labels) != d) stop("incompatible 'labels' vector")
   if (fam[["family"]] == "multinomial") {
     if (is.null(labels) && isTRUE(all.equal(fun., identity)) && type != "data_cat")
-      labels <- paste(rep_each(model$cats[-length(model$cats)], n %/% model[["Km1"]]), rep.int(seq_len(n %/% model[["Km1"]]), model[["Km1"]]), sep="_")
+      labels <- paste(rep_each(fam[["cats"]][-length(fam[["cats"]])], n %/% fam[["Km1"]]), rep.int(seq_len(n %/% fam[["Km1"]]), fam[["Km1"]]), sep="_")
     if (type == "response") {  # undo stick-breaking transformation
-      n0 <- n %/% model[["Km1"]]
+      n0 <- n %/% fam[["Km1"]]
       ind <- seq_len(n0)
       linkinv <- function(eta) {
         p <- fam$linkinv(eta)
         pleft <- 1 - p[ind]
-        for (k in seq_len(model[["Km1"]] - 1L)) {
+        for (k in seq_len(fam[["Km1"]] - 1L)) {
           ind <- ind + n0
           p[ind] <- p[ind] * pleft
           pleft <- pleft - p[ind]
@@ -380,12 +380,30 @@ generate_data <- function(formula, data=NULL, family="gaussian",
                           sigma.fixed=NULL, sigma.mod=NULL, Q0=NULL, formula.V=NULL,  # DEPRECATED
                           linpred=NULL) {
   if (is.function(family)) {
-    family <- as.character(substitute(family))
-    if (startsWith(family, "f_")) family <- substring(family, 3L)
+    fam <- family()
+    if (!is.list(fam) || !is_character_scalar(fam[["family"]])) stop("unrecognised input for argument 'family'")
+    family <- fam[["family"]]
   }
-  if (identical(family, "gaussian")) {
+  if (is_character_scalar(family)) {
     # use a proper prior for sigma by default
-    family <- f_gaussian(var.prior = pr_invchisq(df=1, scale=1))
+    if (tolower(family) == "gaussian")
+      family <- f_gaussian(var.prior = pr_invchisq(df=1, scale=1))
+    else if (tolower(family) == "student_t")
+      family <- f_student_t(var.prior = pr_invchisq(df=1, scale=1))
+  } else if (family[["family"]] == "multi") {
+    for (f in seq_along(family[["fam.list"]])) {
+      if (is.function(family[["fam.list"]][[f]])) {
+        fam <- family[["fam.list"]][[f]]()
+        if (!is.list(fam) || !is_character_scalar(fam[["family"]])) stop("unrecognised family in multi-response family")
+        family[["fam.list"]][[f]] <- fam[["family"]]
+      }
+      if (is_character_scalar(family[["fam.list"]][[f]])) {
+        if (tolower(family[["fam.list"]][[f]]) == "gaussian")
+          family[["fam.list"]][[f]] <- f_gaussian(var.prior = pr_invchisq(df=1, scale=1))
+        else if (tolower(family[["fam.list"]][[f]]) == "student_t")
+          family[["fam.list"]][[f]] <- f_student_t(var.prior = pr_invchisq(df=1, scale=1))
+      }
+    }
   }
   sampler <- create_sampler(formula=formula, data=data, family=family,
     ny=ny, ry=ry, r.mod=r.mod,  # DEPRECATED
@@ -394,12 +412,13 @@ generate_data <- function(formula, data=NULL, family="gaussian",
   )
   sim <- MCMCsim(sampler, n.iter=1L, n.chain=1L, store.all=TRUE, from.prior=TRUE, verbose=FALSE)
   pars <- lapply(sim[par_names(sim)], \(x) setNames(x[[1L]][1L, ], attr(x, "labels")))
-  if (sampler$family[["family"]] == "multinomial") {
-    if (allv(sampler$family[["ny0"]], 1)) {
+  fam <- sampler[["family"]]
+  if (fam[["family"]] == "multinomial") {
+    if (allv(fam[["ny0"]], 1)) {
       y <- drop(predict(sim, type="data_cat")[[1L]])
     } else {
-      y <- matrix(predict(sim)[[1L]], sampler[["n0"]], sampler[["Km1"]])
-      y <- cbind(y, sampler$family[["ny0"]] - dapply(y, sum, MARGIN=1L))  # NB rowSums does not preserve integer type
+      y <- matrix(predict(sim)[[1L]], fam[["n0"]], fam[["Km1"]])
+      y <- cbind(y, fam[["ny0"]] - dapply(y, sum, MARGIN=1L))  # NB rowSums does not preserve integer type
     }
   } else {
     y <- drop(predict(sim)[[1L]])

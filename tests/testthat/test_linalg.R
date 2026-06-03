@@ -41,16 +41,6 @@ test_that("inverseSPD works", {
   expect_equal(solve(M), inverseSPD(M))
 })
 
-test_that("inverse method of cholesky object works", {
-  n <- 20L
-  M <- crossprod(matrix(rnorm(n*n), n, n)) + 2*diag(n)
-  MdsC <- as(M, "CsparseMatrix")
-  cholM <- build_chol(MdsC)
-  MdsCinv <- cholM$inverse()
-  expect_is(MdsCinv, "dsCMatrix")
-  expect_equal(as.matrix(MdsCinv), inverseSPD(M))
-})
-
 test_that("dotprodC works", {
   x <- rnorm(10)
   y <- runif(10)
@@ -107,12 +97,13 @@ test_that("matrix-vector crossproducts work", {
   M <- Diagonal(x=rnorm(n))
   expect_equal(M@x * x, crossprod_mv(M, x))
   M <- as(matrix(c(1,0,1,0,1,0,0,0,0), 3, 3), "tabMatrix")
+  expect_error(crossprod_mv(M, runif(2)))
+  expect_error(crossprod_mv(M, c("a", "b", "c")))
   x <- rnorm(3)
   expect_equal(as.vector(t(M) %*% x), crossprod_mv(M, x))
   M <- as(rnorm(3)*matrix(c(1,0,1,0,1,0,0,0,0), 3, 3), "tabMatrix")
   expect_equal(crossprod_mv(Ctab2dgC(M), x), crossprod_mv(M, x))
-  x <- rnorm(2)
-  expect_error(crossprod_mv(M, x))  # incompatible dimensions
+  expect_error(crossprod_mv(M, rnorm(2)))  # incompatible dimensions
   M <- as(matrix(c(1,0,0), 3, 1), "tabMatrix")
   x <- rnorm(3)
   expect_equal(crossprod_mv(Ctab2dgC(M), x), crossprod_mv(M, x))

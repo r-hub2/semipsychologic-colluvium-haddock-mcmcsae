@@ -4,7 +4,7 @@
 \alias{poisson_control}
 \title{Set computational options for the sampling algorithms}
 \usage{
-poisson_control(nb.shape = 100)
+poisson_control(nb.shape = 100, PG.approx = TRUE, PG.approx.m = -2L)
 }
 \arguments{
 \item{nb.shape}{shape parameter of the negative binomial distribution used
@@ -12,6 +12,17 @@ internally to approximate the Poisson distribution. This should be set to a rela
 large value (default is 100), corresponding to negligible overdispersion, to obtain a
 good approximation to the Poisson sampling distribution. However, note that very large
 values may cause slow MCMC exploration of the posterior distribution.}
+
+\item{PG.approx}{whether Polya-Gamma draws for logistic binomial models are
+approximated by a hybrid gamma convolution approach. If not, \code{BayesLogit::rpg}
+is used, which is exact for some values of the shape parameter.}
+
+\item{PG.approx.m}{if \code{PG.approx=TRUE}, the number of explicit gamma draws in the
+sum-of-gammas representation of the Polya-Gamma distribution. The remainder (infinite)
+convolution is approximated by a single moment-matching gamma draw. Special values are:
+\code{-2L} for a default choice depending on the value of the shape parameter
+balancing performance and accuracy, \code{-1L} for a moment-matching normal approximation,
+and \code{0L} for a moment-matching gamma approximation.}
 }
 \value{
 A list with computational options for the sampling algorithm.

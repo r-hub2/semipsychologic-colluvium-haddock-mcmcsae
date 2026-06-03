@@ -65,16 +65,20 @@ CrCRT <- function(y, r, m = 20L) {
     .Call(`_mcmcsae_CrCRT`, y, r, m)
 }
 
-copy_vector <- function(x) {
-    .Call(`_mcmcsae_copy_vector`, x)
+copy_obj <- function(x) {
+    .Call(`_mcmcsae_copy_obj`, x)
 }
 
-v_update <- function(y, plus, x) {
-    invisible(.Call(`_mcmcsae_v_update`, y, plus, x))
+v_update <- function(ySEXP, plus, xSEXP) {
+    invisible(.Call(`_mcmcsae_v_update`, ySEXP, plus, xSEXP))
 }
 
-mv_update <- function(y, plus, M, x) {
-    invisible(.Call(`_mcmcsae_mv_update`, y, plus, M, x))
+mv_update <- function(ySEXP, plus, M, xSEXP) {
+    invisible(.Call(`_mcmcsae_mv_update`, ySEXP, plus, M, xSEXP))
+}
+
+set_in_place <- function(xSEXP, i, zSEXP) {
+    invisible(.Call(`_mcmcsae_set_in_place`, xSEXP, i, zSEXP))
 }
 
 invsqrt <- function(x) {
@@ -267,6 +271,10 @@ Ccreate_sparse_crossprod_sym_template <- function(X, j1_ind, j2_ind, nnz_per_col
 
 rowVarsC <- function(M) {
     .Call(`_mcmcsae_rowVarsC`, M)
+}
+
+tree_predictC <- function(tree, var, value, Xnew, n_trees) {
+    .Call(`_mcmcsae_tree_predictC`, tree, var, value, Xnew, n_trees)
 }
 
 Ctab <- function(Dim, reduced, perm, num, x) {

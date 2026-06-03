@@ -47,6 +47,14 @@ test_that("MCMCsim arguments work", {
   res <- residuals(sim, matrix=TRUE)
   expect_is(res, "matrix")
   expect_identical(dim(res), c(1000L, nrow(ex$dat)))
+  summ <- summary(sim)
+  expect_is(summ, "mcdraws_summary")
+  summv <- summ$v
+  expect_is(summv, "dc_summary")
+  dfsummv <- as.data.frame(summv)
+  expect_is(dfsummv, "data.frame")
+  dfsumm <- as.data.frame(summ)
+  expect_is(dfsumm, "data.frame")
 })
 
 test_that("combine_chains works", {

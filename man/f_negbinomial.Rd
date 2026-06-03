@@ -8,7 +8,7 @@ f_negbinomial(
   link = "log",
   shape.vec = ~1,
   inv.shape.prior = pr_invchisq(df = 1, scale = 1),
-  control = negbin_control()
+  control = negbinomial_control()
 )
 }
 \arguments{
@@ -26,7 +26,7 @@ i.e. the overdispersion parameter. Supported prior distributions are
 \code{\link{pr_gig}}. The current default is \code{pr_invchisq(df=1, scale=1)}.}
 
 \item{control}{a list with computational options. These options can
-be specified using function \code{\link{negbin_control}}.}
+be specified using function \code{\link{negbinomial_control}}.}
 }
 \value{
 A family object.
@@ -55,6 +55,35 @@ binomial regression, so that a Polya-Gamma data augmentation sampling
 algorithm can be employed. Note that the fact that the linear predictor
 \eqn{\eta} does not include \eqn{\log r} effectively changes the
 interpretation of its intercept.
+}
+\examples{
+\dontrun{
+n <- 1000
+nT <- 40
+dat <- data.frame(
+  x = rnorm(n),
+  t = factor(sample(1:nT, n, replace=TRUE), levels=1:nT)
+)
+model <- ~ reg(~ x, prior=pr_normal(precision=1), name="beta") +
+           gen(factor = ~ RW1(t), name="v")
+gd <- generate_data(model, dat, family=f_negbinomial())
+str(gd)
+
+dat$y <- gd$y
+sampler <- create_sampler(
+  model <- y ~ reg(~ x, name="beta") +
+             gen(factor = ~ RW1(t), name="v"),
+  data=dat, family=f_negbinomial()
+)
+sim <- MCMCsim(sampler, store.all=TRUE)
+summ <- summary(sim)
+loo(sim)
+plot.ts(gd$pars$v)
+lines(summ$v[, "Mean"], col=2)
+bayesplot::mcmc_recover_intervals(as.array(sim$beta), gd$pars$beta)
+bayesplot::mcmc_recover_hist(as.array(sim$negbin_shape_), gd$pars$negbin_shape_)
+}
+
 }
 \references{
 N. Polson, J.G. Scott and J. Windle (2013).

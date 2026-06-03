@@ -32,30 +32,39 @@ vfac <- function(factor="local_",
 
 mc_vfac <- function(factor="local_",
                     prior=pr_invchisq(df=1, scale=1),
-                    name="", debug=FALSE, e, in.block) {
+                    name="", debug=FALSE,
+                    sc,  # unused
+                    fam,
+                    in.block,  # unused
+                    prior.only, data) {
   type <- "vfac"
   if (name == "") stop("missing model component name")
 
+  if (!is_character_scalar(factor))
+    stop("'factor' argument of vfac must be the name of a variable")
   switch(factor,
     local_ = {
-      X <- CdiagU(e[["n"]])
+      X <- CdiagU(fam[["n"]])
       nh <- 1
     },
     global_ = {
-      X <- aggrMatrix(rep.int(1L, e[["n"]]))
-      nh <- as.numeric(e[["n"]])
+      X <- aggrMatrix(rep.int(1L, fam[["n"]]))
+      nh <- as.numeric(fam[["n"]])
     },
     {
-      X <- aggrMatrix(e$data[[factor]])
+      if (is.null(data[[factor]])) stop("variable '", factor, "' not found")
+      X <- aggrMatrix(data[[factor]])
       nh <- as.numeric(colSums(X))
-      e$coef.names[[name]] <- levels(e$data[[factor]])
+      coef.names <- levels(data[[factor]])
+      label_funs <- list()
+      label_funs[[name]] <- function() coef.names
     }
   )
   q <- ncol(X)
 
-  if (e[["Q0.type"]] == "symm") {
+  if (fam[["Q0.type"]] == "symm") {
     # check that scale factor is compatible with block-diagonal structure of Q0
-    if (sum(abs(commutator(e[["Q0"]], Cdiag(X %m*v% sin(1.23*seq_len(q)))))) > .tol) stop("'formula.V' incompatible with 'Q0'")
+    if (sum(abs(commutator(fam[["Q0"]], Cdiag(X %m*v% sin(1.23*seq_len(q)))))) > .tol) stop("vfac variance component incompatible with the specified non-diagonal gaussian covariance")
   }
 
   switch(prior[["type"]],
@@ -65,7 +74,7 @@ mc_vfac <- function(factor="local_",
     },
     invchisq = {
       prior$init(q)
-      if (!e[["prior.only"]]) prior$make_draw()
+      if (!prior.only) prior$make_draw()
     },
     exp = prior$init(q),
     stop("'vfac' priors must be specified using one of pr_invchisq, pr_exp and pr_fixed functions")
@@ -135,30 +144,31 @@ mc_vfac <- function(factor="local_",
   )
   rprior <- add(rprior, quote(p))
 
-  if (prior[["type"]] == "invchisq" && is.list(prior[["df"]])) 
+  if (prior[["type"]] == "invchisq" && is.list(prior[["df"]]))
     store.default <- name_df
   else
     store.default <- NULL
 
-  if (e[["prior.only"]]) return(environment())
+  if (prior.only) return(environment())
 
   # BEGIN draw function
   draw <- if (debug) function(p) {browser()} else function(p) {}
 
+  if (!fam[["sigma.fixed"]]) sd.name <- fam[["sd.name"]]
   # define function to compute partial variance factors (cf. partial residuals)
-  if (e[["single.V.block"]]) {
-    switch(e[["Q0.type"]],
+  if (fam[["single.V.block"]]) {
+    switch(fam[["Q0.type"]],
       unit = {
-        if (e[["sigma.fixed"]])
+        if (fam[["sigma.fixed"]])
           get_partial_factor <- function(p) crossprod_mv(X, p[["e_"]]^2)
         else
-          get_partial_factor <- function(p) crossprod_mv(X, p[["e_"]]^2) * (1 / p[["sigma_"]]^2)
+          get_partial_factor <- function(p) crossprod_mv(X, p[["e_"]]^2) * (1 / p[[sd.name]]^2)
       },
       diag = {
-        if (e[["sigma.fixed"]])
-          get_partial_factor <- function(p) crossprod_mv(X, e[["Q0"]]@x * p[["e_"]]^2)
+        if (fam[["sigma.fixed"]])
+          get_partial_factor <- function(p) crossprod_mv(X, fam[["Q0"]]@x * p[["e_"]]^2)
         else
-          get_partial_factor <- function(p) crossprod_mv(X, e[["Q0"]]@x * p[["e_"]]^2) * (1 / p[["sigma_"]]^2)
+          get_partial_factor <- function(p) crossprod_mv(X, fam[["Q0"]]@x * p[["e_"]]^2) * (1 / p[[sd.name]]^2)
       },
       symm = {
         # create list with blocks of Q0 corresponding to the subdivision by factor
@@ -167,7 +177,7 @@ mc_vfac <- function(factor="local_",
         fac <- numeric(q)
         for (i in seq_len(q)) {
           X.ind[[i]] <- whichv(X@perm, i - 1L)  # NB tabMatrix 0-based
-          Q0.list[[i]] <- e[["Q0"]][X.ind[[i]], X.ind[[i]]]
+          Q0.list[[i]] <- fam[["Q0"]][X.ind[[i]], X.ind[[i]]]
         }
         get_partial_factor <- function(p) {
           for (i in seq_along(Q0.list)) {
@@ -175,16 +185,16 @@ mc_vfac <- function(factor="local_",
             fac[i] <- dotprodC(res, Q0.list[[i]] %m*v% res)
           }
         }
-        get_partial_factor <- add(get_partial_factor, bquote(.(if (e[["sigma.fixed"]]) quote(fac) else quote(fac * (1 / p[["sigma_"]]^2)))))
+        get_partial_factor <- add(get_partial_factor, bquote(.(if (fam[["sigma.fixed"]]) quote(fac) else bquote(fac * (1 / p[[.(sd.name)]]^2)))))
       }
     )
   } else {
-    switch(e[["Q0.type"]],
+    switch(fam[["Q0.type"]],
       unit=, diag = {
-        if (e[["sigma.fixed"]])
+        if (fam[["sigma.fixed"]])
           get_partial_factor <- function(p) crossprod_mv(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]]
         else
-          get_partial_factor <- function(p) crossprod_mv(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]] * (1 / p[["sigma_"]]^2)
+          get_partial_factor <- function(p) crossprod_mv(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]] * (1 / p[[sd.name]]^2)
       },
       stop("TBI: 'vfac' term in multi-component variance model in combination with non-diagonal covariance matrix")
     )
@@ -213,18 +223,20 @@ mc_vfac <- function(factor="local_",
     }
   )
 
-  if (e[["single.V.block"]]) {
-    switch(e[["Q0.type"]],
+  if (fam[["single.V.block"]]) {
+    switch(fam[["Q0.type"]],
       unit = {
         draw <- add(draw, quote(p$Q_ <- X %m*v% (1 / lambda)))
       },
       diag = {
-        draw <- add(draw, quote(p$Q_ <- e[["Q0"]]@x * (X %m*v% (1 / lambda))))
+        Q0x <- fam[["Q0"]]@x
+        draw <- add(draw, quote(p$Q_ <- Q0x * (X %m*v% (1 / lambda))))
       },
       symm = {
+        Q0 <- fam[["Q0"]]
         draw <- draw |>
           add(quote(p$Q_ <- X %m*v% (1 / lambda))) |>
-          add(quote(p$QM_ <- block_scale_dsCMatrix(e[["Q0"]], p[["Q_"]])))
+          add(quote(p$QM_ <- block_scale_dsCMatrix(Q0, p[["Q_"]])))
       }
     )
   } else {
@@ -259,6 +271,6 @@ mc_vfac <- function(factor="local_",
     add(bquote(if (length(p[[.(name)]]) != .(q)) stop("wrong length for start value '", name, "'"))) |>
     add(quote(p))
 
-  if (!e[["single.V.block"]] || e[["Q0.type"]] == "unit") rm(e)
+  rm(in.block, prior.only, data)
   environment()
 }

@@ -236,36 +236,47 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// copy_vector
-NumericVector copy_vector(const NumericVector& x);
-RcppExport SEXP _mcmcsae_copy_vector(SEXP xSEXP) {
+// copy_obj
+SEXP copy_obj(SEXP x);
+RcppExport SEXP _mcmcsae_copy_obj(SEXP xSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
-    Rcpp::traits::input_parameter< const NumericVector& >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(copy_vector(x));
+    Rcpp::traits::input_parameter< SEXP >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(copy_obj(x));
     return rcpp_result_gen;
 END_RCPP
 }
 // v_update
-void v_update(Eigen::Map<Eigen::VectorXd>& y, const bool plus, const Eigen::Map<Eigen::VectorXd>& x);
-RcppExport SEXP _mcmcsae_v_update(SEXP ySEXP, SEXP plusSEXP, SEXP xSEXP) {
+void v_update(SEXP ySEXP, const bool plus, const SEXP xSEXP);
+RcppExport SEXP _mcmcsae_v_update(SEXP ySEXPSEXP, SEXP plusSEXP, SEXP xSEXPSEXP) {
 BEGIN_RCPP
-    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd>& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ySEXP(ySEXPSEXP);
     Rcpp::traits::input_parameter< const bool >::type plus(plusSEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd>& >::type x(xSEXP);
-    v_update(y, plus, x);
+    Rcpp::traits::input_parameter< const SEXP >::type xSEXP(xSEXPSEXP);
+    v_update(ySEXP, plus, xSEXP);
     return R_NilValue;
 END_RCPP
 }
 // mv_update
-void mv_update(Eigen::Map<Eigen::VectorXd>& y, const bool plus, const SEXP M, const Eigen::Map<Eigen::VectorXd>& x);
-RcppExport SEXP _mcmcsae_mv_update(SEXP ySEXP, SEXP plusSEXP, SEXP MSEXP, SEXP xSEXP) {
+void mv_update(SEXP ySEXP, const bool plus, const SEXP M, const SEXP xSEXP);
+RcppExport SEXP _mcmcsae_mv_update(SEXP ySEXPSEXP, SEXP plusSEXP, SEXP MSEXP, SEXP xSEXPSEXP) {
 BEGIN_RCPP
-    Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd>& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ySEXP(ySEXPSEXP);
     Rcpp::traits::input_parameter< const bool >::type plus(plusSEXP);
     Rcpp::traits::input_parameter< const SEXP >::type M(MSEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd>& >::type x(xSEXP);
-    mv_update(y, plus, M, x);
+    Rcpp::traits::input_parameter< const SEXP >::type xSEXP(xSEXPSEXP);
+    mv_update(ySEXP, plus, M, xSEXP);
+    return R_NilValue;
+END_RCPP
+}
+// set_in_place
+void set_in_place(SEXP xSEXP, const int i, const SEXP zSEXP);
+RcppExport SEXP _mcmcsae_set_in_place(SEXP xSEXPSEXP, SEXP iSEXP, SEXP zSEXPSEXP) {
+BEGIN_RCPP
+    Rcpp::traits::input_parameter< SEXP >::type xSEXP(xSEXPSEXP);
+    Rcpp::traits::input_parameter< const int >::type i(iSEXP);
+    Rcpp::traits::input_parameter< const SEXP >::type zSEXP(zSEXPSEXP);
+    set_in_place(xSEXP, i, zSEXP);
     return R_NilValue;
 END_RCPP
 }
@@ -554,15 +565,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // sparse_sum_x
-NumericVector sparse_sum_x(const int n, const IntegerVector& ind1, const IntegerVector& ind2, const NumericVector& M1x, const NumericVector& M2x, const bool UD1, const bool UD2, const double w1, const double w2);
+NumericVector sparse_sum_x(const int n, const IntegerVector ind1, const IntegerVector ind2, const NumericVector M1x, const NumericVector M2x, const bool UD1, const bool UD2, const double w1, const double w2);
 RcppExport SEXP _mcmcsae_sparse_sum_x(SEXP nSEXP, SEXP ind1SEXP, SEXP ind2SEXP, SEXP M1xSEXP, SEXP M2xSEXP, SEXP UD1SEXP, SEXP UD2SEXP, SEXP w1SEXP, SEXP w2SEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< const int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type ind1(ind1SEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type ind2(ind2SEXP);
-    Rcpp::traits::input_parameter< const NumericVector& >::type M1x(M1xSEXP);
-    Rcpp::traits::input_parameter< const NumericVector& >::type M2x(M2xSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector >::type ind1(ind1SEXP);
+    Rcpp::traits::input_parameter< const IntegerVector >::type ind2(ind2SEXP);
+    Rcpp::traits::input_parameter< const NumericVector >::type M1x(M1xSEXP);
+    Rcpp::traits::input_parameter< const NumericVector >::type M2x(M2xSEXP);
     Rcpp::traits::input_parameter< const bool >::type UD1(UD1SEXP);
     Rcpp::traits::input_parameter< const bool >::type UD2(UD2SEXP);
     Rcpp::traits::input_parameter< const double >::type w1(w1SEXP);
@@ -582,12 +593,12 @@ BEGIN_RCPP
 END_RCPP
 }
 // add_diagC
-Eigen::MatrixXd add_diagC(const Eigen::Map<Eigen::MatrixXd>& A, const Eigen::Map<Eigen::VectorXd>& d);
+SEXP add_diagC(SEXP A, SEXP d);
 RcppExport SEXP _mcmcsae_add_diagC(SEXP ASEXP, SEXP dSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::MatrixXd>& >::type A(ASEXP);
-    Rcpp::traits::input_parameter< const Eigen::Map<Eigen::VectorXd>& >::type d(dSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type A(ASEXP);
+    Rcpp::traits::input_parameter< SEXP >::type d(dSEXP);
     rcpp_result_gen = Rcpp::wrap(add_diagC(A, d));
     return rcpp_result_gen;
 END_RCPP
@@ -798,6 +809,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// tree_predictC
+NumericVector tree_predictC(IntegerVector tree, IntegerVector var, NumericVector value, NumericMatrix Xnew, int n_trees);
+RcppExport SEXP _mcmcsae_tree_predictC(SEXP treeSEXP, SEXP varSEXP, SEXP valueSEXP, SEXP XnewSEXP, SEXP n_treesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< IntegerVector >::type tree(treeSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type var(varSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type value(valueSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type Xnew(XnewSEXP);
+    Rcpp::traits::input_parameter< int >::type n_trees(n_treesSEXP);
+    rcpp_result_gen = Rcpp::wrap(tree_predictC(tree, var, value, Xnew, n_trees));
+    return rcpp_result_gen;
+END_RCPP
+}
 // Ctab
 SEXP Ctab(const IntegerVector& Dim, const bool reduced, const IntegerVector& perm, const bool num, const NumericVector& x);
 RcppExport SEXP _mcmcsae_Ctab(SEXP DimSEXP, SEXP reducedSEXP, SEXP permSEXP, SEXP numSEXP, SEXP xSEXP) {
@@ -813,7 +838,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // Ctab_numeric_prod
-Rcpp::NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector& y, const bool ignore_x);
+NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector& y, const bool ignore_x);
 RcppExport SEXP _mcmcsae_Ctab_numeric_prod(SEXP ASEXP, SEXP ySEXP, SEXP ignore_xSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -847,12 +872,12 @@ BEGIN_RCPP
 END_RCPP
 }
 // Ctab_numeric_crossprod
-NumericVector Ctab_numeric_crossprod(const SEXP A, const NumericVector& y);
+NumericVector Ctab_numeric_crossprod(const SEXP A, const NumericVector y);
 RcppExport SEXP _mcmcsae_Ctab_numeric_crossprod(SEXP ASEXP, SEXP ySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< const SEXP >::type A(ASEXP);
-    Rcpp::traits::input_parameter< const NumericVector& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const NumericVector >::type y(ySEXP);
     rcpp_result_gen = Rcpp::wrap(Ctab_numeric_crossprod(A, y));
     return rcpp_result_gen;
 END_RCPP

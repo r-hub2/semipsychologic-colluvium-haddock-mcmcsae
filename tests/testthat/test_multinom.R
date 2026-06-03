@@ -53,7 +53,7 @@ test_that("multinomial data generation, model fitting and prediction work, for d
   expect_true(all(rowSums(gd$y) == ny))
   dat$y <- gd$y
   sampler <- create_sampler(y ~ x, data=dat, family="multinomial")
-  expect_equal(sampler$Km1, K - 1L)
+  expect_equal(sampler$family$Km1, K - 1L)
   expect_equal(sampler$family$ny0, rep.int(ny, nrow(dat)))
   sim <- MCMCsim(sampler, n.chain=2, burnin=50, n.iter=200, verbose=FALSE)
   summ <- summary(sim)
@@ -68,7 +68,7 @@ test_that("multinomial data generation, model fitting and prediction work, for d
   # fraction data; remove last column
   dat$y <- dat$y[, -ncol(dat$y)]/rowSums(dat$y)
   sampler <- create_sampler(y ~ x, data=dat, family=f_multinomial(n.trial = ny))
-  expect_equal(sampler$Km1, K - 1L)
+  expect_equal(sampler$family$Km1, K - 1L)
   expect_equal(sampler$family$ny0, ny)
   sim <- MCMCsim(sampler, n.chain=2, burnin=50, n.iter=200, verbose=FALSE)
   summ <- summary(sim)

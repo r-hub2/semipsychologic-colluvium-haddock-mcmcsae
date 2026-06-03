@@ -58,14 +58,15 @@ s <- function(..., unit.precision=FALSE, name="", debug=FALSE) {
   stop("function 'mcmcsae::s' should only be used inside a formula")
 }
 
-# additional argument e to pass sampler environment, and in.block
-mc_s <- function(..., unit.precision=FALSE, name="",
-                 debug=FALSE, e, in.block) {
+mc_s <- function(..., unit.precision=FALSE, name="", debug=FALSE,
+                 sc, fam, in.block, prior.only, compute.weights=FALSE, data) {
   type <- "s"
   if (name == "") stop("missing model component name")
 
+  if (fam[["family"]] == "multinomial") stop("s() term not yet supported for multinomial family")
   if (!requireNamespace("mgcv", quietly=TRUE)) stop("package mgcv required for a model including smooth terms defined through s()")
-  sm <- mgcv::smoothCon(mgcv::s(...), data=e[["data"]], absorb.cons=TRUE)[[1L]]
+  if (is.integer(data)) stop("variables in s() terms must be supplied through the data argument of create_sampler or generate_data")
+  sm <- mgcv::smoothCon(mgcv::s(...), data=data, absorb.cons=TRUE)[[1L]]
   if (length(sm[["S"]]) > 1L) stop("smooth terms with multiple penalties are not supported")
   if (sm[["by"]] != "NA") stop("'by' argument of s() not yet supported")
   X <- sm[["X"]]
@@ -75,10 +76,12 @@ mc_s <- function(..., unit.precision=FALSE, name="",
     re <- mgcv::smooth2random(sm, "", type=2L)
     stop("unit.precision=TRUE transformation not currently supported")
   } else {
-    if (nrow(X) != e[["n"]]) stop("design matrix with incompatible number of rows")
-    e$coef.names[[name]] <- dimnames(X)[[2L]]
+    if (nrow(X) != fam[["n"]]) stop("design matrix with incompatible number of rows")
+    coef.names <- dimnames(X)[[2L]]
+    label_funs <- list()
+    label_funs[[name]] <- function() coef.names
     # fixed effects model component
-    qf <- sm[["null.space.dim"]]
+    qf <- as.integer(sm[["null.space.dim"]])
     qr <- ncol(X) - qf
     q <- qf + qr
     name.r <- paste0(name, "_r")
@@ -86,25 +89,34 @@ mc_s <- function(..., unit.precision=FALSE, name="",
     if (qf > 0L) {
       name.f <- paste0(name, "_f")
       i.f <- (qr + 1L):q
-      mf <- mc_reg(X = X[, i.f, drop=FALSE], name=name.f, e=e, in.block=in.block)
+      mf <- mc_reg(X = X[, i.f, drop=FALSE],
+        name=name.f, sc=sc, fam=fam, in.block=in.block,
+        prior.only=prior.only, compute.weights=compute.weights,
+        data=data
+      )
     }
     mr <- mc_gen(X = X[, i.r, drop=FALSE],
       factor = ~ custom(Q = Q0[i.r, i.r]),
-      name=name.r, e=e, in.block=in.block
+      name=name.r, sc=sc, fam=fam, in.block=in.block,
+      prior.only=prior.only, compute.weights=compute.weights,
+      data=data
     )
     store.default <- mr[["store.default"]]
     if (qf > 0L) {
       store.default <- c(store.default, mf[["store.default"]])
-      Q0 <- bdiag_ddidsC(list(mr[["Q"]], mf[["Q0"]]))
+      if (in.block) Q0 <- bdiag_ddidsC(list(mr[["Q"]], mf[["Q0"]]))  # make sure the mf part is 0
     }
 
-    if (in.block && !e[["prior.only"]])
-      get_Q <- function(p) {
-        if (qf > 0L)
-          c(mr$get_Q(p), mf$get_Q(p))
+    if (in.block && !prior.only) {
+      get_Q <- if (qf > 0L) {
+        if (is.function(mf[["get_Q"]]))
+          function(p) c(mr$get_Q(p), mf$get_Q(p))
         else
-          mr$get_Q(p)
+          function(p) c(mr$get_Q(p), mf[["Q0"]]@x)
+      } else {
+        function(p) mr$get_Q(p)
       }
+    }
 
     lp_update <- function(x, plus=TRUE, p) {
       if (qf > 0L) mf$lp_update(x, plus, p)
@@ -144,8 +156,7 @@ mc_s <- function(..., unit.precision=FALSE, name="",
         out <- pred.r$linpred(p)
         if (qf > 0L)
           pred.f$linpred_update(out, TRUE, p)
-        else
-          out
+        out
       }
       linpred_update <- function(x, plus=TRUE, p) {
         pred.r$linpred_update(x, plus, p)
@@ -155,21 +166,15 @@ mc_s <- function(..., unit.precision=FALSE, name="",
       environment()
     }
 
-    if (!e[["prior.only"]]) {
+    if (!prior.only) {
 
-      if (!e[["sigma.fixed"]]) {
-        df.add <- mr[["df.add"]]
-        if (qf > 0L) df.add <- df.add + mf[["df.add"]]
-        SSR_add <- function(p)
-          if (qf == 0L || is.null(mf$SSR_add))
-            mr$SSR_add(p)
-          else
-            mf$SSR_add(p) + mr$SSR_add(p)
-      }
-
-      draw <- function(p) {
-        if (qf > 0L && !in.block) p <- mf$draw(p)
-        mr$draw(p)
+      if (qf > 0L && is.function(mf[["draw"]])) {
+        draw <- function(p) {
+          p <- mf$draw(p)
+          mr$draw(p)
+        }
+      } else {
+        draw <- function(p) mr$draw(p)
       }
       start <- function(p) {
         if (qf > 0L && !in.block) p <- mf$start(p)

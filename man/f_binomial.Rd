@@ -4,7 +4,11 @@
 \alias{f_binomial}
 \title{Specify a binomial sampling distribution}
 \usage{
-f_binomial(link = c("logit", "probit"), n.trial = NULL)
+f_binomial(
+  link = c("logit", "probit"),
+  n.trial = NULL,
+  control = binomial_control()
+)
 }
 \arguments{
 \item{link}{the name of a link function. Currently the only allowed link functions
@@ -13,12 +17,68 @@ for the binomial distribution are \code{"logit"} (default) and \code{"probit"}.}
 \item{n.trial}{the number of binomial trials. This can be specified either as
 a formula for a variable number of trials, or as a scalar value for a common
 number of trials for all units.}
+
+\item{control}{a list with computational options. These options can
+be specified using function \code{\link{binomial_control}}.}
 }
 \value{
 A family object.
 }
 \description{
 This function can be used in the \code{family} argument of \code{\link{create_sampler}}
-or \code{\link{generate_data}} to specify a binomial sampling distribution. This
-includes the special case of binary (Bernoulli) data.
+or \code{\link{generate_data}} to specify a binomial sampling distribution.
+}
+\details{
+For the binomial family, the left hand side of the \code{formula} argument of
+\code{\link{create_sampler}} can be specified in several ways (similar to the
+options allowed by \code{\link[stats]{glm}} for binomial family):
+\describe{
+  \item{1}{as a factor, character, or boolean variable, say \code{y}.
+    In this case the first level of \code{as.factor(y)} is interpreted as 'failures' and all
+    other values as 'successes'. This option can only be used for binary data.}
+  \item{2a}{as a numeric or integer vector with no values strictly between 0 and 1.
+    The values are then interpreted as numbers of successes. This requires specifying
+    the number of trials through argument \code{n.trial}, unless the data is
+    binary (values 0 and 1 only). For non-integer values a warning is issued.}
+  \item{2b}{as a numeric vector with values between 0 and 1. The values are then interpreted
+    as the proportion of the number of successes. This requires specifying the number of trials
+    through argument \code{n.trial}.}
+  \item{3}{as a two-column integer matrix. The first column is interpreted as the number of
+    successes, the second column as the number of failures.}
+}
+}
+\examples{
+y <- c(TRUE, FALSE, TRUE)
+sampler <- create_sampler(y ~ 1, family=f_binomial())
+# logistic binary regression is the default, and may also be
+# specified as family="binomial"
+sim <- MCMCsim(sampler, n.chain=2, n.iter=100, burnin=50, verbose=FALSE)
+summary(predict(sim, newdata=data.frame(id=1)))
+
+y <- c(0, 0, 1, 1, 0, 0, 0, 0, 1)
+sampler <- create_sampler(y ~ 1, family=f_binomial(link="probit"))
+sim <- MCMCsim(sampler, n.chain=2, n.iter=100, burnin=50, verbose=FALSE)
+summary(predict(sim, newdata=data.frame(id=1)))
+
+sampler <- create_sampler(c(0.2, 0.3, 0.5, 0.0) ~ 1, family=f_binomial(n.trial=10))
+# is interpreted as
+sampler <- create_sampler(c(2, 3, 5, 0) ~ 1, family=f_binomial(n.trial=10))
+sim <- MCMCsim(sampler, n.chain=2, n.iter=100, burnin=50, verbose=FALSE)
+summary(predict(sim, newdata=data.frame(id=1)))
+
+n <- 1000
+dat <- data.frame(
+  x = runif(n),
+  g = factor(sample(1:10, n, replace=TRUE)),
+  trials = sample(1:5, n, replace=TRUE)
+)
+v <- rnorm(10)
+dat$y <- rbinom(n, size=dat$trials, prob=1 / (1 + exp(-(1 - dat$x + v[dat$g]))))
+sampler <- create_sampler(y ~ x + (1|g), data=dat, family=f_binomial(n.trial = ~ trials))
+# alternatively:
+sampler <- create_sampler(cbind(y, trials - y) ~ x + (1|g), data=dat, family="binomial")
+sim <- MCMCsim(sampler, store.all=TRUE, burnin=200, n.iter=300, n.chain=2, verbose=FALSE)
+summ <- summary(sim)
+plot(v, summ$gen2[, "Mean"]); abline(0, 1)
+
 }

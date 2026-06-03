@@ -12,12 +12,9 @@ sampler_control(
   cMVN.sampler = FALSE,
   CG = NULL,
   block = TRUE,
-  block.V = TRUE,
   auto.order.block = TRUE,
   chol.control = chol_control(),
-  max.size.cps.template = 100,
-  PG.approx = TRUE,
-  PG.approx.m = -2L
+  max.size.cps.template = 100
 )
 }
 \arguments{
@@ -62,10 +59,6 @@ If \code{FALSE}, the coefficients of each model component are sampled separately
 Alternatively, a list of character vectors with names of model components can be passed to
 specify a grouping of model components whose coefficients should be sampled together in blocks.}
 
-\item{block.V}{if \code{TRUE}, the default, all coefficients of \code{reg} and \code{gen} components
-in a variance model formula are sampled in a single block. Alternatively, a list of
-character vectors with names of model components whose coefficients should be sampled together in blocks.}
-
 \item{auto.order.block}{whether Gibbs blocks should be ordered automatically in such a
 way that those with the most sparse design matrices come first. This way of ordering
 can make Cholesky updates more efficient.}
@@ -75,23 +68,14 @@ can make Cholesky updates more efficient.}
 \item{max.size.cps.template}{maximum allowed size in MB of the sparse matrix serving as a 
 template for the sparse symmetric crossproduct X'QX of a dgCMatrix X, where Q is a diagonal
 matrix subject to change.}
-
-\item{PG.approx}{whether Polya-Gamma draws for logistic binomial models are
-approximated by a hybrid gamma convolution approach. If not, \code{BayesLogit::rpg}
-is used, which is exact for some values of the shape parameter.}
-
-\item{PG.approx.m}{if \code{PG.approx=TRUE}, the number of explicit gamma draws in the
-sum-of-gammas representation of the Polya-Gamma distribution. The remainder (infinite)
-convolution is approximated by a single moment-matching gamma draw. Special values are:
-\code{-2L} for a default choice depending on the value of the shape parameter
-balancing performance and accuracy, \code{-1L} for a moment-matching normal approximation,
-and \code{0L} for a moment-matching gamma approximation.}
 }
 \value{
 A list with specified computational options used by various sampling functions.
 }
 \description{
-Set computational options for the sampling algorithms
+This function can be used to specify computational options
+by passing the result to the \code{control} argument of
+\code{\link{create_sampler}}.
 }
 \references{
 D. Bates, M. Maechler, B. Bolker and S.C. Walker (2015).

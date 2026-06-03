@@ -126,6 +126,10 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
         # TODO
         # - check whether the permutation is handled correctly in the transpose=FALSE case
         # - use update flag to avoid unnecessary calls to expand1
+        # NB name Ltimes is misleading in the permuted case, as L
+        # is not usually lower triangular in this case; it is still
+        # such that P1'LL'P1 reproduces the original matrix, so can
+        # be used for MVN sampling
         Ltimes <- function(x, transpose=TRUE) {
           L <- expand1(cholM, which="L")
           if (transpose)
@@ -183,12 +187,12 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
       if (Imult == 0)
         cholM <- chol.default(M)
       else
-        cholM <- chol.default(add_diagC(M, rep.int(Imult, size)))
+        cholM <- chol.default(add_diagC(M, Imult))
       update <- function(parent, mult=0) {
         if (mult == 0)
           cholM <<- Ccholesky(parent)
         else
-          cholM <<- Ccholesky(add_diagC(parent, rep.int(mult, size)))
+          cholM <<- Ccholesky(add_diagC(parent, mult))
       }
       Ltimes <- function(x, transpose=TRUE) {
         if (transpose)

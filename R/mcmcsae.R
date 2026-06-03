@@ -25,24 +25,24 @@ NULL
 NULL
 
 # other namespace imports
-#' @importFrom Matrix .diag2sparse .m2sparse .M2m .updateCHMfactor
-#'  bandSparse bdiag coerce diag Diagonal drop0 expand1 forceSymmetric
-#'  invertPerm isDiagonal KhatriRao Matrix nnzero rsparsematrix sparseMatrix
+#' @importFrom Matrix .diag2sparse .m2sparse .M2m .updateCHMfactor bandSparse
+#' @importFrom Matrix bdiag coerce diag Diagonal drop0 expand1 forceSymmetric
+#' @importFrom Matrix invertPerm isDiagonal KhatriRao Matrix nnzero
+#' @importFrom Matrix rsparsematrix sparseMatrix
 #' @importClassesFrom Matrix CHMfactor dCHMsimpl ddiMatrix CsparseMatrix
-#'  dgCMatrix dsCMatrix generalMatrix sparseMatrix
+#' @importClassesFrom Matrix dgCMatrix dsCMatrix generalMatrix sparseMatrix
 #' @importMethodsFrom Matrix %*% as.matrix as.vector Cholesky colSums crossprod
-#'  determinant diag isSymmetric rowSums solve t tcrossprod unname
+#' @importMethodsFrom Matrix determinant diag isSymmetric rowSums solve t tcrossprod unname
 #' @import GIGrvg
 #' @importFrom collapse allNA allv any_duplicated anyv dapply fdroplevels fmatch
-#'  fmean.default fmean.matrix fquantile fsd.matrix fsum.matrix fvar.matrix qF
-#'  whichNA whichv
+#' @importFrom collapse fmean.default fmean.matrix fquantile fsd.matrix fsum.matrix
+#' @importFrom collapse fvar.matrix qF whichNA whichv
 #' @importFrom graphics abline axis legend lines matplot pairs par plot
-#'  plot.new points segments
-#' @importFrom methods as cbind2 new rbind2 setAs setClass setMethod signature
-#'  show
-#' @importFrom stats acf as.formula density fitted make.link mvfft optim
-#'  pnorm predict rbeta rbinom rchisq residuals rexp rgamma rnbinom rnorm
-#'  rpois runif rWishart sd setNames terms update.formula var weights
+#' @importFrom graphics plot.new points segments
+#' @importFrom methods as cbind2 new rbind2 setAs setClass setMethod signature show
+#' @importFrom stats acf as.formula density fitted make.link mvfft nextn optim
+#' @importFrom stats pnorm predict rbeta rbinom rchisq residuals rexp rgamma rnbinom rnorm
+#' @importFrom stats rpois runif rWishart sd setNames terms update.formula var weights
 #' @importFrom utils getFromNamespace modifyList object.size setTxtProgressBar
-#'  str tail txtProgressBar
+#' @importFrom utils str tail txtProgressBar
 NULL

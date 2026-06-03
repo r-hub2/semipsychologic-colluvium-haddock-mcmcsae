@@ -21,8 +21,8 @@
 #'   \item{draw}{function to draw samples, typically from a full conditional
 #'     posterior distribution.}
 #'   \item{rprior}{function to draw from a prior distribution.}
-#'   \item{coef.names}{list of vectors of parameter coefficient names, for
-#'     vector parameters.}
+#'   \item{get_labels}{function of a single variable \code{par.name} that
+#'    returns labels for the components of the corresponding vector parameter.}
 #   next two elements undocumented; used by create_sampler, but awkward
 #   \item{store_default}{function that returns a character vector of parameter
 #     names that should be stored by default.}
@@ -168,8 +168,8 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
     parallel::clusterExport(cl, "sampler", envir=environment())
     mc <- match.call()
     mc$sampler <- quote(sampler)
-    mc$n.chain <- quote(worker$n.chain)
-    mc$start <- quote(worker$start)
+    mc$n.chain <- quote(worker[["n.chain"]])
+    mc$start <- quote(worker[["start"]])
     mc$verbose <- FALSE
     mc$n.cores <- 1L
     mc$cl <- mc$seed <- mc$export <- NULL
@@ -224,12 +224,12 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
     }
   }
 
-  if (from.prior)
+  if (from.prior) {
     draw <- sampler$rprior  # function that returns a draw from the prior
-  else {
+  } else {
     draw <- sampler$draw  # function that returns a draw from the posterior
     if (is.null(draw)) {
-      if (sampler$prior.only)
+      if (sampler[["prior.only"]])
         stop("sampler does not have a function 'draw'; please use 'from.prior=TRUE' if you want to sample from priors")
       else
         stop("sampler does not have a function 'draw'")
@@ -341,9 +341,11 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
       out[[v]][[ch]] <- matrix(NA_real_, nrow=n.draw, ncol=length(test_draw[[v]]))
   }
 
-  out[["_info"]] <- list(n.iter=n.iter, n.chain=n.chain, thin=thin, burnin=burnin, n.draw=n.draw,
-                         from.prior=from.prior, parnames=store, list.pars=list.store,
-                         call=match.call())
+  out[["_info"]] <- list(
+    n.iter=n.iter, n.chain=n.chain, thin=thin, burnin=burnin, n.draw=n.draw,
+    from.prior=from.prior, parnames=store, list.pars=list.store,
+    call=match.call()
+  )
   out[["_state"]] <- p  # current state of the system
   out[["_model"]] <- sampler  # pointer to the sampler's scope
 
@@ -365,7 +367,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
       } else {
         outfile[[v]] <- file(paste0(filename, v, ".dat"), "wb")
         write_header(outfile[[v]], n.iter, n.chain, length(test_draw[[v]]),
-          if (is.null(sampler$coef.names)) NULL else sampler$coef.names[[v]], write.single.prec)
+          if (is.function(sampler[["get_labels"]])) sampler$get_labels(v) else NULL, write.single.prec)
       }
     }
     write.size <- if (write.single.prec) 4L else NA_integer_
@@ -439,7 +441,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
           if (store.sds)
             v_update(out[["_sds"]][[v]][[ch]], plus=TRUE, p[[ch]][[v]]^2)
         }
-      }  # END for (ch in chains)
+      }
       if (write.to.file)
         for (v in to.file)
           writeBin(unlst(lapply(p, `[[`, v)), con=outfile[[v]], size=write.size)
@@ -456,7 +458,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
     if (i %% 10L == 0L && verbose) cat("\riteration", i)
     if (i %% n.progress == 0L) {  # show progress
       if (length(trace.convergence) && (n.chain > 1L) && (index > 1L)) {
-        diagnostic <- unlst(lapply(trace.convergence, \(v) R_hat(get_from(out[[v$name]], v$range, draws=seq_len(index)))))
+        diagnostic <- unlst(lapply(trace.convergence, \(v) R_hat(get_from(out[[v[["name"]]]], v[["range"]], draws=seq_len(index)))))
         names(diagnostic) <- trace.convergence.names
         if (verbose) {
           cat("\n")
@@ -470,7 +472,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
       if (verbose && length(plot.trace)) {
         i0 <- max(index - (n.progress %/% thin) + 1L, 1L)
         if (length(plot.trace) == 1L) {  # 1d traceplot
-          yvalues <- get_from(out[[plot.trace[[1L]]$name]], vars=plot.trace[[1L]]$range, draws=i0:index)
+          yvalues <- get_from(out[[plot.trace[[1L]][["name"]]]], vars=plot.trace[[1L]][["range"]], draws=i0:index)
           xvalues <- thin * (i0:index)
           for (ch in chains) {
             if (add.to.plot) {
@@ -486,8 +488,8 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
             }
           }  # END for (ch in chains)
         } else if (length(plot.trace) == 2L) {  # 2d traceplot
-          xvalues <- get_from(out[[plot.trace[[1L]]$name]], vars=plot.trace[[1L]]$range, draws=i0:index)
-          yvalues <- get_from(out[[plot.trace[[2L]]$name]], vars=plot.trace[[2L]]$range, draws=i0:index)
+          xvalues <- get_from(out[[plot.trace[[1L]][["name"]]]], vars=plot.trace[[1L]][["range"]], draws=i0:index)
+          yvalues <- get_from(out[[plot.trace[[2L]][["name"]]]], vars=plot.trace[[2L]][["range"]], draws=i0:index)
           for (ch in chains) {
             if (ch == 1L && (!add.to.plot || (add.to.plot && i0 == 1L)))
               plot(xvalues[[ch]], yvalues[[ch]], type=plot.type, xlim=range(unlst(xvalues)), ylim=range(unlst(yvalues)), xlab=plot.trace.names[1L], ylab=plot.trace.names[2L])
@@ -497,7 +499,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
         } else {  # pairs plot for >=3 variables
           plot.matrix <- matrix(NA_real_, n.chain * (index - i0 + 1L), length(plot.trace))
           for (v in seq_along(plot.trace))
-            plot.matrix[, v] <- unlst(get_from(out[[plot.trace[[v]]$name]], vars=plot.trace[[v]]$range, draws=i0:index))
+            plot.matrix[, v] <- unlst(get_from(out[[plot.trace[[v]][["name"]]]], vars=plot.trace[[v]][["range"]], draws=i0:index))
           pairs(plot.matrix, labels=plot.trace.names, cex.labels=1, gap=0, pch=20L, col=rep_each(chains, index - i0 + 1L))
         }
         Sys.sleep(0)  # forces the plot to update
@@ -526,8 +528,8 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
     # class attributes set at the end of the simulation for faster assignment
     class(out) <- "mcdraws"
     for (v in store) {
-      if (!is.null(sampler$coef.names))
-        attr(out[[v]], "labels") <- sampler$coef.names[[v]]
+      if (is.function(sampler[["get_labels"]]))
+        attr(out[[v]], "labels") <- sampler$get_labels(v)
       if (is.null(attr(out[[v]], "labels")))
         if (n_vars(out[[v]]) == 1L)
           attr(out[[v]], "labels") <- v
@@ -821,7 +823,7 @@ get_name_range <- function(composite.name, default.first=TRUE) {
 #' \donttest{
 #' ex <- mcmcsae_example()
 #' sampler <- create_sampler(ex$model, data=ex$dat)
-#' sim <- MCMCsim(sampler, store.all=TRUE)
+#' sim <- MCMCsim(sampler, store.all=TRUE, n.chain=2, n.iter=500)
 #' summary(sim$u)
 #' }
 #'
@@ -879,7 +881,7 @@ summary.dc <- function(object, probs=c(0.05, 0.5, 0.95), na.rm=FALSE, time=NULL,
 #' \donttest{
 #' ex <- mcmcsae_example()
 #' sampler <- create_sampler(ex$model, data=ex$dat)
-#' sim <- MCMCsim(sampler, store.all=TRUE)
+#' sim <- MCMCsim(sampler, store.all=TRUE, n.chain=2, n.iter=500)
 #' summary(sim)
 #' par_names(sim)
 #' summary(sim, c("beta", "v_sigma", "u_sigma"))
@@ -915,6 +917,49 @@ summary.mcdraws <- function(object, vnames=NULL, probs=c(0.05, 0.5, 0.95), na.rm
     }
   }
   class(out) <- "mcdraws_summary"
+  out
+}
+
+#' Convert a dc_summary object to a data.frame
+#'
+#' @export
+#' @method as.data.frame dc_summary
+#' @param x a summary of a draws component object.
+#' @param row.names not used.
+#' @param optional not used.
+#' @param ... not used.
+#' @returns The \code{dc_summary} object as a \code{data.frame}.
+as.data.frame.dc_summary <- function(x, row.names, optional, ...) {
+  out <- data.frame(
+    label = rownames(x),
+    unclass(x)
+  )
+  rownames(out) <- NULL
+  out
+}
+
+#' Convert a mcdraws_summary object to a data.frame
+#'
+#' @export
+#' @method as.data.frame mcdraws_summary
+#' @param x a summary of an object of class \code{mcdraws}.
+#' @param row.names not used.
+#' @param optional not used.
+#' @param ... not used.
+#' @returns The \code{mcdraws_summary} object as a \code{data.frame}.
+as.data.frame.mcdraws_summary <- function(x, row.names, optional, ...) {
+  dfpar <- as.data.frame(x[[1L]])
+  out <- data.frame(
+    parameter = names(x)[1L],
+    dfpar
+  )
+  for (par in names(x)[-1L]) {
+    dfpar <- as.data.frame(x[[par]])
+    out <- rbind(out,
+      cbind(parameter = par, dfpar)
+    )
+  }
+  rownames(out) <- NULL
   out
 }
 
@@ -1204,12 +1249,14 @@ n_eff <- function(dc, useFFT=TRUE, lag.max, cl=NULL) {
 #' @param x matrix with time (iteration number) along the rows and variables along the columns.
 #' @param demean whether to subtract from each column its mean.
 #' @returns A matrix of the same size as x with autocovariances at all lags from 1 to the number of rows.
-# TODO check whether zero-padding to (approx.) a power of 2 is possible (should be faster); use nextn()?
-ac_fft <- function(x, demean=TRUE) {
+ac_fft <- function(x, demean = TRUE) {
   nr <- nrow(x)
-  if (demean) x <- x - rep_each(fmean.matrix(x, na.rm=FALSE), nr)
-  Fx <- mvfft(rbind(sqrt(0.5/nr) * x, 0*x))  # zero-pad and FFT
-  Re(mvfft(Fx * Conj(Fx), inverse=TRUE))[seq_len(nr), , drop=FALSE] * (1/nr)
+  if (demean) x <- fmean.matrix(x, TRA="-", na.rm=FALSE)
+  n.pad <- nextn(2 * nr)
+  x.pad <- matrix(0, n.pad, ncol(x))
+  x.pad[seq_len(nr), ] <- x
+  Fx <- mvfft(x.pad)
+  Re(mvfft(Fx * Conj(Fx), inverse = TRUE))[seq_len(nr), , drop = FALSE] * (1 / (n.pad * nr))
 }
 
 #' Return Metropolis-Hastings acceptance rates
@@ -1314,11 +1361,14 @@ get_sds <- function(obj, vnames=NULL) {
 #' @param chain chain number.
 #' @returns A list with all parameter values of draw \code{iter} from chain \code{chain}.
 get_draw <- function(obj, iter, chain) {
+  info <- .subset2(obj, "_info")
+  parnames <- .subset2(info, "parnames")
+  list.pars <- .subset2(info, "list.pars")
   p <- list()
-  for (v in obj[["_info"]][["parnames"]])
-    p[[v]] <- obj[[v]][[chain]][iter, ]
-  if (!is.null(obj[["_info"]][["list.pars"]])) for (v in obj[["_info"]][["list.pars"]])
-    p[[v]] <- obj[[v]][[chain]][[iter]]
+  for (v in parnames)
+    p[[v]] <- .subset2(.subset2(obj, v), chain)[iter, ]
+  if (!is.null(list.pars)) for (v in list.pars)
+    p[[v]] <- .subset2(.subset2(.subset2(obj, v), chain), iter)
   p
 }
 
@@ -1345,6 +1395,7 @@ get_draw <- function(obj, iter, chain) {
 # TODO add option chain.wise to alow application of a vectorised function to each chain at once
 transform_dc <- function(..., fun, to.matrix=FALSE, labels=NULL) {
   objs <- list(...)
+  if (!all(b_apply(objs, \(x) inherits(x, "dc")))) stop("only dc objects allowed in '...' argument")
   nobj <- length(objs)
   nc <- n_chains(objs[[1L]])
   ni <- n_draws(objs[[1L]])

@@ -13,10 +13,11 @@ GMRF_structure(
 }
 \arguments{
 \item{type}{one of "default", "bym2" or "leroux". The default choice
-corresponds to the precision matrix \eqn{Q_A} as specified by argument \code{factor}
-of \code{gen}. Type "bym2" modifies the default structure to one with
-covariance matrix \eqn{\phi \tilde{Q}_{A}^- + (1 - \phi) I} where
-\eqn{\tilde{Q}_{A*}^-} is the generalised inverse of \eqn{Q_A}, by default
+corresponds to the precision matrix \eqn{Q_A} as implied or specified by
+argument \code{factor} of \code{gen}.
+Type "bym2" modifies the default structure to one with covariance matrix
+\eqn{\phi \tilde{Q}_{A}^- + (1 - \phi) I} where
+\eqn{\tilde{Q}_{A}^-} is the generalised inverse of \eqn{Q_A}, by default
 scaled such that the geometric mean of the marginal variances equals 1.
 Type "leroux" modifies the default structure to one with precision matrix
 \eqn{\phi Q_A + (1 - \phi) I}.}

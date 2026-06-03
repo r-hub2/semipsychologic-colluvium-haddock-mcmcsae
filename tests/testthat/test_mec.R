@@ -47,7 +47,7 @@ X <- rnorm(m, mean=1, sd=3)  # true covariate values
 z <- rnorm(m)
 eta <- -1 + 3*X  # true values
 y <- rnorm(m, mean=eta, sd = exp(0.5*(1 + z)))
-C <- c(rep(3, 100), rep(0, 300))  # measurement error for first 100 values
+C <- c(rep(3, 100), rep(0, m - 100))  # measurement error for first 100 values
 W <- X + rnorm(m, sd=sqrt(C))  # covariate subject to measurement error
 
 test_that("measurement error component in linear regression with modeled variances works", {
@@ -56,7 +56,7 @@ test_that("measurement error component in linear regression with modeled varianc
     family=f_gaussian(var.prior=pr_fixed(1), var.model = ~ reg(~ z)),
     linpred="fitted"
   )
-  expect_true(sampler$modeled.Q)
+  expect_true(sampler$family$modeled.Q)
   sim <- MCMCsim(sampler, burnin=150, n.iter=400, n.chain=2, store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$reg1[, "Mean"], 2*(-1), 0.5*(-1))
@@ -116,4 +116,28 @@ test_that("measurement error component in non-gaussian models works", {
   #points(X, summ$ME_X[, "Mean"], col="green"); abline(0, 1, col="red")
   #legend("topleft", legend=c("prior mean", "posterior mean"), col=c("black", "green"), pch=c(1,1))
   expect_lt(mean(abs(summ$ME_X[, "Mean"] - X)), mean(abs(W - X)))
+})
+
+test_that("mec only model works", {
+  eta <- 3*X  # true values
+  y <- rbinom(m, 100, 1/(1 + exp(-eta)))
+  sampler <- create_sampler(
+    y ~ mec(~ 0 + W, V=C, name="ME", debug=FALSE),
+    family=f_binomial(n.trial = 100),
+    control=sampler_control(block=FALSE)
+  )
+  sim <- MCMCsim(sampler, burnin=120, n.iter=200, n.chain=1, store.all=TRUE, verbose=FALSE)
+  summ <- summary(sim)
+  expect_in(names(summ), c("llh_", "ME", "ME_X"))
+  expect_between(summ$ME[, "Mean"], 0.5*(3), 2*(3))
+  y <- rnorm(m, mean=eta)
+  sampler <- create_sampler(
+    y ~ mec(~ 0 + W, V=C, name="ME", debug=FALSE),
+    control=sampler_control(block=FALSE)
+  )
+  sim <- MCMCsim(sampler, burnin=120, n.iter=200, n.chain=1, store.all=TRUE, verbose=FALSE)
+  summ <- summary(sim)
+  expect_in(names(summ), c("llh_", "ME", "ME_X", "sigma_"))
+  expect_between(summ$ME[, "Mean"], 0.5*(3), 2*(3))
+  expect_between(summ$sigma_[, "Mean"], 0.5, 2)
 })

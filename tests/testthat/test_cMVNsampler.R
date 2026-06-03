@@ -22,8 +22,8 @@ test_that("estimation of marginal variances of IGMRF priors works", {
   expect_length(mv, n)
 })
 
+ex <- mcmcsae_example()
 test_that("constrained MVN sampler can be used within block Gibbs sampler", {
-  ex <- mcmcsae_example()
   sampler <- create_sampler(
     y ~ reg(~x, name="beta")
       + gen(~x, factor=~fA, name="v")
@@ -33,4 +33,21 @@ test_that("constrained MVN sampler can be used within block Gibbs sampler", {
   sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=500, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$sigma_[, "Mean"], 0.5*ex$pars$sigma_, 2*ex$pars$sigma_)
+})
+
+test_that("constrained MVN sampler can be used in case of sampling errors with (sparse) non-diagonal gaussian precision", {
+  Q0 <- rsparsematrix(100, 100, density=0.1, symmetric=TRUE) + 10*Diagonal(100)
+  sampler <- create_sampler(
+    y ~ reg(~x, name="beta") +
+        gen(~x, factor=~fA, name="v") +
+        gen(factor = ~RW2(fT), name = "u"),
+    data = ex$dat,
+    control = sampler_control(cMVN.sampler = TRUE,
+      chol.control = chol_control(perm=TRUE, super = FALSE)
+    ),
+    family=f_gaussian(prec.mat = Q0)
+  )
+  expect_is(sampler$family$cholQ$cholM, "dCHMsimpl")
+  p <- sampler$start()
+  sampler$draw(p)
 })

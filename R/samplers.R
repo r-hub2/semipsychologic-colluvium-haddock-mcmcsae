@@ -11,11 +11,15 @@
 #' for regression or 'fixed' effects, \code{\link{gen}(...)} for generic random effects,
 #' \code{\link{mec}(...)} for measurement in covariates effects, and \code{\link{brt}(...)}
 #' for a Bayesian additive regression trees component. Note that an offset can be added
-#' separately, in the usual way using \code{\link{offset}(...)}.
+#' separately, in the usual way using \code{\link{offset}(...)}. As usual, the left hand side of
+#' \code{formula} specifies the response variable. For binomial and multinomial models see
+#' their respective help pages (\code{\link{f_binomial}}, \code{\link{f_multinomial}}) for
+#' different ways to specify the response variable. If no response variable is specified,
+#' \code{create_sampler} only sets up infrastructure to sample from the model parameters'
+#' prior distributions.
 #'
-#' For gaussian models, \code{formula.V} can be used to specify the variance structure of the model.
-#' Currently two specialised variance model components are supported, \code{\link{vreg}(...)} for regression
-#' effects predicting the log-variance and \code{\link{vfac}(...)} for modelled variance factors.
+#' To specify family-specific parameters or options, see the help pages for the various
+#' family specification functions, e.g. \code{\link{f_gaussian}} or \code{\link{f_negbinomial}}.
 #'
 #' @examples
 #' # first generate some data
@@ -87,8 +91,7 @@
 #'  in particular its \code{var.model} argument, to specify a variance model.
 #' @param logJacobian if the data are transformed the logarithm of the Jacobian can be supplied so that it
 #'  is incorporated in all log-likelihood computations. This can be useful for comparing information criteria
-#'  for different transformations. It should be supplied as a vector of the same size as the response variable,
-#'  and is currently only supported if \code{family="gaussian"}.
+#'  for different transformations. It should be supplied as a vector of the same size as the response variable.
 #'  For example, when a log-transformation is used on response vector \code{y}, the vector \code{-log(y)}
 #'  should be supplied. DEPRECATED, this argument has moved to \code{\link{f_gaussian}}.
 #' @param linpred a list of matrices defining (possibly out-of-sample) linear predictors to be simulated.
@@ -128,6 +131,10 @@
 #'    Dependent multinomial models made easy: Stick-breaking with the Polya-Gamma augmentation.
 #'    Advances in Neural Information Processing Systems, 3456-3464.
 #'
+#'  J.S. Liu and Y.N. Wu (1999).
+#'    Parameter expansion for data augmentation.
+#'    Journal of the American Statistical Association, 94(448), 1264-1274.
+#'
 #'  P.A. Parker, S.H. Holan and R. Janicki (2024).
 #'    Conjugate Modeling Approaches for Small Area Estimation with Heteroscedastic Structure.
 #'    Journal of Survey Statistics and Methodology 12(4), 1061-1080.
@@ -156,25 +163,9 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
       data <- as.data.frame(data)
   }
 
-  if (class(family)[1L] == "family") {
-    family <- switch(family[["family"]],
-      gaussian = f_gaussian(link = family[["link"]]),
-      binomial = f_binomial(link = family[["link"]]),
-      poisson = f_poisson(link = family[["link"]]),
-      Gamma = f_gamma(link = family[["link"]])
-    )
-  } else {
-    if (is.function(family)) {
-      family <- as.character(substitute(family))
-      if (startsWith(family, "f_")) family <- substring(family, 3L)
-    }
-    if (is.character(family)) {
-      family <- tolower(family)  # so that e.g. both "gamma" and "Gamma" allowed
-      family <- match.arg(family, c("gaussian", "binomial", "negbinomial", "poisson", "multinomial", "gamma", "gaussian_gamma"))
-      family <- eval(call(paste0("f_", family)))
-    }
-  }
+  family <- process_family(family)
 
+  # deprecation code
   if (!(is.null(sigma.fixed) && is.null(sigma.mod) && is.null(Q0) && is.null(formula.V) && is.null(logJacobian))) {
     if (family[["family"]] == "gaussian") {
       warn("arguments 'sigma.fixed', 'sigma.mod', 'Q0', 'formula.V' and 'logJacobian' are deprecated\n",
@@ -183,15 +174,14 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
       family <- f_gaussian(
         var.prior = if (isTRUE(sigma.fixed)) pr_fixed(1) else if (!is.null(sigma.mod)) sigma.mod else pr_invchisq(0, 1),
         var.vec =
-          if (is.null(Q0) || is_a_matrix(Q0)) {
+          if (is.null(Q0) || is_a_matrix(Q0))
             ~ 1
-          } else if (is.character(Q0)) {
+          else if (is.character(Q0))
             as.formula(paste0("~ I(1/", Q0, ")"))
-          } else if (is.vector(Q0)) {
+          else if (is.vector(Q0))
             1/Q0
-          } else {
-            as.formula(paste0("~ I(1/(", deparse(substitute(Q0)), "))"))
-          },
+          else
+            as.formula(paste0("~ I(1/(", deparse(substitute(Q0)), "))")),
         prec.mat = if (is_a_matrix(Q0)) Q0 else NULL,
         var.model = formula.V, logJacobian = logJacobian
       )
@@ -208,253 +198,160 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
   if (missing(formula)) stop("a formula specifying response and linear predictor model components must be specified")
   if (!inherits(formula, "formula")) stop("'formula' must be a formula")
   # Poisson approximated by negative binomial with large shape parameter and (internal) offset = -log(shape)
-  formula <- standardize_formula(formula, data=data, internal.offset = family[["family"]] == "poisson")
+  internal.offset <- family[["family"]] == "poisson" || (family[["family"]] == "multi" &&
+    any(b_apply(family[["fam.list"]], function(f) f[["family"]] == "poisson")))
+  formula <- standardise_formula(formula, data=data, internal.offset=internal.offset)
   mod <- to_mclist(formula)
   if (!length(mod)) stop("empty 'formula'")
   types <- get_types(mod)
   if (any(types %in% c("vreg", "vfac"))) stop("'vreg' and 'vfac' can only be used in variance model specification")
+  if (family[["family"]] == "gamma" && !all(types %in% c("mc_offset", "reg", "gen"))) stop("only 'reg' and 'gen' (and offset/mc_offset) components supported for family 'gamma'")
+  offset.only <- all(types == "mc_offset")
   has.bart <- any(types == "brt")
 
   control <- check_sampler_control(control)
+  if (!prior.only) {
+    # check Gibbs blocks for mean model specification
+    if (!is.null(block)) {
+      warn("'block' argument of create_sampler is deprecated; ",
+           "instead, please use argument 'control' to specify the Gibbs sampling blocks; ",
+           "by default a maximal blocking strategy is used so that coefficients are sampled together whenever possible")
+      control$block <- block
+    }
+    if (is.logical(control[["block"]])) {
+      if (control[["block"]]) {  # the default
+        # all components of type reg, gen and mec in a single block
+        control$block <- list(names(mod)[!(types %in% c("mc_offset", "brt"))])
+        # single component by default not handled as a block, unless
+        #   compute.weights=TRUE, or cMVN or CG sampler is used
+        if (!length(control[["block"]][[1L]]) || (length(control[["block"]][[1L]]) == 1L &&
+            types[!(types %in% c("mc_offset", "brt"))] != "s" && !compute.weights &&
+            !is.list(control[["CG"]]) && !control[["cMVN.sampler"]] &&
+            !(family[["link"]] == "probit" && family$control[["probit.HaarPXDA"]])))
+          control$block <- list()
+      } else {
+        control$block <- list()
+      }
+    } else {
+      for (bl in control[["block"]]) {
+        if (!all(bl %in% names(mod)))
+          stop("invalid name(s) '", paste0(setdiff(bl, names(mod)), collapse="', '"), "' in 'block'")
+        if (any(types[bl] == "brt")) stop("'brt' model component cannot be part of a Gibbs block")
+        if (any(types[bl] == "mc_offset")) stop("'offset/mc_offset' model component cannot be part of a Gibbs block")
+      }
+      rm(bl)
+      if (any_duplicated(unlst(control[["block"]]))) stop("duplicate model component name(s) in 'block'")
+    }
+    if (family[["link"]] == "probit" && !length(control[["block"]])) family$control$probit.HaarPXDA <- FALSE
+    control$single.block <- any(length(mod) == c(1L, length(unlst(control[["block"]]))))
+    control$length1mod <- length(mod) == 1L
+  }
 
   if (!prior.only && has_response(formula)) {
     y <- get_response(formula, data)
-    if (is.numeric(y)) {
-      if (!all(is.finite(y))) stop(sum(!is.finite(y)), " missing or infinite value(s) in response variable")
-    } else {
-      if (anyNA(y)) stop(sum(is.na(y)), " missing value(s) in response variable")
-    }
     n <- NROW(y)
-    if (is.null(data)) data <- n
-    y <- family$init(data, y)
+    if (is.null(data))
+      data <- n
+    else if (n != nrow(data))
+      stop("response vector has length ", n, " while data has ", nrow(data), " rows")
+    if (control[["single.block"]]) {  # computation of working response may simplify
+      control$recompute.e <- FALSE  # already computed in the coefficient sampling function
+    }
   } else {
     if (!prior.only) {
       warn("no left hand side in 'formula': setting up prior samplers only")
       prior.only <- TRUE
     }
     if (is.null(data)) {
-      if (!length(all.vars(formula))) stop("no way to determine the number of cases")
-      n <- length(get(all.vars(formula)[1L]))
+      vars <- all.vars(formula)
+      vars <- vars[!(vars %in% c("local_", "global_"))]
+      if (!length(vars)) stop("no way to determine the number of cases")
+      n <- length(eval(as.name(vars[1L]), envir=environment(formula)))
       data <- n
+      rm(vars)
     } else {
       n <- n_row(data)
     }
-    family$init(data)
+    y <- NULL
   }
   if (n < 1L) stop("empty data")
 
+  self <- environment()
+  family$sm <- self
+  family$data <- data
+  family$y <- y
+  family$`_raw_` <- NULL
+  family <- do.call(
+    getFromNamespace(paste0("ff_", family[["family"]]), "mcmcsae"),
+    family[-1L], envir=environment(formula)
+  )
+  y <- family[["y"]]
+
   Vmod <- NULL
-  if (any(family[["family"]] == c("gaussian", "gaussian_gamma"))) {
-    if (prior.only || n == 1L) {
-      scale.e <- 1
-    } else {
-      # scale.e used to generate default starting values for residuals (or fitted values for non-gaussian models)
-      # divide by number of model components + 1: each component explains part of the total variation
-      scale.e <- sd(y) / (length(mod) + 1L)
-      if (scale.e == 0 || !is.finite(scale.e)) scale.e <- 1
-    }
-    sigma.fixed <- family[["sigma.fixed"]]
-    modeled.Q <- family[["modeled.Q"]]
-    Q0.type <- family[["Q0.type"]]
-    Q0 <- family[["Q0"]]
-    scale.sigma <- scale.e * fmean.default(sqrt(diag(Q0)), na.rm=FALSE)
-    if (!sigma.fixed) sigma.mod <- family[["var.prior"]]
-    if (modeled.Q) {
+  if (any(family[["family"]] == c("gaussian", "student_t", "gaussian_gamma"))) {
+    if (family[["modeled.Q"]]) {
       Vmod <- family[["Vmod"]]
       if (any(names(mod) %in% names(Vmod))) stop("names of model components in 'var.model' must be distinct from names used in mean model 'formula'")
     }
-    f_mean <- identity  # mean function acting on linear predictor
-  } else {  # binomial, multinomial, negative binomial, Poisson or gamma likelihood
-    sigma.fixed <- TRUE
-    Q0 <- CdiagU(n)
-    Q0.type <- "unit"
-    modeled.Q <- family[["link"]] != "probit" && family[["family"]] != "gamma"
-    scale.e <- if (family[["family"]] == "gamma") 1 else 2.5  # is 2.5 reasonable for all other cases?
-    scale.sigma <- scale.e
-    if (family[["family"]] == "binomial") {
-      ny <- family[["ny"]]
-      f_mean <- function(eta) ny / (1 + exp(-eta))  # mean function acting on linear predictor
-    } else if (family[["family"]] == "multinomial") {
-      cats <- family[["cats"]]
-      ny <- family[["ny"]]
-      Km1 <- family[["K"]] - 1L
-      n0 <- n
-      n <- n0 * Km1
-    } else {  # negative binomial, Poisson or gamma likelihood
-      if (family[["family"]] == "negbinomial") {
-        if (family[["shape.fixed"]]) {
-          if (!prior.only) {
-            ry <- family[["shape0"]]
-            ny <- y + ry  # used in Polya-Gamma full conditional
-          }
-          f_mean <- function(eta) family[["shape0"]] * exp(eta)  # mean function acting on linear predictor
-        } else {
-          if (!prior.only) y <- as.numeric(y)  # for C++ rCRT function; alternatively force to be integer
-          f_mean <- function(eta) stop("negative binomial family with modelled shape parameter: mean also depends on this parameter")
-        }
-      } else if (family[["family"]] == "poisson") {
-        ry <- family$control[["nb.shape"]]
-        if (!prior.only) ny <- y + ry  # used in Polya-Gamma full conditional
-        f_mean <- function(eta) exp(eta)  # mean function acting on linear predictor
-      }
-    }
-    if (!prior.only && family[["link"]] != "probit") {
-      if (control[["PG.approx"]]) {
-        mPG <- as.integer(control[["PG.approx.m"]])
-        if (all(length(mPG) != c(1L, n))) stop("invalid value for option 'PG.approx.m'")
-        rPolyaGamma <- function(b, c) CrPGapprox(n, b, c, mPG)
-      } else {
-        if (!requireNamespace("BayesLogit", quietly=TRUE)) stop("please install package 'BayesLogit' and try again")
-        if (family[["family"]] == "binomial") {
-          ny[ny == 0] <- .Machine$double.eps  # to prevent generation of NA by BayesLogit::rpg
-        }
-        rpg <- BayesLogit::rpg
-        rPolyaGamma <- function(b, c) rpg(n, b, c)
-      }
-    }
+  } else if (family[["family"]] == "multinomial") {
+    n <- n * (family[["K"]] - 1L)
   }
-
-  e.is.res <- family[["link"]] == "identity"
-  if (e.is.res)
-    y_eff <- function() copy_vector(y)
-  else
-    y_eff <- function() 0
-
-  if (family[["family"]] == "gamma" && !all(types %in% c("mc_offset", "reg", "gen"))) stop("only 'reg' and 'gen' (and offset/mc_offset) components supported for family 'gamma'")
-  # check Gibbs blocks for mean model specification
-  if (!is.null(block)) {
-    warn("'block' argument of create_sampler is deprecated; ",
-      "instead, please use argument 'control' to specify the Gibbs sampling blocks; ",
-      "by default a maximal blocking strategy is used so that coefficients are sampled together whenever possible")
-    control$block <- block
-  }
-  block <- control[["block"]]
-  if (is.logical(block)) {
-    if (block) {
-      # all components of type reg, gen and mec in a single block
-      block <- list(names(mod)[!(types %in% c("mc_offset", "brt"))])
-      # single component by default not handled as a block, unless
-      #   compute.weights=TRUE, or cMVN or CG sampler is used
-      if (!length(block[[1L]]) || (length(block[[1L]]) == 1L && !compute.weights && !is.list(control[["CG"]]) && !control[["cMVN.sampler"]]))
-        block <- list()
-    } else
-      block <- list()
-  } else {
-    for (k in seq_along(block)) {
-      if (!all(block[[k]] %in% names(mod)))
-        stop("invalid name(s) '", paste0(setdiff(block[[k]], names(mod)), collapse="', '"), "' in 'block'")
-      if (any(types[block[[k]]] == "brt")) stop("'brt' model component cannot be part of a Gibbs block")
-      if (any(types[block[[k]]] == "mc_offset")) stop("'offset/mc_offset' model component cannot be part of a Gibbs block")
-    }
-    if (any_duplicated(unlst(block))) stop("duplicate model component name(s) in 'block'")
-  }
-  single.block <- any(length(mod) == c(1L, length(unlst(block))))
-  offset.only <- all(types == "mc_offset")
 
   if (!prior.only) {
     if (control[["cMVN.sampler"]] || !is.null(control[["CG"]])) {
       if (family[["family"]] == "gamma")
         stop("conjugate gradients and 'cMVN.sampler' algorithms not supported for 'gamma' family")
-      if (!length(block)) {
+      if (!length(control[["block"]])) {
         warn("conjugate gradients and 'cMVN.sampler' algorithms currently only used for blocked Gibbs sampler")
         control$cMVN.sampler <- FALSE
         control$CG <- NULL
       }
     }
-    if (single.block) {  # computation of working response may simplify
-      control$recompute.e <- FALSE  # already computed in the coefficient sampling function
-      y <- as.numeric(y)  # some C++ matrix algebra functions expect double
-    }
 
-    # function Q_e computes matrix-vector product of Q and working response e_
-    if (any(family[["family"]] == c("gaussian", "gaussian_gamma"))) {
-      if (modeled.Q) {
-        Q_e <- switch(Q0.type,
-          unit=, diag = function(p) p[["Q_"]] * p[["e_"]],
-          # in case of non-diagonal Q0, full precision matrix stored as p[["QM_"]]
-          symm = function(p) p[["QM_"]] %m*v% p[["e_"]]
-        )
-      } else {
-        Q_e <- switch(Q0.type,
-          unit = function(p) p[["e_"]],
-          diag = function(p) Q0@x * p[["e_"]],
-          symm = function(p) Q0 %m*v% p[["e_"]]
-        )
-      }
-    } else if (family[["family"]] != "gamma") {
-      if (family[["link"]] == "probit") {
-        if (single.block)
-          Q_e <- function(p) p[["z_"]]
-        else
-          Q_e <- function(p) p[["z_"]] - p[["e_"]]
-      } else if (family[["family"]] == "negbinomial" && !family[["shape.fixed"]]) {
-        if (single.block)
-          Q_e <- function(p) 0.5 * (y - family$get_shape(p))
-        else
-          Q_e <- function(p) 0.5 * (y - family$get_shape(p)) - p[["Q_"]] * p[["e_"]]
-      } else {
-        if (family[["family"]] == "negbinomial" || family[["family"]] == "poisson")
-          y_shifted <- 0.5 * (y - ry)
-        else  # binomial or multinomial
-          y_shifted <- y - 0.5 * family[["ny"]]
-        if (single.block)
-          Q_e <- function(p) y_shifted
-        else
-          Q_e <- function(p) y_shifted - p[["Q_"]] * p[["e_"]]
-      }
-    }
-    if (!is.null(control[["CG"]]) || control[["cMVN.sampler"]]) {
-      # set up a function that multiplies by L Chol factor of Q, for sampling from N(., Q)
-      if (any(family[["family"]] == c("gaussian", "gaussian_gamma"))) {
-        if (modeled.Q) {
-          cholQ <- switch(Q0.type,
-            unit=, diag = build_chol(runif(n, 0.9, 1.1)),
-            symm = build_chol(crossprod_sym(Cdiag(runif(0.9, 1.1)), Q0), control=control[["chol.control"]])
-          )
-        } else {
-          cholQ <- switch(Q0.type,
-            unit = build_chol(CdiagU(n)),
-            diag = build_chol(Cdiag(Q0@x)),
-            symm = build_chol(Q0, control=control[["chol.control"]])
-          )
-        }
-      } else {
-        if (family[["link"]] == "probit")
-          cholQ <- build_chol(CdiagU(n))
-        else
-          cholQ <- build_chol(runif(n, 0.9, 1.1))
-      }
-      # draw from MVN with variance(!) Q
-      drawMVNvarQ <- function(p) {
-        if (modeled.Q) {
-          if (Q0.type == "symm")
-            cholQ$update(p[["QM_"]])
-          else
-            cholQ$update(p[["Q_"]])
-        }
-        cholQ$Ltimes(Crnorm(n), transpose=FALSE)
-      }
-    }
   }  # END if (!prior.only)
 
-  self <- environment()
-
-  coef.names <- vector(mode="list", length(mod))
-  names(coef.names) <- names(mod)
   for (k in seq_along(mod)) {
     mc <- mod[[k]]
     mc$name <- names(mod)[k]
-    mc$e <- self
-    mc$in.block <- any(mc[["name"]] == unlst(block))
+    mc$sc <- control
+    mc$fam <- family
+    mc$in.block <- any(mc[["name"]] == unlst(control[["block"]]))
+    mc$prior.only <- prior.only
+    mc$compute.weights <- compute.weights
+    mc$data <- data
     mc <- as.list(mc)[-1L]
     mod[[mc[["name"]]]] <- do.call(
       getFromNamespace(paste0("mc_", types[k]), "mcmcsae"),
       mc, envir=environment(formula)
     )
   }
+  labels_map <- list()  # information where to retrieve vector parameter labels
+  for (mc in mod) {
+    m <- fmatch(names(mc[["label_funs"]]), names(labels_map))
+    if (!allNA(m)) stop("duplicate use of parameter name '", names(mc[["label_funs"]])[whichNA(m, invert=TRUE)], "'")
+    labels_map <- c(labels_map, mc[["label_funs"]])
+  }
+  if (!is.null(Vmod)) {
+    for (mc in Vmod) {
+      m <- fmatch(names(mc[["label_funs"]]), names(labels_map))
+      if (!allNA(m)) stop("duplicate use of parameter name '", names(mc[["label_funs"]])[whichNA(m, invert=TRUE)], "'")
+      labels_map <- c(labels_map, mc[["label_funs"]])
+    }
+  }
+  get_labels <- function(par.name) {
+    labs <- labels_map[[par.name]]
+    if (is.function(labs)) labs() else NULL
+  }
   if (family[["family"]] == "poisson") {
     # add internal offset for negbinomial Poisson approximation to (first) mc_offset term
-    mod[[whichv(types, "mc_offset")[1L]]]$add_internal_offset(-log(ry))
+    mod[[whichv(types, "mc_offset")[1L]]]$add_internal_offset(-family[["log.shape"]])
+  } else if (family[["family"]] == "multi") {
+    for (fam in family[["fam.list"]]) {
+      if (fam[["family"]] == "poisson") {
+        mod[[whichv(types, "mc_offset")[1L]]]$add_internal_offset(-fam[["log.shape"]], sub=fam[["sub"]])
+      }
+    }
+    rm(fam)
   }
 
 
@@ -463,100 +360,13 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
   # rprior: function to draw parameters from their priors
   # start: function to create starting values (including for residuals/linear predictor e_)
   rprior <- function(p) {p <- list()}
-  switch(family[["family"]],
-    gaussian = if (!family[["sigma.fixed"]] || family[["modeled.Q"]]) rprior <- add(rprior, quote(p <- family$rprior(p))),
-    negbinomial = if (!family[["shape.fixed"]]) rprior <- add(rprior, quote(p[["negbin_shape_"]] <- 1 / family$inv.shape.prior$rprior())),
-    gamma=, gaussian_gamma = if (!family[["alpha.fixed"]]) rprior <- add(rprior, quote(p[["gamma_shape_"]] <- family$shape.prior$rprior()))
-  )
+  if (is.function(family$rprior)) rprior <- add(rprior, quote(p <- family$rprior(p)))
 
-  if (any(family[["family"]] == c("gaussian", "gaussian_gamma"))) {
-    if (modeled.Q) {
-      # check Gibbs blocks for variance model specification
-      types <- family[["types"]]
-      if (is.logical(control[["block.V"]])) {
-        if (control[["block.V"]]) {
-          # all components of type reg and gen in a single block
-          block.V <- list(names(Vmod)[types %in% c("reg", "gen")])
-          # a single component by default not handled as a block
-          if (length(block.V[[1L]]) <= 1L) block.V <- NULL
-        } else {
-          block.V <- NULL
-        }
-      } else {
-        block.V <- control[["block.V"]]
-        for (k in seq_along(block.V)) {
-          if (!all(block.V[[k]] %in% names(Vmod)))
-            stop("invalid name(s) '", paste0(setdiff(block.V[[k]], names(Vmod)), collapse="', '"), "' in 'block.V'")
-          if (any(types[block.V[[k]]] %in% c("vreg", "vfac"))) stop("'vreg' and 'vfac' components cannot be part of a Gibbs block")
-        }
-        if (any_duplicated(unlst(block.V))) stop("duplicate model component name in 'block.V'")
-      }
-      single.V.block <- any(length(Vmod) == c(1L, length(unlst(block.V))))
-
-      for (k in seq_along(Vmod)) {
-        mc <- Vmod[[k]]
-        mc$name <- names(Vmod)[k]
-        mc$e <- self
-        mc$in.block <- any(mc[["name"]] == unlst(block.V))
-        mc <- as.list(mc)[-1L]
-        Vmod[[mc[["name"]]]] <- do.call(
-          getFromNamespace(paste0("mc_", types[k]), "mcmcsae"),
-          mc, envir=parent.frame()
-        )
-      }
-      family$set_Vmod(Vmod)
-    } else {
-      block.V <- NULL
-    }
+  for (k in seq_along(mod)) {
+    if (is.function(mod[[k]][["rprior"]]))
+      rprior <- add(rprior, bquote(p <- mod[[.(k)]]$rprior(p)))
   }
-
-  for (k in seq_along(mod))
-    rprior <- add(rprior, bquote(p <- mod[[.(k)]]$rprior(p)))
-
-  if (!has.bart) {
-    # for max likelihood optimization, currently not available for models including a bart term
-    # build a list of indices for vector representation of all likelihood parameters
-    vec_list <- list()
-    n_vec_list <- 0L
-    # single block sampler assumes coefficients are at the start of the parameter vector
-    for (k in seq_along(mod)) if (mod[[k]]$type != "mc_offset") {
-      vec_list[[names(mod)[k]]] <- (n_vec_list + 1L):(n_vec_list + mod[[k]][["q"]])
-      n_vec_list <- n_vec_list + mod[[k]][["q"]]
-    }
-    if (!sigma.fixed) {
-      vec_list[["sigma_"]] <- n_vec_list + 1L
-      n_vec_list <- n_vec_list + 1L
-    }
-    if (!is.null(Vmod)) {
-      for (k in seq_along(Vmod)) {
-        vec_list[[names(Vmod)[k]]] <- (n_vec_list + 1L):(n_vec_list + Vmod[[k]][["q"]])
-        n_vec_list <- n_vec_list + Vmod[[k]][["q"]]
-      }
-    }
-    switch(family[["family"]],
-      negbinomial = if (!family[["shape.fixed"]]) {
-        vec_list[["negbin_shape_"]] <- n_vec_list + 1L
-        n_vec_list <- n_vec_list + 1L
-      },
-      gamma=, gaussian_gamma = if (!family[["alpha.fixed"]]) {
-        vec_list[["gamma_shape_"]] <- n_vec_list + 1L
-        n_vec_list <- n_vec_list + 1L
-      }
-    )
-    vec2list <- function(x) {
-      pars <- names(vec_list)
-      out <- list()
-      for (k in seq_along(vec_list)) out[[pars[k]]] <- x[vec_list[[k]]]
-      out
-    }
-    list2vec <- function(p) {
-      pars <- names(vec_list)
-      out <- rep.int(NA_real_, n_vec_list)
-      for (k in seq_along(vec_list)) out[vec_list[[k]]] <- p[[pars[k]]]
-      out
-    }
-  }
-
+    
   if (is.null(linpred)) {
     do.linpred <- FALSE
   } else {
@@ -584,16 +394,11 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
   rprior <- add(rprior, quote(p))
 
   # What parameters to store by default? This information is used by MCMCsim.
-  store_default <- function(prior.sampler=FALSE) {
-    out <- if (prior.sampler) NULL else "llh_"
-    if (!sigma.fixed) out <- c(out, "sigma_")
-    if (do.linpred) out <- c(out, "linpred_")
-    switch(family[["family"]],
-      negbinomial = if (!family[["shape.fixed"]]) out <- c(out, "negbin_shape_"),
-      gamma=, gaussian_gamma = if (!family[["alpha.fixed"]]) out <- c(out, "gamma_shape_")
-    )
+  store_default <- function(prior=FALSE) {
+    out <- if (prior) NULL else "llh_"
     for (mc in mod) out <- c(out, mc[["store.default"]])
-    for (mc in Vmod) out <- c(out, mc[["store.default"]])
+    out <- c(out, family$store_default())
+    if (do.linpred) out <- c(out, "linpred_")
     out
   }
   store_mean_default <- function(prior.sampler=FALSE) {
@@ -601,7 +406,7 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
       out <- NULL
     } else {
       out <- "e_"
-      if (modeled.Q && any(family[["family"]] == c("gaussian", "gaussian_gamma"))) out <- c(out, "Q_")
+      if (family[["modeled.Q"]] && any(family[["family"]] == c("gaussian", "student_t", "gaussian_gamma"))) out <- c(out, "Q_")
       if (compute.weights) out <- c(out, "weights_")
     }
     out
@@ -612,25 +417,23 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
     return(self)
   }
 
-
   if (compute.weights) {
     if (!do.linpred) stop("weights can only be computed for a linear predictor specified by argument 'linpred'")
-    if (!single.block) stop("'compute.weights=TRUE' cannot be combined with 'block=FALSE'")
+    if (!control[["single.block"]]) stop("'compute.weights=TRUE' only supported for a fully blocked Gibbs sampler")
     if (family[["family"]] == "gamma") stop("weights computation not supported for gamma sampling distribution")
   }
 
-  if (length(block)) {
+  if (length(control[["block"]])) {
     mbs <- list()
-    for (k in seq_along(block)) mbs[[k]] <- create_mc_block(mod[block[[k]]])
-  }
-
-  if (any(family[["family"]] == c("gaussian", "gaussian_gamma")) && length(block.V)) {
-    mbs.V <- list()
-    for (k in seq_along(block.V)) mbs.V[[k]] <- create_mc_block(Vmod[block.V[[k]]])
+    for (k in seq_along(control[["block"]]))
+      mbs[[k]] <- create_mc_block(mod[control[["block"]][[k]]],
+        family, control, prior.only=prior.only,
+        compute.weights=compute.weights, linpred=linpred
+      )
   }
 
   # compute residuals/linear predictor e_ for state p
-  if (e.is.res) {  # residuals
+  if (family[["e.is.res"]]) {  # residuals
     compute_e <- function(p) {
       e <- y - mod[[1L]]$lp(p)
       for (mc in mod[-1L]) mc$lp_update(e, plus=FALSE, p)
@@ -648,7 +451,7 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
     if (is.null(draws[["e_"]])) {
       nr <- n_chains(draws) * n_draws(draws)
       all.units <- length(i) == n
-      if (e.is.res) {
+      if (family[["e.is.res"]]) {
         # residuals
         e_i <- matrix(rep_each(y[i], nr), nr, length(i))
         for (mc in mod)
@@ -677,157 +480,20 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
       p$e_ <- compute_e(p)
     } else {
       if (is.null(p[["e_"]])) {
-        p$e_ <- Crnorm(n, sd=scale.e)
+        p$e_ <- Crnorm(n, sd=family[["scale.e"]])
       } else {
         if (length(p[["e_"]]) != n) stop("wrong length for 'e_' start value")
-        p$e_ <- copy_vector(p[["e_"]])
+        p$e_ <- copy_obj(p[["e_"]])
       }
     }
   }
   MHpars <- NULL
   adapt <- function(ar) {}
 
-  if ((family[["family"]] == "gaussian" || family[["family"]] == "gaussian_gamma") && modeled.Q) {
-    if (!single.V.block) {
-      # recompute precision Q for numerical stability
-      draw <- add(draw, quote(p <- family$compute_Q(p)))
-    }
-    for (k in seq_along(Vmod)) {
-      mc <- Vmod[[k]]
-      switch(mc[["type"]],
-        vreg = MHpars <- c(MHpars, mc[["name"]]),
-        vfac = {
-          if (mc$prior[["type"]] == "invchisq" && is.list(mc$prior[["df"]])) {
-            MHpars <- c(MHpars, mc[["name_df"]])
-            if (mc$prior$df[["adapt"]])
-              adapt <- add(adapt, bquote(Vmod[[.(k)]]$adapt(ar)))
-          }
-        },
-        gen = {
-          MHpars <- c(MHpars, if (mc[["usePX"]]) mc[["name_sigma_raw"]] else mc[["name_sigma"]])
-          if (mc$control[["MHprop"]] == "LNRW")
-            adapt <- add(adapt, bquote(Vmod[[.(k)]]$adapt(ar)))
-        }
-      )
-      if (!(mc[["type"]] == "reg" && mc[["in.block"]])) {
-        draw <- add(draw, bquote(p <- Vmod[[.(k)]]$draw(p)))
-        start <- add(start, bquote(p <- Vmod[[.(k)]]$start(p)))
-      }
-    }
-    if (length(block.V)) {
-      for (k in seq_along(mbs.V)) {
-        draw <- add(draw, bquote(p <- mbs.V[[.(k)]]$draw(p)))
-        start <- add(start, bquote(p <- mbs.V[[.(k)]]$start(p)))
-      }
-    }
-    start <- add(start, quote(p <- family$compute_Q(p)))
-  }
-  llh <- family$make_llh(y)
-  if (family[["family"]] == "gaussian" || family[["family"]] == "gaussian_gamma") {
-    draw <- draw |>
-      add(quote(SSR <- dotprodC(p[["e_"]], Q_e(p)))) |>
-      add(quote(p$llh_ <- llh(p, SSR)))
-  } else if (family[["family"]] == "gamma") {
-    draw <- add(draw, quote(p$llh_ <- llh(p)))
-  }
-  if (family[["family"]] == "gamma" || family[["family"]] == "gaussian_gamma") {
-    if (!family[["alpha.fixed"]]) {
-      if (family[["family"]] == "gamma")
-        draw_shape <- family$make_draw_shape(y)
-      else  # gaussian_gamma
-        draw_shape <- family$make_draw_shape(family[["sigmasq"]])
-      draw <- add(draw, quote(p$gamma_shape_ <- draw_shape(p)))
-      # shape start value should not be too small
-      start <- add(start, quote(if (is.null(p[["gamma_shape_"]])) p$gamma_shape_ <- exp(runif(1L, -3, 4))))
-      MHpars <- c(MHpars, "gamma_shape_")
-      if (family$control[["type"]] == "RWLN" && family$control[["adaptive"]]) {
-        adapt <- add(adapt, quote(family$control$adapt(ar[["gamma_shape_"]])))
-      }
-    }
-  } else if (family[["family"]] == "negbinomial") {
-    draw <- add(draw, quote(p$llh_ <- llh(p)))
-    if (!family[["shape.fixed"]]) {
-      if (family$inv.shape.prior[["type"]] == "fixed") {
-        start <- add(start, quote(if (is.null(p[["negbin_shape_"]])) p$negbin_shape_ <- 1/family$inv.shape.prior$rprior()))
-      } else {
-        start <- add(start, quote(
-          if (is.null(p[["negbin_shape_"]])) {
-            p$negbin_shape_ <- runif(1L, 0.1, 10)
-          } else {
-            if (length(p[["negbin_shape_"]]) != 1L) stop("wrong length for 'negbin_shape_' start value")
-            p[["negbin_shape_"]] <- as.numeric(p[["negbin_shape_"]])
-            if (is.na(p[["negbin_shape_"]]) || p[["negbin_shape_"]] <= 0) stop("'negbin_shape_' start value must be a positive number")
-          }
-        ))
-      }
-      draw_shape <- family$make_draw_shape(y)
-      draw <- add(draw, quote(p$negbin_shape_ <- draw_shape(p)))
-    }
-    draw <- add(draw, quote(ny <- y + family$get_shape(p)))  # used in Polya-Gamma full conditional for latent precision vector
-    start <- add(start, quote(ny <- y + family$get_shape(p)))
-  }
-  if (family[["link"]] == "probit") {  # binomial family
-    draw <- draw |>
-      add(quote(p[["z_"]] <- CrTNprobit(p[["e_"]], y))) |>
-      add(quote(p$llh_ <- llh(p)))
-    start <- start |>
-      add(quote(if (is.null(p[["z_"]])) p$z_ <- CrTNprobit(p[["e_"]], y))) |>
-      add(quote(if (length(p[["z_"]]) != n) stop("wrong length for 'z_' start value")))
-  } else if (any(family[["family"]] == c("binomial", "multinomial", "negbinomial", "poisson"))) {
-    draw <- draw |>
-      add(quote(p[["Q_"]] <- rPolyaGamma(ny, p[["e_"]]))) |>
-      add(quote(p$llh_ <- llh(p)))
-    start <- start |>
-      add(quote(if (is.null(p[["Q_"]])) p$Q_ <- rPolyaGamma(ny, p[["e_"]]))) |>
-      add(quote(if (length(p[["Q_"]]) != n) stop("wrong length for 'Q_' start value")))
-  }
-
-  if (!sigma.fixed) {
-    draw_sigma <- function(p, SSR) {}
-    # compute df.data + update SSR with contributions from reg, mec, gen and s components
-    df.data <- n
-    for (k in seq_along(mod)) {
-      mc <- mod[[k]]
-      if (any(mc[["type"]] == c("reg", "mec", "gen", "s"))) {
-        df.data <- df.data + mc[["df.add"]]
-        if (!is.null(mc[["SSR_add"]]))
-          draw_sigma <- add(draw_sigma, bquote(SSR <- SSR + mod[[.(k)]]$SSR_add(p)))
-      }
-    }
-    switch(sigma.mod[["type"]],
-      fixed = {
-        draw_sigma <- add(draw_sigma, quote(p$sigma_ <- sqrt(sigma.mod[["value"]])))
-      },
-      invchisq = {
-        if (is.list(sigma.mod[["scale"]]))
-          draw_sigma <- add(draw_sigma, quote(p$sigma_ <- sqrt(sigma.mod$draw(df.data, SSR, 1 / p[["sigma_"]]^2))))
-        else
-          draw_sigma <- add(draw_sigma, quote(p$sigma_ <- sqrt(sigma.mod$draw(df.data, SSR))))
-      },
-      exp = {
-        rgig <- GIGrvg::rgig
-        draw_sigma <- add(draw_sigma, quote(p$sigma_ <- sqrt(rgig(1L, 1 - 0.5*df.data, SSR, 2/sigma.mod[["scale"]]))))
-      },
-      gig = {
-        rgig <- GIGrvg::rgig
-        draw_sigma <- add(draw_sigma, quote(p$sigma_ <- sqrt(rgig(1L, sigma.mod[["p"]] - 0.5*df.data, sigma.mod[["b"]] + SSR, sigma.mod[["a"]]))))
-      }
-    )
-    draw_sigma <- add(draw_sigma, quote(p))
-
-    draw <- add(draw, quote(p <- draw_sigma(p, SSR)))
-
-    if (sigma.mod[["type"]] == "fixed") {
-      start <- add(start, quote(if (is.null(p[["sigma_"]])) p$sigma_ <- sqrt(sigma.mod$rprior())))
-    } else {
-      start <- add(start, quote(
-        if (is.null(p[["sigma_"]]))
-          p$sigma_ <- runif(1L, 0.1 * scale.sigma, scale.sigma)
-        else if (length(p[["sigma_"]]) != 1L)
-          stop("wrong length for 'sigma_' start value")
-      ))
-    }
-  }  # END if (!sigma.fixed)
+  draw <- add(draw, quote(p <- family$draw(p)))
+  if (is.function(family$start)) start <- add(start, quote(p <- family$start(p)))
+  MHpars <- c(MHpars, family[["MHpars"]])
+  if (is.function(family[["adapt"]])) adapt <- add(adapt, quote(family$adapt(ar)))
 
   for (k in seq_along(mod)) {
     mc <- mod[[k]]
@@ -835,28 +501,24 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
       if (mc[["gl"]] && mc[["usePX"]]) MHpars <- c(MHpars, mc[["name_xi"]])
       if (mc$strucA[["update.Q"]]) {
         MHpars <- c(MHpars, mc$strucA[["name_ext"]])
-        if (mc$strucA$control[["adaptive"]]) {
+        if (mc$strucA$control[["adaptive"]])
           adapt <- add(adapt, bquote(mod[[.(k)]]$strucA$control$adapt(ar[[.(mc$strucA[["name_ext"]])]])))
-        }
       }
       if (!is.null(mc[["AR1.inferred"]])) {
         MHpars <- c(MHpars, mc[["name_AR1"]])
-        if (mc$AR1sampler$MH[["adaptive"]]) {
+        if (mc$AR1sampler$MH[["adaptive"]])
           adapt <- add(adapt, bquote(mod[[.(k)]]$AR1sampler$MH$adapt(ar[[.(mc[["name_AR1"]])]])))
-        }
       }
       if (family[["family"]] == "gamma" && mc$control[["MHprop"]] == "LNRW") {
         MHpars <- c(MHpars, if (mc[["usePX"]]) mc[["name_sigma_raw"]] else mc[["name_sigma"]])
         adapt <- add(adapt, bquote(mod[[.(k)]]$adapt(ar)))
       }
     }
-    if (mc[["type"]] != "mc_offset" && !(mc[["type"]] == "reg" && mc[["in.block"]])) {
-      start <- add(start, bquote(p <- mod[[.(k)]]$start(p)))
-      draw <- add(draw, bquote(p <- mod[[.(k)]]$draw(p)))
-    }
+    if (is.function(mc[["start"]]))  start <- add(start, bquote(p <- mod[[.(k)]]$start(p)))
+    if (is.function(mc[["draw"]])) draw <- add(draw, bquote(p <- mod[[.(k)]]$draw(p)))
   }
 
-  if (length(block)) {
+  if (length(control[["block"]])) {
     for (k in seq_along(mbs)) {
       draw <- add(draw, bquote(p <- mbs[[.(k)]]$draw(p)))
       start <- add(start, bquote(p <- mbs[[.(k)]]$start(p)))
@@ -868,30 +530,68 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 
   draw <- add(draw, quote(p))  # return state p
 
-  if (!control[["recompute.e"]] && !single.block) {
+  if (!control[["recompute.e"]] && !control[["single.block"]]) {
     # adding this sometimes gives bad starting values in case of single.block (no need anyway in that case)
     start <- add(start, quote(p$e_ <- compute_e(p)))
   }
   start <- add(start, quote(p))
   if (length(body(adapt)) <= 1L) rm(adapt)
 
-  fam_llh_i <- family$make_llh_i(y)
+  fam_llh_i <- family[["llh_i"]]
   llh_i <- function(draws, i=seq_len(n)) {
     e_i <- compute_e_i(draws, i)
     fam_llh_i(draws, i, e_i)
   }
 
-  # log-likelihood function for optimization: function of a vector instead of list
-  if (!has.bart) {
+  if (!family[["family"]] == "multi" && !has.bart) {
+    # max likelihood optimization
+    # currently not available for multi-response models or models including a bart term
+    # build a list of indices for vector representation of all likelihood parameters
+    vec_list <- list()
+    n_vec_list <- 0L
+    # single block sampler assumes coefficients are at the start of the parameter vector
+    for (k in seq_along(mod)) if (mod[[k]]$type != "mc_offset") {
+      vec_list[[names(mod)[k]]] <- (n_vec_list + 1L):(n_vec_list + mod[[k]][["q"]])
+      n_vec_list <- n_vec_list + mod[[k]][["q"]]
+    }
+    if (!family[["sigma.fixed"]]) {
+      vec_list[["sigma_"]] <- n_vec_list + 1L
+      n_vec_list <- n_vec_list + 1L
+    }
+    if (!is.null(Vmod)) {
+      for (k in seq_along(Vmod)) {
+        vec_list[[names(Vmod)[k]]] <- (n_vec_list + 1L):(n_vec_list + Vmod[[k]][["q"]])
+        n_vec_list <- n_vec_list + Vmod[[k]][["q"]]
+      }
+    }
+    switch(family[["family"]],
+      negbinomial = if (!family[["shape.fixed"]]) {
+        vec_list[["negbin_shape_"]] <- n_vec_list + 1L
+        n_vec_list <- n_vec_list + 1L
+      },
+      gamma=, gaussian_gamma = if (!family[["alpha.fixed"]]) {
+        vec_list[["gamma_shape_"]] <- n_vec_list + 1L
+        n_vec_list <- n_vec_list + 1L
+      }
+    )
+    pars <- names(vec_list)
+    vec2list <- function(x) {
+      out <- list()
+      for (k in seq_along(vec_list)) out[[pars[k]]] <- x[vec_list[[k]]]
+      out
+    }
+    list2vec <- function(p) {
+      out <- rep.int(NA_real_, n_vec_list)
+      for (k in seq_along(vec_list)) out[vec_list[[k]]] <- p[[pars[k]]]
+      out
+    }
+    # log-likelihood function for optimisation: function of a vector instead of list
     llh_opt <- function(x) {
       p <- vec2list(x)
       p$e_ <- compute_e(p)
-      if (family[["family"]] == "gaussian") {
-        SSR <- dotprodC(p[["e_"]], Q_e(p))
-        llh(p, SSR)
-      } else {
-        llh(p)
-      }
+      if (any(family[["family"]] == c("gaussian", "student_t", "gaussian_gamma")))
+        p$SSR_ <- dotprodC(p[["e_"]], family$Q_e(p))
+      family$llh(p)
     }
   }
 
@@ -904,6 +604,10 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 
 
 #' Set computational options for the sampling algorithms
+#'
+#' This function can be used to specify computational options
+#' by passing the result to the \code{control} argument of
+#' \code{\link{create_sampler}}.
 #'
 #' @export
 #' @param add.outer.R whether to add the outer product of a constraint matrix to the
@@ -940,9 +644,6 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #'  If \code{FALSE}, the coefficients of each model component are sampled separately in sequence.
 #'  Alternatively, a list of character vectors with names of model components can be passed to
 #'  specify a grouping of model components whose coefficients should be sampled together in blocks.
-#' @param block.V if \code{TRUE}, the default, all coefficients of \code{reg} and \code{gen} components
-#'  in a variance model formula are sampled in a single block. Alternatively, a list of
-#'  character vectors with names of model components whose coefficients should be sampled together in blocks.
 #' @param auto.order.block whether Gibbs blocks should be ordered automatically in such a
 #'  way that those with the most sparse design matrices come first. This way of ordering
 #'  can make Cholesky updates more efficient.
@@ -950,15 +651,6 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #' @param max.size.cps.template maximum allowed size in MB of the sparse matrix serving as a 
 #'  template for the sparse symmetric crossproduct X'QX of a dgCMatrix X, where Q is a diagonal
 #'  matrix subject to change.
-#' @param PG.approx whether Polya-Gamma draws for logistic binomial models are
-#'  approximated by a hybrid gamma convolution approach. If not, \code{BayesLogit::rpg}
-#'  is used, which is exact for some values of the shape parameter.
-#' @param PG.approx.m if \code{PG.approx=TRUE}, the number of explicit gamma draws in the
-#'  sum-of-gammas representation of the Polya-Gamma distribution. The remainder (infinite)
-#'  convolution is approximated by a single moment-matching gamma draw. Special values are:
-#'  \code{-2L} for a default choice depending on the value of the shape parameter
-#'  balancing performance and accuracy, \code{-1L} for a moment-matching normal approximation,
-#'  and \code{0L} for a moment-matching gamma approximation.
 #' @returns A list with specified computational options used by various sampling functions.
 #' @references
 #'  D. Bates, M. Maechler, B. Bolker and S.C. Walker (2015).
@@ -971,17 +663,15 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 sampler_control <- function(add.outer.R=TRUE, add.eps.I=FALSE, eps=sqrt(.Machine$double.eps),
                             recompute.e=TRUE,
                             cMVN.sampler=FALSE, CG=NULL,
-                            block=TRUE, block.V=TRUE, auto.order.block=TRUE,
+                            block=TRUE, auto.order.block=TRUE,
                             chol.control=chol_control(),
-                            max.size.cps.template=100,
-                            PG.approx=TRUE, PG.approx.m=-2L) {
+                            max.size.cps.template=100) {
   list(add.outer.R=add.outer.R, add.eps.I=add.eps.I, eps=eps,
        recompute.e=recompute.e,
        cMVN.sampler=cMVN.sampler, CG=CG,
-       block=block, block.V=block.V, auto.order.block=auto.order.block,
+       block=block, auto.order.block=auto.order.block,
        chol.control = chol.control,
-       max.size.cps.template=max.size.cps.template,
-       PG.approx=PG.approx, PG.approx.m=PG.approx.m
+       max.size.cps.template=max.size.cps.template
   )
 }
 
@@ -1001,12 +691,6 @@ check_sampler_control <- function(control) {
   } else {
     if (!is.list(control[["block"]])) stop("'block' should be either a scalar logical or a list of model component name vectors")
     if (!length(control[["block"]])) stop("'block' must contain at least one character vector")
-  }
-  if (is.logical(control[["block.V"]])) {
-    if (length(control[["block.V"]]) != 1L) stop("unexpected input for 'block.V'")
-  } else {
-    if (!is.list(control[["block.V"]])) stop("'block.V' should be either a scalar logical or a list of variance model component name vectors")
-    if (!length(control[["block.V"]])) stop("'block.V' must contain at least one character vector")
   }
   control$chol.control <- check_chol_control(control[["chol.control"]])
   if (isTRUE(control[["CG"]])) {

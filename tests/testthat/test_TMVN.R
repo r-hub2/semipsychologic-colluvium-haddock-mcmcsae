@@ -152,6 +152,15 @@ test_that("Soft TMVN method works", {
   sim <- MCMCsim(sampler, burnin=500, n.iter=2000, verbose=FALSE)
   summ <- summary(sim)
   expect_true(crossprod_mv(C$S, summ$x[, "Mean"]) >= C$s)
+  expect_error(
+    sampler <- create_TMVN_sampler(Q=Q0, mu=mu0, constraints=C,
+      method=m_softTMVN(PG.approx=TRUE, PG.approx.m=rep(5, 5))
+    ), "invalid"
+  )
+  sampler <- create_TMVN_sampler(Q=Q0, mu=mu0, constraints=C,
+    method=m_softTMVN(PG.approx=TRUE, PG.approx.m=5)
+  )
+  expect_identical(environment(sampler$rPolyaGamma)$mPG, 5L)
 })
 
 test_that("inequality-constrained linear regression works", {

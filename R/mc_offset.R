@@ -17,15 +17,16 @@ mc_offset <- function(formula, value=NULL, name="") {
   stop("function 'mc_offset' should only be used inside a formula")
 }
 
-# additional argument e to pass sampler environment
-# in.block not used for mc_offset
-mc_mc_offset <- function(formula, value=NULL, name="", e, in.block) {
+mc_mc_offset <- function(formula, value=NULL, name="",
+                         sc, fam,
+                         in.block,  # not used for mc_offset
+                         prior.only, compute.weights, data) {
   type <- "mc_offset"
   if (name == "") stop("missing model component name")
-  n <- e[["n"]]
+  n <- fam[["n"]]
 
   if (is.null(value)) {
-    offset <- get_var_from_formula(formula, e[["data"]])
+    offset <- as.numeric(get_var_from_formula(formula, data))
   } else {
     offset <- as.numeric(value)
     if (length(offset) != 1L || anyNA(offset)) stop("'value' argument of mc_offset must be a single numeric value")
@@ -36,14 +37,19 @@ mc_mc_offset <- function(formula, value=NULL, name="", e, in.block) {
   #   where an internal offset is added to the approximating negbinomial model
   pred.offset <- offset
   internal.offset <- FALSE
-  add_internal_offset <- function(value) {
-    offset <<- offset + value
+  add_internal_offset <- function(value, sub=NULL) {
+    if (is.null(sub)) {
+      offset <<- offset + value
+    } else {
+      if (length(offset) == 1L) offset <<- rep.int(offset, n)
+      offset[sub] <<- offset[sub] + value
+    }
     internal.offset <<- TRUE
     # update lp, lp_update methods
     if (length(offset) == 1L)
-      lp <<- function(p) copy_vector(rep.int(offset, n))
+      lp <<- function(p) rep.int(offset, n)
     else
-      lp <<- function(p) copy_vector(offset)
+      lp <<- function(p) copy_obj(offset)
     if (allv(offset, 0))
       lp_update <<- function(x, plus=TRUE, p) NULL
     else
@@ -70,9 +76,9 @@ mc_mc_offset <- function(formula, value=NULL, name="", e, in.block) {
     }
     rm(newdata, Xnew, verbose)
     if (length(newoffset) == 1L && nnew != 1L)
-      linpred <- function(p) copy_vector(rep.int(newoffset, nnew))
+      linpred <- function(p) rep.int(newoffset, nnew)
     else
-      linpred <- function(p) copy_vector(newoffset)
+      linpred <- function(p) copy_obj(newoffset)
     if (allv(newoffset, 0))
       linpred_update <- function(x, plus=TRUE, p) NULL
     else
@@ -81,9 +87,9 @@ mc_mc_offset <- function(formula, value=NULL, name="", e, in.block) {
   }
   # assume that lp, lp_update are used for model fitting only (--> include internal offset)
   if (length(offset) == 1L)
-    lp <- function(p) copy_vector(rep.int(offset, n))
+    lp <- function(p) rep.int(offset, n)
   else
-    lp <- function(p) copy_vector(offset)
+    lp <- function(p) copy_obj(offset)
   if (allv(offset, 0))
     lp_update <- function(x, plus=TRUE, p) NULL
   else

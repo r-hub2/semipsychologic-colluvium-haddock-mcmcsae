@@ -4,14 +4,14 @@
 \alias{setup_CG_sampler}
 \title{Set up conjugate gradient sampler}
 \usage{
-setup_CG_sampler(mbs, X, sampler, control = CG_control())
+setup_CG_sampler(mbs, X, fam, control = CG_control())
 }
 \arguments{
 \item{mbs}{block component containing several model components.}
 
 \item{X}{design matrix.}
 
-\item{sampler}{sampler object as created by \code{\link{create_sampler}}.}
+\item{fam}{family object.}
 
 \item{control}{a list of options for the conjugate gradient algorithm that can be passed
 using function \code{\link{CG_control}}.}

@@ -117,12 +117,16 @@ NULL
 `%m*v%` <- function(M, v) {
   switch(class(M)[1L],
     matrix = Cdense_numeric_prod(M, v),
-    ddiMatrix = if (length(M@x)) M@x * v else copy_vector(v),
+    ddiMatrix = if (length(M@x)) M@x * v else copy_obj(v),
     tabMatrix = Ctab_numeric_prod(M, v),
     dgCMatrix = Csparse_numeric_prod(M, v),
     dsCMatrix = {
       class(M) <- .dgC.class.attr
       CsparseS_numeric_prod(M, v)
+    },
+    dtCMatrix = {  # possibly used by Ltimes method of cholesky object
+      class(M) <- .dgC.class.attr  # convert M to dgC
+      Csparse_numeric_prod(M, v)
     },
     numeric = M * v,  # interpreted as diagonal M, including scalar (1 x 1) case
     stop("unsupported class '", class(M)[1L], "'")
@@ -134,7 +138,7 @@ NULL
 crossprod_mv <- function(M, v) {
   switch(class(M)[1L],
     matrix = Cdense_numeric_crossprod(M, v),
-    ddiMatrix = if (length(M@x)) M@x * v else copy_vector(v),
+    ddiMatrix = if (length(M@x)) M@x * v else copy_obj(v),
     tabMatrix = Ctab_numeric_crossprod(M, v),
     dgCMatrix = Csparse_numeric_crossprod(M, v),
     dsCMatrix = {

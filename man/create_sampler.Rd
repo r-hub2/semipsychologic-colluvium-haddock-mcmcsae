@@ -87,8 +87,7 @@ in particular its \code{var.model} argument, to specify a variance model.}
 
 \item{logJacobian}{if the data are transformed the logarithm of the Jacobian can be supplied so that it
 is incorporated in all log-likelihood computations. This can be useful for comparing information criteria
-for different transformations. It should be supplied as a vector of the same size as the response variable,
-and is currently only supported if \code{family="gaussian"}.
+for different transformations. It should be supplied as a vector of the same size as the response variable.
 For example, when a log-transformation is used on response vector \code{y}, the vector \code{-log(y)}
 should be supplied. DEPRECATED, this argument has moved to \code{\link{f_gaussian}}.}
 
@@ -136,11 +135,15 @@ additive model components. Currently four model components are supported: \code{
 for regression or 'fixed' effects, \code{\link{gen}(...)} for generic random effects,
 \code{\link{mec}(...)} for measurement in covariates effects, and \code{\link{brt}(...)}
 for a Bayesian additive regression trees component. Note that an offset can be added
-separately, in the usual way using \code{\link{offset}(...)}.
+separately, in the usual way using \code{\link{offset}(...)}. As usual, the left hand side of
+\code{formula} specifies the response variable. For binomial and multinomial models see
+their respective help pages (\code{\link{f_binomial}}, \code{\link{f_multinomial}}) for
+different ways to specify the response variable. If no response variable is specified,
+\code{create_sampler} only sets up infrastructure to sample from the model parameters'
+prior distributions.
 
-For gaussian models, \code{formula.V} can be used to specify the variance structure of the model.
-Currently two specialised variance model components are supported, \code{\link{vreg}(...)} for regression
-effects predicting the log-variance and \code{\link{vfac}(...)} for modelled variance factors.
+To specify family-specific parameters or options, see the help pages for the various
+family specification functions, e.g. \code{\link{f_gaussian}} or \code{\link{f_negbinomial}}.
 }
 \examples{
 # first generate some data
@@ -171,6 +174,10 @@ J.H. Albert and S. Chib (1993).
  S.W. Linderman, M.J. Johnson and R.P. Adams (2015).
    Dependent multinomial models made easy: Stick-breaking with the Polya-Gamma augmentation.
    Advances in Neural Information Processing Systems, 3456-3464.
+
+ J.S. Liu and Y.N. Wu (1999).
+   Parameter expansion for data augmentation.
+   Journal of the American Statistical Association, 94(448), 1264-1274.
 
  P.A. Parker, S.H. Holan and R. Janicki (2024).
    Conjugate Modeling Approaches for Small Area Estimation with Heteroscedastic Structure.

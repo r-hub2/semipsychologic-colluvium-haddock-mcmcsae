@@ -31,7 +31,7 @@ set_MH <- function(type = "RWTN", scale = 0.025, adaptive = NULL, ...) {
   if (is.null(adaptive)) {
     adaptive <- any(type == c("RWTN", "RWN", "RWLN"))
   } else {
-    if (!is.logical(adaptive) || length(adaptive) != 1L)
+    if (!is_logical_scalar(adaptive))
       stop("argument 'adaptive' must be a single logical value, or 'NULL' for a default choice")
     if (adaptive && all(type != c("RWTN", "RWN", "RWLN")))
       stop("adaptive=TRUE only supported for 'RWTN', 'RWN' and 'RWLN' proposals")

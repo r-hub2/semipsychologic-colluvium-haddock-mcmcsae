@@ -7,6 +7,7 @@ get_col_ind <- function(M, zero.based=TRUE) {
     rep(seq_len(dim(M)[2L]), diff.default(M@p))
 }
 
+# NB unit-ddi M1, M2 are assumed not to change
 # output type determined by input types and force.sparse, not by economizeMatrix
 make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
   q <- nrow(M1)
@@ -38,21 +39,21 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
     }
   }
 
+  UnitDiag1 <- is_unit_ddi(M1)
+  UnitDiag2 <- doM2 && is_unit_ddi(M2)
   if (need.template && class(template)[1L] == "ddiMatrix") {
     # ddi output
     # some input matrices might be (diagonal) dsC, but not (diagonal) matrix
     if (any.mat) stop("unexpected input for make_mat_sum")
     if (is_unit_ddi(template)) stop("unexpected unit diagonal matrix sum")
-    UnitdiagM1 <- is_unit_ddi(M1)
     sub1 <- class1 == "dsC" && length(M1@x) < q
-    if (!UnitdiagM1 && sub1) {
+    if (!UnitDiag1 && sub1) {
       # diagonal dsC containing zeros
       ind1 <- fmatch(M1@i, seq_len(q) - 1L)
     }
     if (doM2) {
-      UnitdiagM2 <- is_unit_ddi(M2)
       sub2 <- class2 == "dsC" && length(M2@x) < q
-      if (!UnitdiagM2 && sub2) {
+      if (!UnitDiag2 && sub2) {
         # diagonal dsC containing zeros
         ind2 <- fmatch(M2@i, seq_len(q) - 1L)
       }
@@ -72,21 +73,19 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
         x <- numeric(q)
         x[ind1] <- w1 * M1@x
       } else {
-        x <- if (UnitdiagM1) w1 else w1 * M1@x
+        x <- if (UnitDiag1) w1 else w1 * M1@x
       }
       if (doM2) {
         if (sub2)
           x[ind2] <- x[ind2] + w2 * M2@x
         else
-          x <- x + if (UnitdiagM2) w2 else w2 * M2@x
+          x <- x + if (UnitDiag2) w2 else w2 * M2@x
       }
       attr(out, "x") <- if (doM0) template@x + x else x
       out
     }
   } else if (sparse.output) {
     # dsC output
-    UnitDiag1 <- is_unit_ddi(M1)
-    UnitDiag2 <- doM2 && is_unit_ddi(M2)
     nx <- length(template@i)
     j <- get_col_ind(template)
     switch(class1,
@@ -167,7 +166,10 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
       if (class1 == "mat") {
         update <- add(update, quote(x <- x + w1 * M1))
       } else if (class1 == "ddi") {
-        update <- add(update, quote(x <- add_diagC(x, w1 * M1@x)))
+        if (M1@diag == "U")
+          update <- add(update, quote(x <- add_diagC(x, w1)))
+        else
+          update <- add(update, quote(x <- add_diagC(x, w1 * M1@x)))
       } else {  # dsC
         j1 <- get_col_ind(M1)
         ind1 <- 1L + M1@i + q * j1
@@ -181,7 +183,10 @@ make_mat_sum <- function(M0 = NULL, M1, M2 = NULL, force.sparse = FALSE) {
       if (class2 == "mat") {
         update <- add(update, quote(x <- x + w2 * M2))
       } else if (class2 == "ddi") {
-        update <- add(update, quote(x <- add_diagC(x, w2 * M2@x)))
+        if (M2@diag == "U")
+          update <- add(update, quote(x <- add_diagC(x, w2)))
+        else
+          update <- add(update, quote(x <- add_diagC(x, w2 * M2@x)))
       } else {  # dsC
         j2 <- get_col_ind(M2)
         ind2 <- 1L + M2@i + q * j2
@@ -208,7 +213,7 @@ make_det <- function(M, chol.control=chol_control(perm=FALSE)) {
     d <- nrow(M)
     if (is.matrix(M)) {
       function(w1, w2) d * log(w1) +
-        as.numeric(determinant.matrix(Ccholesky(add_diagC(M, rep.int(w2/w1, d))), logarithm=TRUE)[["modulus"]])
+        as.numeric(determinant.matrix(Ccholesky(add_diagC(M, w2/w1)), logarithm=TRUE)[["modulus"]])
     } else if (class(M)[1L] == "dsCMatrix") {
       ch <- build_chol(M, control=chol.control)
       rm(chol.control)

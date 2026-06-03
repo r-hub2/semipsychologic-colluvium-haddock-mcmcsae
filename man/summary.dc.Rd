@@ -41,7 +41,7 @@ Summarise a draws component (dc) object
 \donttest{
 ex <- mcmcsae_example()
 sampler <- create_sampler(ex$model, data=ex$dat)
-sim <- MCMCsim(sampler, store.all=TRUE)
+sim <- MCMCsim(sampler, store.all=TRUE, n.chain=2, n.iter=500)
 summary(sim$u)
 }
 

@@ -339,7 +339,7 @@ pr_invchisq <- function(df=1, scale=1) {
   if (is.list(df)) {
     if (is.null(df[["alpha0"]])) df$alpha0 <- 2  # default in prior Gamma(alpha0, beta0)
     if (is.null(df[["beta0"]])) df$beta0 <- 0.1  # default in prior Gamma(alpha0, beta0)
-    # TODO tau, proposal, adapt: move to another object
+    # TODO tau, proposal, adapt: move to another object (cf. setMH)
     if (is.null(df[["tau"]])) df$tau <- 1  # (starting) scale of MH update
     if (is.null(df[["proposal"]])) df$proposal <- "RW"
     if (is.null(df[["adapt"]])) df$adapt <- TRUE

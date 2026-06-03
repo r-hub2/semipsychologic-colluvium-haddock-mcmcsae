@@ -20,7 +20,7 @@ static const double EPS = 10.0 * std::numeric_limits<double>::epsilon();
 //’ @returns A vector of size n with (approximate) Polya-Gamma draws.
 // [[Rcpp::export(rng=true)]]
 NumericVector CrPGapprox(const int n, const NumericVector & b, const NumericVector & z, const IntegerVector & m) {
-  double bi, hzi, th, mu, Sigma, dninv, rgs;
+  double bi, hzi, hzi2, th, mu, Sigma, dninv, rgs;
   int mi;
   const int nb = b.size();
   const int nz = z.size();
@@ -29,26 +29,27 @@ NumericVector CrPGapprox(const int n, const NumericVector & b, const NumericVect
   for (int i = 0; i < n; ++i) {
     bi = nb == 1 ? b[0] : b[i];
     if (bi < EPS) {
-      out[i] = 0;
+      out[i] = 0.0;
     } else {
       hzi = nz == 1 ? 0.5*z[0] : 0.5*z[i];
+      hzi2 = hzi * hzi;
       // compute mean and variance of PG(bi, zi), up to factor bi
       if (std::abs(hzi) < 0.01) {
-        mu = 0.25 * (1 - hzi*hzi / 3);
-        Sigma = (1 - 0.8 * hzi*hzi) / 24;
+        mu = 0.25 * (1.0 - hzi2 / 3.0);
+        Sigma = (1.0 - 0.8 * hzi2) / 24.0;
       } else {
         th = tanh(hzi);
         mu = 0.25 * th / hzi;
-        Sigma = 0.0625 * (th - hzi / std::pow(cosh(hzi), 2)) / std::pow(hzi, 3);
+        Sigma = 0.0625 * (th - hzi * (1 - th * th)) / (hzi2 * hzi);
       }
       mi = nm == 1 ? m[0] : m[i];
       if (mi < -1) {
         // default
-        if (bi > 200) {
+        if (bi > 200.0) {
           mi = -1;
-        } else if (bi > 20) {
+        } else if (bi > 20.0) {
           mi = 0;
-        } else if (bi > 2) {
+        } else if (bi > 2.0) {
           mi = 1;
         } else if (bi > 0.5) {
           mi = 2;
@@ -58,28 +59,30 @@ NumericVector CrPGapprox(const int n, const NumericVector & b, const NumericVect
       }
       // draw from approximation to PG(b, z)
       switch(mi) {
-      case -1:
-        out[i] = R::rnorm(bi*mu, std::sqrt(bi*Sigma));
-        break;
-      case 0:
-        out[i] = R::rgamma(bi*mu*mu/Sigma, Sigma/mu);
-        break;
-      case 1:
-        dninv = 2 / (0.25*PI2 + hzi*hzi);
-        mu -= 0.25 * dninv;
-        Sigma -= 0.0625 * dninv*dninv;
-        out[i] = 0.25 * dninv * R::rgamma(bi, 1) + R::rgamma(bi*mu*mu/Sigma, Sigma/mu);
-        break;
-      default:
-        rgs = 0;
-        for (int j = 0; j < mi; ++j) {
-          dninv = 2 / (PI2 * std::pow(j + 0.5, 2) + hzi*hzi);
-          rgs += 0.25 * dninv * R::rgamma(bi, 1);
+        case -1:
+          out[i] = R::rnorm(bi*mu, std::sqrt(bi*Sigma));
+          break;
+        case 0:
+          out[i] = R::rgamma(bi*mu*mu/Sigma, Sigma/mu);
+          break;
+        case 1:
+          dninv = 2.0 / (0.25*PI2 + hzi2);
           mu -= 0.25 * dninv;
           Sigma -= 0.0625 * dninv*dninv;
-        }
-        out[i] = rgs + R::rgamma(bi*mu*mu/Sigma, Sigma/mu);
-      }
+          out[i] = 0.25 * dninv * R::rgamma(bi, 1) + R::rgamma(bi*mu*mu/Sigma, Sigma/mu);
+          break;
+        default:
+          double rgs = 0.0;
+          double jhalf;
+          for (int j = 0; j < mi; ++j) {
+            jhalf = j + 0.5;
+            dninv = 2.0 / (PI2 * jhalf * jhalf + hzi2);
+            rgs += 0.25 * dninv * R::rgamma(bi, 1);
+            mu -= 0.25 * dninv;
+            Sigma -= 0.0625 * dninv*dninv;
+          }
+          out[i] = rgs + R::rgamma(bi*mu*mu/Sigma, Sigma/mu);
+      }  // END switch(mi)
     }
   }
   return out;
@@ -159,31 +162,58 @@ NumericVector Crgig(const int n, const NumericVector & p, const NumericVector & 
 //’ @returns A vector of (approximate) CRT variates.
 // [[Rcpp::export(rng=true)]]
 IntegerVector CrCRT(const NumericVector & y, const NumericVector & r, const int m=20) {
-  double prob, lambda;
-  int m_expl;
-  const int two_m = 2 * m;
   const int n = y.size();
   const int nr = r.size();
-  double ri = r[0];
+  const int two_m = 2 * m;
   IntegerVector out(n);
-  for (int i = 0; i < n; i++) {
-    if (nr > 1) ri = r[i];
-    if (y[i] <= two_m) {
-      // exact CRT sampling
-      for (int j = 0; j < y[i]; j++) {
-        prob = ri / (ri + j);
-        if (R::runif(0, 1) < prob) out[i]++;
+  const double* p_y = y.begin();
+  const double* p_r = r.begin();
+  int* p_out = out.begin();
+  if (nr == 1) {  // scalar r
+    const double ri = p_r[0];
+    const int m_expl = std::min(m, (int)ri);
+    const double digamma_m_ri = R::digamma(m_expl + ri);
+    std::vector<double> prob_cache(two_m + 1);
+    for (int j = 0; j <= two_m; j++) {
+      prob_cache[j] = ri / (ri + j);
+    }
+    for (int i = 0; i < n; i++) {
+      const double yi = p_y[i];
+      int count = 0;
+      if (yi <= two_m) {
+        // exact CRT sampling
+        for (int j = 0; j < yi; j++) {
+          if (R::runif(0, 1) < prob_cache[j]) count++;
+        }
+      } else {
+        // first m_expl Bernoulli draws
+        for (int j = 0; j < m_expl; j++) {
+          if (R::runif(0, 1) < prob_cache[j]) count++;
+        }
+        // then approximate remaining y[i] - m_expl draws
+        double lambda = ri * (R::digamma(yi + ri) - digamma_m_ri);
+        count += R::rpois(lambda);
       }
-    } else {
-      m_expl = std::min(m, (int)ri);
-      // first m_expl Bernoulli draws
-      for (int j = 0; j < m_expl; j++) {
-        prob = ri / (ri + j);
-        if (R::runif(0, 1) < prob) out[i]++;
+      p_out[i] = count;
+    }
+  } else {  // vector r
+    for (int i = 0; i < n; i++) {
+      const double yi = p_y[i];
+      const double ri = p_r[i];
+      int count = 0;
+      if (yi <= two_m) {
+        for (int j = 0; j < yi; j++) {
+          if (R::runif(0, 1) < (ri / (ri + j))) count++;
+        }
+      } else {
+        const int m_expl = std::min(m, (int)ri);
+        for (int j = 0; j < m_expl; j++) {
+          if (R::runif(0, 1) < (ri / (ri + j))) count++;
+        }
+        double lambda = ri * (R::digamma(yi + ri) - R::digamma(m_expl + ri));
+        count += R::rpois(lambda);
       }
-      // then approximate remaining y[i] - m_expl draws
-      lambda = ri * (R::digamma(y[i] + ri) - R::digamma(m_expl + ri));
-      out[i] += R::rpois(lambda);
+      p_out[i] = count;
     }
   }
   return out;

@@ -61,8 +61,9 @@ residuals.mcdraws <- function(object, mean.only=FALSE, units=NULL, chains=seq_le
 fitted_res <- function(obj, mean.only=FALSE, units=NULL, chains=seq_len(n_chains(obj)),
                        draws=seq_len(n_draws(obj)), matrix=FALSE, type, resid, ...) {
   smplr <- obj[["_model"]]
+  fam <- smplr[["family"]]
   if (mean.only && (!is.null(obj[["e_"]]) || !is.null(obj[["_means"]][["e_"]]))) {
-    if ((resid && smplr[["e.is.res"]]) || (!resid && !smplr[["e.is.res"]]))
+    if ((resid && fam[["e.is.res"]]) || (!resid && !fam[["e.is.res"]]))
       return(get_means(obj, "e_")[[1L]])
     else
       return(smplr$y - get_means(obj, "e_")[[1L]])
@@ -82,16 +83,16 @@ fitted_res <- function(obj, mean.only=FALSE, units=NULL, chains=seq_len(n_chains
         out[[ch]] <- out[[ch]] + mc$draws_linpred(obj, units, ch, draws, matrix)[[1L]]
   } else {
     out <- get_from(obj[["e_"]], chains=chains, draws=draws, vars=units)
-    if (smplr[["e.is.res"]]) {
+    if (fam[["e.is.res"]]) {
       # change to linear predictor as code below assumes that
       out <- lapply(out, \(x) rep_each(smplr[["y"]][units], nrow(x)) - x)
     }
   }
   if (type == "response") {
     if (matrix)
-      out <- smplr$f_mean(out)
+      out <- fam$f_mean(out)
     else
-      out <- lapply(out, smplr$f_mean)
+      out <- lapply(out, fam$f_mean)
   }
   if (resid) {  # compute residuals at the response scale
     if (matrix)
@@ -238,21 +239,27 @@ compute_DIC <- function(x, use.pV=FALSE) {
   if (x[["_info"]]$from.prior) stop("cannot compute DIC for draws from prior")
   post.means <- get_means(x)
   model <- x[["_model"]]
+  fam <- model[["family"]]
   if (is.null(post.means[["e_"]]))
-    stop("cannot compute DIC: missing simulation means of ", if (model[["e.is.res"]]) "residuals" else "linear predictor", "'e_'")
-  if (any(model$family[["family"]] == c("gaussian", "gaussian_gamma")) && model[["modeled.Q"]]) {
+    stop("cannot compute DIC: missing simulation means of ", if (fam[["e.is.res"]]) "residuals" else "linear predictor", "'e_'")
+  if (any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma")) && fam[["modeled.Q"]]) {
     if (is.null(post.means[["Q_"]])) stop("cannot compute DIC: missing simulation means of 'Q_'")
-    if (model[["Q0.type"]] == "symm") {
+    if (fam[["Q0.type"]] == "symm") {
       # reconstruct mean sparse precision matrix
-      post.means[["QM_"]] <- block_scale_dsCMatrix(model[["Q0"]], post.means[["Q_"]])
+      post.means[["QM_"]] <- block_scale_dsCMatrix(fam[["Q0"]], post.means[["Q_"]])
     }
   }
   if (is.null(post.means[["llh_"]]))
     stop("cannot compute DIC; missing simulation means of 'llh_'")
-  if (any(model$family[["family"]] == c("gaussian", "gaussian_gamma")))
-    deviance.at.mean <- -2 * model$llh(post.means, dotprodC(post.means[["e_"]], model$Q_e(post.means)))
-  else
-    deviance.at.mean <- -2 * model$llh(post.means)
+  if (any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma"))) {
+    post.means[[fam[["SSR.name"]]]] <- fam$compute_SSR(post.means)
+  } else if (fam[["family"]] == "multi") {
+    for (fm in fam[["fam.list"]]) {
+      if (any(fm[["family"]] == c("gaussian", "student_t", "gaussian_gamma")))
+        post.means[[fm[["SSR.name"]]]] <- fm$compute_SSR(post.means)
+    }
+  }
+  deviance.at.mean <- -2 * fam$llh(post.means)
   mean.deviance <- -2 * post.means[["llh_"]]
   if (use.pV) {
     # larger Monte Carlo error(?), but guaranteed to be positive
@@ -278,7 +285,8 @@ get_lppd_function <- function(x) {
   if (is.null(llh_i)) stop("pointwise log-likelihood function not implemented; cannot compute WAIC")
   if (!(any("e_" == par_names(x)) || all_coef_names_present(x[["_model"]][["mod"]], par_names(x))))
     stop("WAIC/LOO can only be computed if all coefficients are stored. Please use 'store.all=TRUE' in MCMCsim.")
-  if (x[["_model"]]$modeled.Q && x[["_model"]]$family$family == "gaussian" && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", x[["_model"]]$Vmod)) %in% par_names(x)))
+  fam <- x[["_model"]][["family"]]
+  if (fam[["modeled.Q"]] && any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma")) && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", fam[["Vmod"]])) %in% par_names(x)))
     stop("WAIC/LOO can only be computed if all modelled variance factors are stored. Please use 'store.all=TRUE' in MCMCsim.")
   llh_i
 }
@@ -288,14 +296,15 @@ get_lppd_function <- function(x) {
 compute_WAIC <- function(x, diagnostic=FALSE, batch.size=NULL, show.progress=TRUE, cl=NULL, n.cores=1L) {
   if (!inherits(x, "mcdraws")) stop("not an object of class 'mcdraws'")
   if (x[["_info"]]$from.prior) stop("cannot compute WAIC for draws from prior")
-  n <- x[["_model"]]$n
+  fam <- x[["_model"]][["family"]]
+  n <- fam[["n"]]
   n.chain <- n_chains(x)
   n.draw <- n.chain * n_draws(x)
   if (is.null(batch.size)) {
     # determine batch size to avoid too much memory use; now by default truncated to ~ 80MB chunks
     batch.size <- min(n, 10000000L %/% n.draw)
   }
-  if ((x[["_model"]]$Q0.type == "symm") && (batch.size != n)) {
+  if ((fam[["Q0.type"]] == "symm") && (batch.size != n)) {
     warn("For non-diagonal precision matrix, use 'batch.size' equal to the number of
       observations for correct leave-one-out predictive densities")
   }
@@ -386,13 +395,14 @@ compute_WAIC <- function(x, diagnostic=FALSE, batch.size=NULL, show.progress=TRU
 #' @importFrom loo waic
 # based on waic.stanreg from package rstanarm
 waic.mcdraws <- function(x, by.unit=FALSE, ...) {
-  if ((x[["_model"]]$Q0.type == "symm") && by.unit) {
+  fam <- x[["_model"]][["family"]]
+  if ((fam[["Q0.type"]] == "symm") && by.unit) {
     warn("For non-diagonal precision matrix, use 'by.unit=FALSE'
       for correct leave-one-out predictive densities")
   }
   llh_i <- get_lppd_function(x)
   if (by.unit) {
-    data <- data.frame(i=seq_len(x[["_model"]]$n))
+    data <- data.frame(i=seq_len(fam[["n"]]))
     f <- function(data_i, draws) llh_i(draws, data_i[["i"]])
     loo::waic(f, data=data, draws=x)
   } else {
@@ -408,7 +418,8 @@ waic.mcdraws <- function(x, by.unit=FALSE, ...) {
 loo.mcdraws <- function(x, by.unit=FALSE, r_eff=FALSE, n.cores=1L, ...) {
   llh_i <- get_lppd_function(x)
   if (by.unit) {
-    data <- data.frame(i=seq_len(x[["_model"]]$n))
+    fam <- x[["_model"]][["family"]]
+    data <- data.frame(i=seq_len(fam[["n"]]))
     f <- function(data_i, draws) llh_i(draws, data_i[["i"]])
     if (r_eff)
       r_eff <- loo::relative_eff(f, chain_id=rep_each(seq_len(n_chains(x)), n_draws(x)), data=data, draws=x, cores=n.cores)

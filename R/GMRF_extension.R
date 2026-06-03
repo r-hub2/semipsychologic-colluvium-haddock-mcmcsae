@@ -5,10 +5,11 @@
 #'
 #' @export
 #' @param type one of "default", "bym2" or "leroux". The default choice
-#'  corresponds to the precision matrix \eqn{Q_A} as specified by argument \code{factor}
-#'  of \code{gen}. Type "bym2" modifies the default structure to one with
-#'  covariance matrix \eqn{\phi \tilde{Q}_{A}^- + (1 - \phi) I} where
-#'  \eqn{\tilde{Q}_{A*}^-} is the generalised inverse of \eqn{Q_A}, by default
+#'  corresponds to the precision matrix \eqn{Q_A} as implied or specified by
+#'  argument \code{factor} of \code{gen}.
+#'  Type "bym2" modifies the default structure to one with covariance matrix
+#'  \eqn{\phi \tilde{Q}_{A}^- + (1 - \phi) I} where
+#'  \eqn{\tilde{Q}_{A}^-} is the generalised inverse of \eqn{Q_A}, by default
 #'  scaled such that the geometric mean of the marginal variances equals 1.
 #'  Type "leroux" modifies the default structure to one with precision matrix
 #'  \eqn{\phi Q_A + (1 - \phi) I}.
@@ -37,7 +38,7 @@ GMRF_structure <- function(type=c("default", "bym2", "leroux", "Leroux"),
                            prior=NULL, control=NULL) {
   type <- match.arg(type)
   if (type == "Leroux") type <- "leroux"
-  if (!is.logical(scale.precision) || length(scale.precision) != 1L) stop("wrong input for 'scale.precision'")
+  if (!is_logical_scalar(scale.precision)) stop("wrong input for 'scale.precision'")
   if (type == "default") {
     prior <- NULL
     control <- NULL
@@ -99,25 +100,24 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
         detQ <- make_det(update_Q(mc[["QA"]], 0.5))
         name_detQ <- paste0(mc[["name"]], "_detQ_")
         start <- function(p) {
-          if (is.null(p[[name_ext]])) p[[name_ext]] <- runif(1L)
-          if (is.null(p[[name_detQ]])) p[[name_detQ]] <- detQ(2*p[[name_ext]], 1 - 2*p[[name_ext]])
+          p[[name_ext]] <- check_and_get(p, name_ext, 1L, \() runif(1L), pos=TRUE)
+          p[[name_detQ]] <- check_and_get(p, name_detQ, 1L, \() detQ(2*p[[name_ext]], 1 - 2*p[[name_ext]]), pos=TRUE)
           p
         }
         draw <- function(p, coef.raw) {
           phi <- p[[name_ext]]
-          # draw a candidate value (proposal)
-          #   and initialise log acceptance probability
+          # draw a candidate value and initialise log acceptance probability
           phi.star <- control$propose(phi)
           phi.diff <- phi.star - phi
           QA.diff <- mat_sum(mc[["QA"]], idL, phi.diff, -phi.diff)
           tr.diff <- switch(mc[["var"]],
-            unstructured = sum(crossprod_sym(coef.raw, QA.diff) * p[[mc$name_Qraw]]),
-            diagonal = sum(fsum.matrix(coef.raw * (QA.diff %m*m% coef.raw), na.rm=FALSE) * p[[mc$name_Qraw]]),
+            unstructured = sum(crossprod_sym(coef.raw, QA.diff) * p[[mc[["name_Qraw"]]]]),
+            diagonal = sum(fsum.matrix(coef.raw * (QA.diff %m*m% coef.raw), na.rm=FALSE) * p[[mc[["name_Qraw"]]]]),
             scalar =
               if (mc[["q0"]] == 1L)
-                dotprodC(coef.raw, QA.diff %m*v% coef.raw) * p[[mc$name_Qraw]]
+                dotprodC(coef.raw, QA.diff %m*v% coef.raw) * p[[mc[["name_Qraw"]]]]
               else
-                sum(coef.raw * (QA.diff %m*m% coef.raw)) * p[[mc$name_Qraw]]
+                sum(coef.raw * (QA.diff %m*m% coef.raw)) * p[[mc[["name_Qraw"]]]]
           )
           detQ.star <- detQ(2*phi.star, 1 - 2*phi.star)
           log.ar.post <- 0.5 * (mc[["q0"]] * (detQ.star - p[[name_detQ]]) - tr.diff)
@@ -182,7 +182,7 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
       }
       if (!prior.only) {
         start <- function(p) {
-          if (is.null(p[[name_ext]])) p[[name_ext]] <- runif(1L)
+          p[[name_ext]] <- check_and_get(p, name_ext, 1L, \() runif(1L), pos=TRUE)
           p
         }
         draw <- function(p, coef.raw) {

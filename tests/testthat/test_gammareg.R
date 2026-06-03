@@ -77,7 +77,7 @@ test_that("gamma regression with offset works", {
     y ~ offset(o) + reg(~ x1 + x2, name="beta"),
     family="gamma", data = df, control=sampler_control(block=list("beta"))
   )
-  expect_length(sampler$block, 1L)
+  expect_length(sampler$control$block, 1L)
   expect_equal(sampler$mod[[length(sampler$mod)]]$offset, df$o)
   sim <- MCMCsim(sampler, n.iter=600, burnin=250, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
@@ -122,7 +122,7 @@ test_that("gamma multilevel model works", {
     gd$y ~ reg(~ x + z, name="beta") + gen(factor = ~ f, name="v"),
     family="gamma", data=dat
   )
-  expect_length(sampler$block, 1L)
+  expect_length(sampler$control$block, 1L)
   expect_false(sampler$mod[["v"]]$usePX)
   sim <- MCMCsim(sampler, n.iter=800, n.chain=2, store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
@@ -148,20 +148,19 @@ test_that("gaussian-gamma model works", {
     y ~ reg(~ 1 + x, debug=FALSE) + gen(factor = ~ g),
     family = f_gaussian_gamma(
       var.model = V ~ reg(~ 1 + x, name="vbeta") + gen(factor = ~ g, name="vv"),
-      shape.prior=pr_fixed(1)
-    ), data = dat,
-    control=sampler_control(block.V=TRUE)
+      shape.prior=pr_fixed(1), gaussian.control=gaussian_control(block.V=TRUE)
+    ), data = dat
   )
   expect_identical(sampler$family$family, "gaussian_gamma")
-  expect_identical(sort(sampler$block.V[[1]]), sort(c("vbeta", "vv")))
+  expect_identical(sort(sampler$family$y.family$control$block.V[[1]]), sort(c("vbeta", "vv")))
   expect_true(sampler$family$alpha.fixed)
   sampler <- create_sampler(
     y ~ reg(~ 1 + x, name="beta") + gen(factor = ~ g, name="v"),
     family = f_gaussian_gamma(
       var.model =
-        V ~ reg(~ 1 + x, name="vbeta") + gen(factor = ~ g, name="vv")
-    ), data = dat,
-    control=sampler_control(block.V=TRUE)
+        V ~ reg(~ 1 + x, name="vbeta") + gen(factor = ~ g, name="vv"),
+      gaussian.control=gaussian_control(block.V=TRUE)
+    ), data = dat
   )
   sim <- MCMCsim(sampler, burnin=180, n.iter=550, n.chain=2, store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
@@ -170,4 +169,16 @@ test_that("gaussian-gamma model works", {
   expect_between(summ$vbeta[, "Mean"], c(-1, 0.5) - 2, c(-1, 0.5) + 2)
   expect_between(cor(summ$v[, "Mean"], v), 0.6, 1)
   expect_between(cor(summ$vv[, "Mean"], vv), 0.5, 1)
+})
+
+test_that("gaussian-gamma model with a single regression term in both model parts works", {
+  sampler <- create_sampler(
+    y ~ reg(~ 1 + x, debug=FALSE),
+    family = f_gaussian_gamma(var.model = V ~ 1), data = dat
+  )
+  expect_true(sampler$control$single.block)
+  sim <- MCMCsim(sampler, n.chain = 1, burnin=80, n.iter=200, verbose=FALSE)
+  summ <- summary(sim)
+  expect_between(summ$beta[, "Mean"], c(1, 1) - 2, c(1, 1) + 2)
+  compute_DIC(sim)
 })

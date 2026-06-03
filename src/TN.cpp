@@ -17,12 +17,13 @@ static const double epsHMC = std::sqrt(std::numeric_limits<double>::epsilon());
 
 // Rayleigh rejection sampling
 double nt(const double l, const double u) {
-  double x;
+  double x, r;
   const double c = 0.5*l*l;
   const double f = std::expm1(c - 0.5*u*u);
   do {
     x = c - std::log1p(f * R::runif(0, 1));
-  } while (x * std::pow(R::runif(0, 1), 2) > c);
+    r = R::runif(0, 1);
+  } while (x * r * r > c);
   return std::sqrt(2*x);
 }
 
@@ -142,7 +143,7 @@ NumericVector Crtmvn_Gibbs_sparse(const NumericVector & v, const SEXP Ut, const 
     a = R_NegInf;
     b = R_PosInf;
     vi = v[i];
-	for (int j = Utp[i]; j < Utp[i + 1]; j++) {
+	  for (int j = Utp[i]; j < Utp[i + 1]; j++) {
       x = Utx[j];
       u[Uti[j]] += x * vi;
       if (x > eps) {

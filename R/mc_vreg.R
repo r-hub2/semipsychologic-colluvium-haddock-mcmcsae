@@ -46,21 +46,27 @@ vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
 }
 
 mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
-                    prior=NULL, Q0=NULL, b0=NULL, name="", e, in.block) {
+                    prior=NULL, Q0=NULL, b0=NULL, name="",
+                    sc,  # unused
+                    fam,
+                    in.block,  # unused
+                    prior.only, data) {
   type <- "vreg"
   if (name == "") stop("missing model component name")
   store.default <- name
 
-  if (e[["Q0.type"]] == "symm") stop("TBI: vreg component with (compatible) non-diagonal sampling variance matrix")
+  if (fam[["Q0.type"]] == "symm") stop("TBI: vreg component with (compatible) non-diagonal sampling variance matrix")
 
   if (is.null(X)) {
-    X <- model_matrix(formula, e[["data"]], sparse=sparse)
+    X <- model_matrix(formula, data, sparse=sparse)
     if (remove.redundant) X <- remove_redundancy(X)
   } else {
     if (is.null(dimnames(X)[[2L]])) colnames(X) <- seq_len(ncol(X))
   }
-  if (nrow(X) != e[["n"]]) stop("design matrix with incompatible number of rows")
-  e$coef.names[[name]] <- dimnames(X)[[2L]]
+  if (nrow(X) != fam[["n"]]) stop("design matrix with incompatible number of rows")
+  coef.names <- dimnames(X)[[2L]]
+  label_funs <- list()
+  label_funs[[name]] <- function() coef.names
   X <- economizeMatrix(X, sparse=sparse, strip.names=FALSE, check=TRUE)
   q <- ncol(X)
 
@@ -75,7 +81,7 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
   switch(prior[["type"]],
     fixed = prior$init(q),
     normal = {
-      prior$init(q, e$coef.names[[name]])
+      prior$init(q, coef.names)
       informative.prior <- prior[["informative"]]
       Q0 <- prior[["precision"]]
       zero.mean <- !informative.prior || allv(prior[["mean"]], 0)
@@ -96,7 +102,7 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
     p
   }
 
-  if (is_ind_matrix(X) && q < e[["n"]])
+  if (is_ind_matrix(X) && q < fam[["n"]])
     compute_Qfactor <- function(p) X %m*v% exp(-p[[name]])
   else
     compute_Qfactor <- function(p) exp(X %m*v% (-p[[name]]))
@@ -113,32 +119,32 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
       function(p) exp(Xnew %m*v% p[[name]])
   }
 
-  if (e[["prior.only"]]) {
-    rm(e)
+  if (prior.only) {
+    rm(sc, fam)
     return(environment())
   }
 
   if (prior[["type"]] == "fixed") {
     start <- draw <- prior[["rprior"]]
-    rm(e)
-    environment()
+    rm(sc, fam)
+    return(environment())
   }
 
   sumX <- 0.5 * colSums(X) - Q0b0
   MVNsampler <- create_TMVN_sampler(Q=0.5*crossprod(X) + Q0, name=name)
 
-  sigma.fixed <- e[["sigma.fixed"]]
-
   proposal_scale <- 2.4/sqrt(q)
+  sigma.fixed <- fam[["sigma.fixed"]]
+  if (!sigma.fixed) sd.name <- fam[["sd.name"]]
   draw <- function(p) {
-    # TODO consider case e$Q0.type="symm"
+    # TODO consider case Q0.type="symm"
     # random walk MH proposal; see Lin and Wang (2011)
     gamma <- p[[name]]
     gamma.star <- gamma + MVNsampler$draw(p, proposal_scale)[[name]]
     if (sigma.fixed)
       Qres <- p[["Q_"]] * p[["e_"]]^2
     else
-      Qres <- p[["Q_"]] * (1 / p[["sigma_"]]^2) * p[["e_"]]^2
+      Qres <- p[["Q_"]] * (1 / p[[sd.name]]^2) * p[["e_"]]^2
     Qratio <- exp(X %m*v% (gamma - gamma.star))
     log.ar <- 0.5 * (dotprodC(gamma, Q0 %m*v% gamma) - dotprodC(gamma.star, Q0 %m*v% gamma.star)) +
               dotprodC(gamma - gamma.star, sumX) + 0.5 * sum((1 - Qratio) * Qres)
@@ -150,11 +156,10 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
   }
 
   start <- function(p) {
-    if (is.null(p[[name]])) p[[name]] <- runif(q, -1e-3, 1e-3)
-    if (length(p[[name]]) != q) stop("wrong length for start value '", name, "'")
+    p[[name]] <- check_and_get(p, name, q, \() runif(q, -1e-3, 1e-3))
     p
   }
 
-  rm(e)
+  rm(sc)
   environment()
 }

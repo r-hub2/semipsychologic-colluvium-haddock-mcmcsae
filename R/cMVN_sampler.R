@@ -81,7 +81,7 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
       )
     }
   }
-  rhs <- c(rep.int(0, q), r)
+  rhs <- c(numeric(q), r)
   Iq <- seq_len(q)
   if (update.Q) {
     if (is.null(R)) {
@@ -118,12 +118,12 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
 #' @param Q precision matrix.
 #' @param R equality restriction matrix.
 #' @param r rhs vector for equality constraints \eqn{R'x = r}, where \eqn{R'} denotes the transpose of R.
-#' @param sampler sampler object as created by \code{\link{create_sampler}}.
+#' @param fam family object.
 #' @param name name of the cMVN vector parameter.
 #' @param chol.control options for Cholesky decomposition, see \code{\link{chol_control}}.
 #' @returns An environment with precomputed quantities and functions for sampling
 #'   from a multivariate normal distribution subject to equality constraints.
-create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, sampler, name="x", chol.control) {
+create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, fam, name="x", chol.control) {
 
   if (name == "") stop("empty name")
 
@@ -133,19 +133,17 @@ create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, sampler, name="
   )
   update <- function(Q, Imult=0) smplr$update(Q, Imult)
 
-  ## X, QT passed from block's draw function
+  # Xy is rhs, i.e. X' Qn ytilde (+ possibly prior reg term)
+  # for multi-response family there is no global sigma_ parameter
   draw <- function(p, Xy, X) {
-
-    # Xy is rhs, i.e. X' Qn ytilde (+ possibly prior reg term)
     if (is.null(p[["sigma_"]])) sigma <- 1 else sigma <- p[["sigma_"]]
-    u <- Xy + sigma * crossprod_mv(X, sampler$drawMVNvarQ(p))
+    u <- Xy + sigma * crossprod_mv(X, fam$drawMVNvarQ(p))
     for (mc in mbs) {
       if (mc[["type"]] == "gen")
         u[mc$block.i] <- u[mc$block.i] + sigma^2 * mc$drawMVNvarQ(p)
       else if (mc[["informative.prior"]])
         u[mc$block.i] <- u[mc$block.i] + sigma * mc$drawMVNvarQ(p)
     }
-
     p[[name]] <- smplr$draw(u)
     p
   }

@@ -1,5 +1,6 @@
 
 .mod.specials <- c("reg", "gen", "mec", "brt", "vreg", "vfac", "mc_offset", "s")
+.fac.types <- c("iid", "RW1", "RW2", "season", "AR1", "splines", "spatial", "custom")
 
 #' Check names of model components
 #'
@@ -44,7 +45,7 @@ check_mod_names <- function(x) {
 #' @returns A list of design matrices.
 computeDesignMatrix <- function(formula=NULL, data=NULL, labels=TRUE) {
   if (!inherits(formula, "formula")) stop("'formula' must be a formula")
-  formula <- standardize_formula(formula, data=data)
+  formula <- standardise_formula(formula, data=data)
   out <- to_mclist(formula)
   for (m in seq_along(out)) {
     out[[m]] <- match.call(eval(out[[m]][[1L]]), out[[m]])
@@ -101,8 +102,6 @@ compute_X <- function(formula=~1, factor=NULL,
     cols2remove <- NULL
   }
   X <- combine_X0_XA(X0, XA)
-  if (length(cols2remove))
-    attr(X, "factor.cols.removed") <- cols2remove
   if (ncol(X0) > 1L)
     attr(X, "formula.colnames") <- dimnames(X0)[[2L]]
   X
@@ -170,9 +169,26 @@ compute_XA <- function(factor.info=NULL, data=NULL) {
     out
   } else {
     fac <- combine_factors(factor.info[["variables"]], data, enclos=enclos)
+    if (length(fac) != n) stop("'", factor.info[["variables"]], "' has length ", length(fac), "; expected ", n)
     if (anyNA(fac)) stop("NA's in 'factor' not allowed")
     aggrMatrix(fac, facnames=TRUE)
   }
+}
+
+# check factor term and wrap symbol in 'iid'
+wrap_term <- function(x) {
+  if (is.symbol(x)) return(call("iid", x))
+  if (is.call(x)) {
+    head <- x[[1L]]
+    # only treat as model syntax if head is a symbol
+    if (is.symbol(head)) {
+      fun <- as.character(head)
+      if (any(fun == .fac.types)) return(x)
+      stop("unsupported factor component: ", fun)
+    }
+  }
+  # fallback
+  call("iid", x)
 }
 
 # extract information from the factor formula component of a model component list
@@ -180,14 +196,9 @@ get_factor_info <- function(formula, data) {
   enclos <- environment(formula)
   if (is.null(formula) || intercept_only(formula)) return(NULL)
   fs <- as.list(attr(terms(formula), "variables"))[-1L]
-  fs <- lapply(fs, \(x) if (is.symbol(x)) call("iid", x) else x)
+  fs <- lapply(fs, wrap_term)
   fs <- lapply(fs, \(x) match.call(match.fun(x[[1L]]), x))
   types <- vapply(fs, \(x) as.character(x[[1L]]), "")
-  if (!all(types %in% c("iid", "RW1", "RW2", "season", "AR1", "splines", "spatial", "custom"))) {
-    stop("unsupported factors in 'factor' argument: ",
-      paste(types[!(types %in% c("iid", "RW1", "RW2", "season", "AR1", "splines", "spatial", "custom"))], collapse=", ")
-    )
-  }
   variables <- vapply(fs,
     \(x) if (any(names(x) == "name")) deparse(x[["name"]]) else "",
     ""
@@ -433,7 +444,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=!D, R=TRUE, cols2remov
       },
       {
         if (needD || Q) DQf <- eval(DQcall)
-        if (needR) Rf <- if (info$types[f] == "iid") NULL else eval(Rcall)
+        if (needR) Rf <- if (info[["types"]][f] == "iid") NULL else eval(Rcall)
       }
     )
     if (needD || Q) DQ <- cross(DQ, DQf)
@@ -449,8 +460,8 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=!D, R=TRUE, cols2remov
     }
   }  # END for (f in seq_along(info[["types"]]))
   if (needR && !is.null(out[["R"]])) {
-    if (!is.null(cols2remove)) out$R <- out$R[-cols2remove, , drop=FALSE]
-    if ((remove.redundant.R.cols && nIGMRF >= 2L) || !is.null(cols2remove)) {
+    if (length(cols2remove)) out$R <- out$R[-cols2remove, , drop=FALSE]
+    if ((remove.redundant.R.cols && nIGMRF >= 2L) || length(cols2remove)) {
       # for multiple IGMRF factors R as constructed has redundant columns,
       #   because of duplicate inclusion of cross-products of null-vectors
       out$R <- remove_redundancy(out[["R"]])
@@ -458,7 +469,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=!D, R=TRUE, cols2remov
     out$R <- economizeMatrix(out[["R"]], allow.tabMatrix=FALSE, ...)
   }
   if (needD) {
-    if (!is.null(cols2remove)) {
+    if (length(cols2remove)) {
       DQ <- DQ[, -cols2remove, drop=FALSE]
       # then see which rows become all-zero and remove them too
       DQ <- DQ[-whichv(rowSums(DQ * DQ), 0), ]
@@ -516,7 +527,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=!D, R=TRUE, cols2remov
       out$Q <- crossprod(out[["D"]])
     } else {
       out$Q <- DQ
-      if (!is.null(cols2remove)) out$Q <- out$Q[-cols2remove, -cols2remove, drop=FALSE]
+      if (length(cols2remove)) out$Q <- out$Q[-cols2remove, -cols2remove, drop=FALSE]
     }
     out$Q <- economizeMatrix(out[["Q"]], symmetric=TRUE, ...)
   }
@@ -990,8 +1001,9 @@ QA_AR1_template <- function(info, QA0.5, nr) {
 maximize_log_lh_p <- function(sampler, type=c("llh", "lpost"), method="BFGS", control=list(fnscale=-1), ...) {
   type <- match.arg(type)
   e <- sampler
-  if (e[["has.bart"]]) stop("optimization not supported for models with a 'brt' component")
-  if (!is.null(e[["Vmod"]])) stop("optimization not yet implemented for models with sampling variance model specified in 'formula.V'")
+  if (e[["has.bart"]]) stop("optimisation not supported for models with a 'brt' component")
+  if (e$family[["family"]] == "multi") stop("optimisation not supported for multi-response models")
+  if (!is.null(e$family[["Vmod"]])) stop("optimisation not yet implemented for models with sampling variance model specified in 'formula.V'")
   ind_sigma <- e$vec_list[["sigma_"]]
   if (type == "llh") {
     f <- function(x)
@@ -1009,11 +1021,11 @@ maximize_log_lh_p <- function(sampler, type=c("llh", "lpost"), method="BFGS", co
 make_logposterior_opt <- function(sampler) {
   # logprior for optimization of logposterior = logprior + llh; llh is defined in sampler
   log_prior <- function(p) {out <- 0}
-  for (k in seq_along(sampler$mod)) {
+  for (k in seq_along(sampler[["mod"]])) {
     mc <- sampler$mod[[k]]
     switch(mc[["type"]],
       reg = {
-        mc$prior$setup_logprior(mc$name)
+        mc$prior$setup_logprior(mc[["name"]])
         log_prior <- add(log_prior, bquote(out <- out + mod[[.(k)]]$prior$logprior(p)))
       },
       stop("TBI: log-prior for model terms other than 'reg'")
@@ -1027,7 +1039,7 @@ make_logposterior_opt <- function(sampler) {
   f <- f |>
     add(quote(p <- vec2list(x))) |>
     add(quote(p$e_ <- compute_e(p))) |>
-    add(quote(log_prior(p) + llh(p)))
+    add(quote(log_prior(p) + family[["llh"]](p)))
   environment(f) <- environment(sampler)
   f
 }

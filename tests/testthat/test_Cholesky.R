@@ -104,3 +104,13 @@ test_that("Determinants are computed correctly", {
   w1 <- 2*L; w2 <- 1 - 2*L
   expect_equal(detchol(w1, w2), c(determinant(L * Q_RW1(n) + (1 - L) * CdiagU(n), logarithm=TRUE)$modulus))
 })
+
+test_that("inverse method of cholesky object works", {
+  n <- 20L
+  M <- crossprod(matrix(rnorm(n*n), n, n)) + 2*diag(n)
+  MdsC <- as(M, "CsparseMatrix")
+  cholM <- build_chol(MdsC)
+  MdsCinv <- cholM$inverse()
+  expect_is(MdsCinv, "dsCMatrix")
+  expect_equal(as.matrix(MdsCinv), inverseSPD(M))
+})

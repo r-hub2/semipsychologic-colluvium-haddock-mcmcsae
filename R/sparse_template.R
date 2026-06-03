@@ -5,6 +5,7 @@
 #   to environment mc, as well as an update method and possibly mat_sum and kron_prod methods
 sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
 
+  in.block <- mc[["type"]] != "block" && mc[["in.block"]]
   if (mc[["type"]] == "block") {
     Q <- mc[["QT"]]
     keep.kp <- FALSE
@@ -28,7 +29,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
       M1.fixed = is.null(mc[["priorA"]]) && !mc$strucA[["update.Q"]] && is.null(mc[["AR1.inferred"]])
     )
     Q <- kron_prod(QA, Qv)
-    if (mc[["in.block"]]) {
+    if (in.block) {
       if (is.matrix(Q)) Q <- .m2sparse(Q, class="dsC")
       assign("Q", Q, envir=mc)  # only for single-time use in create_mc_block
     } else {
@@ -38,7 +39,9 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
     keep.kp <- TRUE
   }
 
-  if (mc[["type"]] == "block" || !mc[["in.block"]]) {
+  if (in.block) {
+    keep.kp <- TRUE
+  } else {
     if (mc[["type"]] == "gen" && mc[["gl"]]) {
       XX <- mc$glp[["XX.ext"]]
       R <- mc$glp[["R"]]
@@ -47,9 +50,9 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
       R <- mc[["R"]]
     }
 
-    add.eps.I <- if (is.null(control)) FALSE else control[["add.eps.I"]]
-    add.outer.R <- if (add.eps.I || is.null(control)) FALSE else control[["add.outer.R"]]
-    cMVN.sampler <- if (is.null(control)) FALSE else control[["cMVN.sampler"]]
+    add.eps.I <- control[["add.eps.I"]]
+    add.outer.R <- if (add.eps.I || mc[["type"]] != "block") FALSE else control[["add.outer.R"]]
+    cMVN.sampler <- if (mc[["type"]] == "block") control[["cMVN.sampler"]] else FALSE
     if (cMVN.sampler) {
       if (update.XX) {
         mat_sum <- make_mat_sum(M1=XX, M2=Q, force.sparse=TRUE)
@@ -61,8 +64,8 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
       MVNsampler <- create_block_cMVN_sampler(
         mbs=mc[["mcs"]], X=mc[["X"]], Q=XX_Q,
         R=R, r=mc[["r"]],
-        sampler=mc[["e"]],
-        name=mc[["name"]], chol.control=mc[["e"]]$control[["chol.control"]]
+        fam=mc[["fam"]],
+        name=mc[["name"]], chol.control=control[["chol.control"]]
       )
     } else {
       MVNsampler <- NULL
@@ -99,7 +102,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
             MVNsampler <- create_TMVN_sampler(
               Q=XX_Q, update.Q=TRUE, name=mc[["name"]],
               constraints=constraints,
-              chol.control=mc[["e"]]$control[["chol.control"]]
+              chol.control=control[["chol.control"]]
             )
           ),
           error = function(e) {
@@ -153,7 +156,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
             MVNsampler <- create_TMVN_sampler(
               Q=XX_Q, update.Q=TRUE, name=mc[["name"]],
               constraints=constraints,
-              chol.control=mc[["e"]]$control[["chol.control"]]
+              chol.control=control[["chol.control"]]
             )
           ),
           error = function(e) {
@@ -209,7 +212,6 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
     if (keep.ms) mc$mat_sum <- mat_sum
   }
 
-  if (mc[["type"]] != "block" && mc[["in.block"]]) keep.kp <- TRUE
   if (keep.kp) mc$kron_prod <- kron_prod
 
 }

@@ -81,6 +81,44 @@ test_that("centered sampler runs", {
   expect_equivalent(summ$v_gl[, "Mean"], dat$pars$beta, tol=1)
 })
 
+test_that("starting values can be set for group-level effects", {
+  sampler <- create_sampler(
+    y ~ gen(factor = ~ RW1(t), formula.gl = ~ glreg(~ x), name="v"),
+    data=df
+  )
+  expect_no_error(
+    sim <- MCMCsim(sampler, n.chain=2L, burnin=0, n.iter=1L, verbose=FALSE,
+      start=rep(list(list(v_gl = rep(0, 2))), 2))
+  )
+  expect_no_error(
+    sim <- MCMCsim(sampler, n.chain=2L, burnin=0, n.iter=1L, verbose=FALSE,
+      start=rep(list(list(v = rep(0, 100))), 2))
+  )
+  expect_no_error(
+    sim <- MCMCsim(sampler, n.chain=2L, burnin=0, n.iter=1L, verbose=FALSE,
+      start=rep(list(list(v = rep(0, 100), v_gl=rep(0, 2))), 2))
+  )
+  expect_error(
+    sim <- MCMCsim(sampler, n.chain=2L, burnin=0, n.iter=1L, verbose=FALSE,
+      start=rep(list(list(v = rep(0, 102))), 2)),
+    "starting value"
+  )
+  z <- rnorm(nrow(df))
+  sampler <- create_sampler(
+    y ~ 0 + z + gen(factor = ~ RW1(t), formula.gl = ~ glreg(~ x), name="v"),
+    data=df
+  )
+  expect_no_error(
+    sim <- MCMCsim(sampler, n.chain=2L, burnin=0, n.iter=1L, verbose=FALSE,
+      start=rep(list(list(v = rep(0, 100), v_gl=rep(0, 2))), 2))
+  )
+  expect_error(
+    sim <- MCMCsim(sampler, n.chain=2L, burnin=0, n.iter=1L, verbose=FALSE,
+      start=rep(list(list(v = rep(0, 102))), 2)),
+    "starting value"
+  )
+})
+
 test_that("assigning a normal prior precision for group-level effects works", {
    sampler <- create_sampler(
      y ~ gen(factor = ~ RW1(t), formula.gl = ~ glreg(~ x, prior=pr_normal(precision = 1, labels="x")), name="v"),
@@ -115,11 +153,11 @@ test_that("more complex example works", {
   # uncentered
   sampler <- create_sampler(
     y ~ reg(name="beta", formula=~x1+x2) + gen(name="v", formula=~x1+x2, factor=~area),
-    family="binomial", data=df,
-    control=sampler_control(PG.approx = TRUE, PG.approx.m = 0L)
+    family=f_binomial(control = binomial_control(PG.approx = TRUE, PG.approx.m = 0L)),
+    data=df
   )
-  expect_true(sampler$control$PG.approx)
-  expect_equal(sampler$control$PG.approx.m, 0L)
+  expect_true(sampler$family$control$PG.approx)
+  expect_identical(sampler$family$control$PG.approx.m, 0L)
   sim <- MCMCsim(sampler, n.iter=700, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
   expect_true(nrow(summ$v_rho) == 3L)
@@ -128,8 +166,7 @@ test_that("more complex example works", {
   # centered
   sampler <- create_sampler(
     y ~ gen(name="v", formula=~x1+x2, factor=~iid(area), formula.gl=~glreg(~1), debug=FALSE),
-    family="binomial", data=df,
-    control=sampler_control(PG.approx.m = 0L)
+    family=f_binomial(control = binomial_control(PG.approx.m = 0L)), data=df
   )
   sim <- MCMCsim(sampler, n.iter=700, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
@@ -137,8 +174,7 @@ test_that("more complex example works", {
   expect_between(summ$v_gl[, "Mean"], 0 * betaTrue, 2 * betaTrue)
   sampler <- create_sampler(
     y ~ gen(name="v", factor=~iid(area), formula.gl=~glreg(~x1+x2), debug=FALSE),
-    family="binomial", data=df,
-    control=sampler_control(PG.approx.m = 0L)
+    family=f_binomial(control = binomial_control(PG.approx.m = 0L)), data=df
   )
   sim <- MCMCsim(sampler, n.iter=700, n.chain=2, verbose=FALSE)
   summ <- summary(sim)

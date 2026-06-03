@@ -10,9 +10,10 @@ reg(
   sparse = NULL,
   X = NULL,
   prior = NULL,
+  scale.prior = NULL,
+  constraints = NULL,
   Q0 = NULL,
   b0 = NULL,
-  constraints = NULL,
   name = "",
   debug = FALSE
 )
@@ -40,6 +41,17 @@ priors can be specified using functions \code{\link{pr_normal}},
 \code{\link{pr_fixed}}, or \code{\link{pr_MLiG}}. The latter prior is only
 available in conjunction with a gamma family sampling distribution.}
 
+\item{scale.prior}{whether the coefficients' prior scale includes the family's
+global (residual) scale as a factor. The default, \code{NULL}, sets
+this option to \code{TRUE} in case of an informative normal prior and
+\code{"gaussian"}, \code{"student-t"} or \code{"gaussian-gamma"} family
+with non-fixed scale parameter, and to \code{FALSE} otherwise.}
+
+\item{constraints}{optional linear equality and/or inequality constraints
+imposed on the vector of regression coefficients. Use function
+\code{\link{set_constraints}} to specify the constraint matrices and
+right-hand sides.}
+
 \item{Q0}{prior precision matrix for the regression effects. The default is a
 zero matrix corresponding to a noninformative improper prior.
 It can be specified as a scalar value, as a numeric vector of appropriate
@@ -50,11 +62,6 @@ instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
 It can be specified as a scalar value or as a numeric vector of
 appropriate length. DEPRECATED, please use argument \code{prior}
 instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
-
-\item{constraints}{optional linear equality and/or inequality constraints
-imposed on the vector of regression coefficients. Use function
-\code{\link{set_constraints}} to specify the constraint matrices and
-right-hand sides.}
 
 \item{name}{the name of the model component. This name is used in the output of the
 MCMC simulation function \code{\link{MCMCsim}}. By default the name will be 'reg'

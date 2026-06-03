@@ -1,11 +1,27 @@
 
+version 0.8.1
+- new family "multi" for multi-response models, see f_multi
+- Student-t sampling distribution now supported more directly
+  through family "student-t", see f_student_t
+- new option scale.prior to choose whether normal prior on
+  regression coefficients should scale with residual
+  standard deviation (default) or not
+- added support for lme4 random effect specifications
+- added Haar-PX-DA algorithm for to improve MCMC mixing of
+  probit Bernoulli models
+- added as.data.frame method to summary of mcdraws and dc
+  objects, for easier combining, analysing and viewing
+- several small speed-ups
+- fixed several small bugs
+- more examples, checks and tests
+
+
 version 0.8.0
 - support added for smooth term specification using mgcv::s()
-- measurement error component mec() now also works for non-gaussian
-  families
-- fixed a bug introduced in v0.7.9 in internal dgC_is_tabMatrix function
-  that could affect results from models with RW2 components
-- solved several other smaller bugs
+- measurement error component mec() now also works for non-gaussian families
+- fixed a bug introduced in v0.7.9 in internal dgC_is_tabMatrix function that
+  could affect results from models with RW2 factors
+- fixed several other smaller bugs
 - more input checks
 - many tests added
 
@@ -27,8 +43,8 @@ version 0.7.9
 - new argument weights of predict method for mcdraws object, which can be used
   to pass population sizes of poststratification cells for the P-step of MRP
   (Multilevel Regression and Poststratification)
-- family-specific arguments should now be passed to thw family argument of
-  create_sampler of generate_data by means of the family functions f_gaussian,
+- family-specific arguments should now be passed to the family argument of
+  create_sampler or generate_data by means of the family functions f_gaussian,
   f_binomial, f_negbinomial, f_poisson, f_multinomial, f_gamma
 - fixed a bug in prediction with type="response" for multinomial family (thanks
   to Sumonkanti Das for reporting)

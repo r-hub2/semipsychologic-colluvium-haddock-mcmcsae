@@ -268,8 +268,13 @@ setMethod("[", c(x="tabMatrix", i="index", j="missing", drop="missing"), \(x, i,
 
 tab_col_select <- function(M, j, drop) {
   j <- get_ind(j, M, "col")
+  dn <- dimnames(M)
   out <- Ctab2dgC(M)[, j, drop=drop]
-  if (is.null(dim(out))) out else as(out, "tabMatrix")
+  if (!is.null(dim(out))) {
+    out <- as(out, "tabMatrix")
+    dimnames(out) <- list(dn[[1L]], dn[[2L]][j])
+  }
+  out
 }
 
 # column selection

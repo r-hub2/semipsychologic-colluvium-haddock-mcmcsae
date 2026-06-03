@@ -38,7 +38,7 @@ extern SEXP _mcmcsae_CdiagU(SEXP);
 extern SEXP _mcmcsae_Cforwardsolve(SEXP, SEXP);
 extern SEXP _mcmcsae_CforwardsolveM(SEXP, SEXP);
 extern SEXP _mcmcsae_Cnnz_per_col_scps_template(SEXP, SEXP, SEXP);
-extern SEXP _mcmcsae_copy_vector(SEXP);
+extern SEXP _mcmcsae_copy_obj(SEXP);
 extern SEXP _mcmcsae_CrCRT(SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_Crepgen(SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_Crgig(SEXP, SEXP, SEXP, SEXP);
@@ -81,8 +81,10 @@ extern SEXP _mcmcsae_logSumExpColwiseC(SEXP);
 extern SEXP _mcmcsae_mv_update(SEXP, SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_prec2se_cor(SEXP);
 extern SEXP _mcmcsae_rowVarsC(SEXP);
+extern SEXP _mcmcsae_set_in_place(SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_sparse_sum_x(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_TMVN_HMC_C(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP _mcmcsae_tree_predictC(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP _mcmcsae_v_update(SEXP, SEXP, SEXP);
 
 static const R_CallMethodDef CallEntries[] = {
@@ -116,7 +118,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_mcmcsae_Cforwardsolve",                         (DL_FUNC) &_mcmcsae_Cforwardsolve,                          2},
     {"_mcmcsae_CforwardsolveM",                        (DL_FUNC) &_mcmcsae_CforwardsolveM,                         2},
     {"_mcmcsae_Cnnz_per_col_scps_template",            (DL_FUNC) &_mcmcsae_Cnnz_per_col_scps_template,             3},
-    {"_mcmcsae_copy_vector",                           (DL_FUNC) &_mcmcsae_copy_vector,                            1},
+    {"_mcmcsae_copy_obj",                              (DL_FUNC) &_mcmcsae_copy_obj,                               1},
     {"_mcmcsae_CrCRT",                                 (DL_FUNC) &_mcmcsae_CrCRT,                                  3},
     {"_mcmcsae_Crepgen",                               (DL_FUNC) &_mcmcsae_Crepgen,                                3},
     {"_mcmcsae_Crgig",                                 (DL_FUNC) &_mcmcsae_Crgig,                                  4},
@@ -159,8 +161,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_mcmcsae_mv_update",                             (DL_FUNC) &_mcmcsae_mv_update,                              4},
     {"_mcmcsae_prec2se_cor",                           (DL_FUNC) &_mcmcsae_prec2se_cor,                            1},
     {"_mcmcsae_rowVarsC",                              (DL_FUNC) &_mcmcsae_rowVarsC,                               1},
+    {"_mcmcsae_set_in_place",                          (DL_FUNC) &_mcmcsae_set_in_place,                           3},
     {"_mcmcsae_sparse_sum_x",                          (DL_FUNC) &_mcmcsae_sparse_sum_x,                           9},
     {"_mcmcsae_TMVN_HMC_C",                            (DL_FUNC) &_mcmcsae_TMVN_HMC_C,                            14},
+    {"_mcmcsae_tree_predictC",                         (DL_FUNC) &_mcmcsae_tree_predictC,                          5},
     {"_mcmcsae_v_update",                              (DL_FUNC) &_mcmcsae_v_update,                               3},
     {NULL, NULL, 0}
 };
@@ -175,3 +179,4 @@ void R_init_mcmcsae(DllInfo *dll) {
 void R_unload_mcmcsae(DllInfo *dll) {
   M_cholmod_finish(&c);
 }
+

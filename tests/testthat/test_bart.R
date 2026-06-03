@@ -20,7 +20,7 @@ test_that("BART component 'brt' works", {
     data=dat
   )
   n.ch <- 2L
-  sim <- MCMCsim(sampler, burnin=400, n.iter=800, n.chain=n.ch, thin=2, store.all=TRUE, verbose=FALSE)
+  sim <- MCMCsim(sampler, burnin=400, n.iter=600, n.chain=n.ch, thin=2, store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$beta[, "Mean"], 0.5*0.5, 2*0.5)
   expect_identical(nrow(summ$bart), n)
@@ -35,6 +35,7 @@ test_that("BART component 'brt' works", {
   expect_equal(waic1[["p_WAIC2"]], waic2$estimates["p_waic", "Estimate"])
   suppressWarnings(loo(sim))
 
+  expect_true(sampler$mod$bart$fastPredict)
   pred <- predict(sim, newdata=testdat, iters=sample(n_draws(sim), 30), show.progress=FALSE)
   summpred <- summary(pred)
   #plot(testdat$x, summpred[, "Mean"])

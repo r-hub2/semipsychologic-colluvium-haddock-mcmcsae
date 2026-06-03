@@ -137,8 +137,8 @@ for sampling. The following elements of the sampler object are used by
   \item{draw}{function to draw samples, typically from a full conditional
     posterior distribution.}
   \item{rprior}{function to draw from a prior distribution.}
-  \item{coef.names}{list of vectors of parameter coefficient names, for
-    vector parameters.}
+  \item{get_labels}{function of a single variable \code{par.name} that
+   returns labels for the components of the corresponding vector parameter.}
   \item{MHpars}{vector of names of parameters that are sampled using a
     Metropolis-Hastings (MH) sampler; acceptance rates are kept for these
     parameters.}

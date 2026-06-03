@@ -11,9 +11,10 @@ mec(
   X = NULL,
   V = NULL,
   prior = NULL,
+  scale.prior = TRUE,
+  constraints = NULL,
   Q0 = NULL,
   b0 = NULL,
-  constraints = NULL,
   name = "",
   debug = FALSE
 )
@@ -43,6 +44,16 @@ specified \code{formula} is ignored.}
 \item{prior}{prior specification for the regression coefficients. Currently only
 normal priors are supported, specified using function \code{\link{pr_normal}}.}
 
+\item{scale.prior}{whether the normal prior's scale includes the model's
+global residual scale as a factor. By default \code{TRUE}, but only relevant
+for a proper normal prior specified by \code{pr_normal} for families
+\code{"gaussian"}, \code{"student-t"} and \code{"gaussian-gamma"}.}
+
+\item{constraints}{optional linear equality and/or inequality constraints
+imposed on the vector of regression coefficients. Use function
+\code{\link{set_constraints}} to specify the constraint matrices and
+right-hand sides.}
+
 \item{Q0}{prior precision matrix for the regression effects. The default is a
 zero matrix corresponding to a noninformative improper prior.
 It can be specified as a scalar value, as a numeric vector of appropriate
@@ -53,11 +64,6 @@ instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
 It can be specified as a scalar value or as a numeric vector of
 appropriate length. DEPRECATED, please use argument \code{prior}
 instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
-
-\item{constraints}{optional linear equality and/or inequality constraints
-imposed on the vector of regression coefficients. Use function
-\code{\link{set_constraints}} to specify the constraint matrices and
-right-hand sides.}
 
 \item{name}{the name of the model component. This name is used in the output of the
 MCMC simulation function \code{\link{MCMCsim}}. By default the name will be 'reg'

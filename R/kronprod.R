@@ -15,24 +15,18 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       template <- expand_unit_ddi(M1)
       update <- function(M1, M2x, values.only=FALSE) {
         x <- M2x * template@x
-        if (values.only)
-          x
-        else {
-          out <- template
-          attr(out, "x") <- x
-          out
-        }
+        if (values.only) return(x)
+        out <- template
+        attr(out, "x") <- x
+        out
       }
     } else {
       update <- function(M1, M2x, values.only=FALSE) {
         x <- M2x * M1@x
-        if (values.only) {
-          x
-        } else {
-          out <- M1
-          attr(out, "x") <- x
-          out
-        }
+        if (values.only) return(x)
+        out <- M1
+        attr(out, "x") <- x
+        out
       }
     }
     rm(M1, M2, M1.fixed)
@@ -61,24 +55,18 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
         ones <- rep.int(1, nrow(M1))
         update <- function(M1, M2x, values.only=FALSE) {
           x <- as.numeric(base_tcrossprod(if (expand) rep.int(M2x, q2) else M2x, ones))
-          if (values.only)
-            x
-          else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       } else {
         update <- function(M1, M2x, values.only=FALSE) {
           x <- as.numeric(base_tcrossprod(if (expand) rep.int(M2x, q2) else M2x, M1@x))
-          if (values.only)
-            x
-          else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       }
     },
@@ -90,24 +78,18 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
         q1 <- nrow(M1)
         update <- function(M1, M2x, values.only=FALSE) {
           x <- rep.int(M2x[upper], q1)
-          if (values.only)
-            x
-          else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       } else {
         update <- function(M1, M2x, values.only=FALSE) {
           x <- as.numeric(base_tcrossprod(M2x[upper], M1@x))
-          if (values.only) {
-            x
-          } else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       }
     },
@@ -122,13 +104,10 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       rm(M1dsC)
       update <- function(M1, M2x, values.only=FALSE) {
         x <- Crepgen(M1[w], d, if (expand) rep.int(M2x, q2) else M2x)
-        if (values.only) {
-          x
-        } else {
-          out <- template
-          attr(out, "x") <- x
-          out
-        }
+        if (values.only) return(x)
+        out <- template
+        attr(out, "x") <- x
+        out
       }
     },
     ddidsC = {
@@ -138,24 +117,18 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
         q1 <- nrow(M1)
         update <- function(M1, M2x, values.only=FALSE) {
           x <- rep.int(M2x, q1)
-          if (values.only) {
-            x
-          } else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       } else {
         update <- function(M1, M2x, values.only=FALSE) {
           x <- as.numeric(base_tcrossprod(M2x, M1@x))
-          if (values.only) {
-            x
-          } else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       }
     },
@@ -168,13 +141,10 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       d <- d[d > 0L]
       update <- function(M1, M2x, values.only=FALSE) {
         x <- Crepgen(M1@x, d, if (expand) rep.int(M2x, q2) else M2x)
-        if (values.only) {
-          x
-        } else {
-          out <- template
-          attr(out, "x") <- x
-          out
-        }
+        if (values.only) return(x)
+        out <- template
+        attr(out, "x") <- x
+        out
       }
     },
     matdsC = {
@@ -193,24 +163,18 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
         rm(ind1)
         update <- function(M1, M2x, values.only=FALSE) {
           x <- x0 * M2x[ind2]
-          if (values.only) {
-            x
-          } else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       } else {
         update <- function(M1, M2x, values.only=FALSE) {
           x <- M1[ind1] * M2x[ind2]
-          if (values.only) {
-            x
-          } else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       }
     },
@@ -227,29 +191,23 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
       attr(template, "x") <- NULL
       rm(upper, x1, x1.ind, ind, prod.table)
       if (M1.fixed) {
-       x0 <- forceSymmetric(as(kronecker(M1, matrix(1, nrow(M2), ncol(M2))), "CsparseMatrix"), uplo="U")@x
-       rm(ind1)
-       update <- function(M1, M2x, values.only=FALSE) {
-         x <- x0 * M2x[ind2]
-         if (values.only)
-           x
-         else {
-           out <- template
-           attr(out, "x") <- x
-           out
-         }
-       }
+        x0 <- forceSymmetric(as(kronecker(M1, matrix(1, nrow(M2), ncol(M2))), "CsparseMatrix"), uplo="U")@x
+        rm(ind1)
+        update <- function(M1, M2x, values.only=FALSE) {
+          x <- x0 * M2x[ind2]
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
+        }
       } else {
-       update <- function(M1, M2x, values.only=FALSE) {
-         x <- M1@x[ind1] * M2x[ind2]
-         if (values.only) {
-           x
-         } else {
-           out <- template
-           attr(out, "x") <- x
-           out
-         }
-       }
+        update <- function(M1, M2x, values.only=FALSE) {
+          x <- M1@x[ind1] * M2x[ind2]
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
+        }
       }
     },
     dsCdsC = {
@@ -271,24 +229,18 @@ build_kron <- function(M1, M2, q2, M1.fixed=FALSE) {
         rm(ind1)
         update <- function(M1, M2x, values.only=FALSE) {
           x <- x0 * M2x[ind2]
-          if (values.only) {
-            x
-          } else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       } else {
         update <- function(M1, M2x, values.only=FALSE) {
           x <- M1@x[ind1] * M2x[ind2]
-          if (values.only) {
-            x
-          } else {
-            out <- template
-            attr(out, "x") <- x
-            out
-          }
+          if (values.only) return(x)
+          out <- template
+          attr(out, "x") <- x
+          out
         }
       }
     },

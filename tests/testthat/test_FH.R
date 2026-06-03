@@ -19,7 +19,7 @@ test_that("single block Gibbs sampler for FH model runs", {
     ), "deprecated"
   )
   expect_equal(sampler$family$Q0, Cdiag(1/psi))
-  expect_identical(sampler$block[[1L]], c("beta", "v"))
+  expect_identical(sampler$control$block[[1L]], c("beta", "v"))
   expect_true(sampler$mod[["v"]]$usePX)
   expect_length(sampler$mbs, 1L)
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE)
@@ -35,7 +35,7 @@ test_that("separate Gibbs block sampler, shortcut '_local' for area indicator, a
     family=f_gaussian(var.prior = pr_fixed(1), var.vec = ~ psi),
     data=df, control=sampler_control(block=FALSE)
   )
-  expect_equal(sampler$Q0, Diagonal(x = 1/psi))
+  expect_equal(sampler$family$Q0, Diagonal(x = 1/psi))
   expect_null(sampler$mbs)
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE, store.all=TRUE)
   expect_is(sim$v, "dc")
@@ -50,8 +50,8 @@ test_that("FH model with unit sampling variances runs", {
   sampler <- create_sampler(y ~ reg(~ 1 + x) + gen(factor = ~ iid(area)),
     family = f_gaussian(var.prior = pr_fixed()), data=df
   )
-  expect_true(sampler$sigma.fixed)
-  expect_identical(sampler$Q0.type, "unit")
+  expect_true(sampler$family$sigma.fixed)
+  expect_identical(sampler$family$Q0.type, "unit")
   sim <- MCMCsim(sampler, n.iter=250, burnin=100, n.chain=2, verbose=FALSE)
   expect_is(sim, "mcdraws")
 })

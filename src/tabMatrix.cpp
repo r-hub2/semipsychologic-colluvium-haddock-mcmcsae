@@ -33,9 +33,9 @@ SEXP Ctab(const IntegerVector & Dim, const bool reduced, const IntegerVector & p
 //’ @param ignore_x whether to use only the indicator part of the tabMatrix (for expansion).
 //’ @returns The vector \code{Ay}.
 // [[Rcpp::export(rng=false)]]
-Rcpp::NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector & y, const bool ignore_x = false) {
+NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector & y, const bool ignore_x = false) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const S4 A_s4(A);  // Only do this once
+  const S4 A_s4(A);
   const IntegerVector perm = A_s4.slot("perm");
   const IntegerVector Dim = A_s4.slot("Dim");
   const int n = perm.size();
@@ -144,32 +144,40 @@ Eigen::MatrixXd Cdense_tab_tcrossprod(const Eigen::Map<Eigen::MatrixXd> & y, con
 //’ @param y a numeric vector.
 //’ @returns The vector \code{A'y}.
 // [[Rcpp::export(rng=false)]]
-NumericVector Ctab_numeric_crossprod(const SEXP A, const NumericVector & y) {
+NumericVector Ctab_numeric_crossprod(const SEXP A, const NumericVector y) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const S4 A_S4(A);
-  const IntegerVector perm(A_S4.slot("perm"));
-  const IntegerVector Dim(A_S4.slot("Dim"));
+
+  int* Dim = INTEGER(R_do_slot(A, Rf_install("Dim")));
   const int n = y.size();
+
   if (Dim[0] != n) stop("incompatible dimensions");
+
   NumericVector out(Dim[1]);
-  const bool reduced(::Rf_asLogical(A_S4.slot("reduced")));
-  const bool num(::Rf_asLogical(A_S4.slot("num")));
+
+  double* p_out = REAL(out);
+  double* p_y = REAL(y);
+  int* p_perm = INTEGER(R_do_slot(A, Rf_install("perm")));
+  bool reduced = LOGICAL(R_do_slot(A, Rf_install("reduced")))[0];
+  bool num = LOGICAL(R_do_slot(A, Rf_install("num")))[0];
+
   if (reduced) {
     for (int i = 0; i < n; i++) {
-      if (perm[i] >= 0) {
-        out[perm[i]] += y[i];
+      int p = p_perm[i];
+      if (p >= 0) {
+        p_out[p] += p_y[i];
       }
     }
   } else if (num) {
-    const NumericVector x(A_S4.slot("x"));
+    double* p_x = REAL(R_do_slot(A, Rf_install("x")));
     for (int i = 0; i < n; i++) {
-      out[perm[i]] += x[i]*y[i];
+      p_out[p_perm[i]] += p_x[i] * p_y[i];
     }
   } else {
     for (int i = 0; i < n; i++) {
-      out[perm[i]] += y[i];
+      p_out[p_perm[i]] += p_y[i];
     }
   }
+
   return out;
 }
 

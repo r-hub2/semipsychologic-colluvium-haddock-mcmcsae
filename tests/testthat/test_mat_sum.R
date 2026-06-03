@@ -149,3 +149,18 @@ test_that("(sparse) matrix sum template works: fixed M0, variable M1 and M2", {
   expect_equivalent(as.matrix(M0 + 4*M1 + M2), as.matrix(ms(M1, M2, w1=4)))
   expect_equivalent(as.matrix(M0), as.matrix(ms(M1, M2, 0, 0)))
 })
+
+test_that("(sparse) matrix sum template works: fixed M0, one or both of M1 and M2 unit-diagonal", {
+  n <- 5
+  M0 <- matrix(runif(n*n), n, n)
+  M1 <- Diagonal(x=runif(n))
+  M2 <- Diagonal(n)
+  ms <- make_mat_sum(M0, M1, M2)
+  expect_equivalent(as.matrix(M0 + 4*M1 + 3*M2), as.matrix(ms(M1, M2, w1=4, w2=3)))
+  M1 <- Diagonal(n)
+  ms <- make_mat_sum(M0, M1, M2)
+  expect_equivalent(as.matrix(M0 + 4*M1 + 3*M2), as.matrix(ms(M1, M2, w1=4, w2=3)))
+  M2 <- Diagonal(x=runif(n))
+  ms <- make_mat_sum(M0, M1, M2)
+  expect_equivalent(as.matrix(M0 + 4*M1 + 3*M2), as.matrix(ms(M1, M2, w1=4, w2=3)))
+})

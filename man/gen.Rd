@@ -89,7 +89,7 @@ by supplying a list with one or more of the following components:
     specified by \code{formula}. The default is \code{TRUE} except when \code{var="scalar"}.
     If \code{FALSE} a single redundant multiplicative parameter is used.}
   \item{data.scale}{whether the data level scale is used as a variance factor for the expansion
-    parameters. Default is \code{TRUE}.}
+    parameters. Default is \code{TRUE} for gaussian, student-t and gaussian-gamma families.}
 }}
 
 \item{priorA}{prior distribution for scale factors at the variance scale associated with \code{QA}.

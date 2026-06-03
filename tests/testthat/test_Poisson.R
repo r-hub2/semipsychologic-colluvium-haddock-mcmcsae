@@ -36,7 +36,7 @@ test_that("Poisson shortcut works", {
 test_that("f_poisson works", {
   expect_error(sampler <- create_sampler(y ~ 1 + x, ry=100, family="poisson"), "no longer")
   sampler <- create_sampler(y ~ 1 + x, family=f_poisson(control=poisson_control(nb.shape=200)))
-  expect_equal(sampler$ry, 200)
+  expect_equal(sampler$family$shape0, 200)
   sim <- MCMCsim(sampler, n.chain=2, burnin=150, n.iter=500, verbose=FALSE)
   summ <- summary(sim)
   expect_equal(summ$reg1[, "Mean"], c(`(Intercept)`=1, x=2), tolerance=0.25)
@@ -57,4 +57,12 @@ test_that("in-sample prediction works", {
   fitted <- fitted(sim, type="response")
   fittedsumm <- summary(fitted)
   expect_between(mean(fittedsumm[, "Mean"]), 0.75*mean(y), 1.3*mean(y))
+})
+
+test_that("generate_data works for Poisson model", {
+  gd <- generate_data(~ reg(~ x, prior=pr_normal(precision=1)), family="Poisson")
+  sampler <- create_sampler(gd$y ~ 1 + x, family="poisson")
+  sim <- MCMCsim(sampler, n.chain=2, n.iter=500, verbose=FALSE)
+  summ <- summary(sim)
+  expect_between(gd$pars$reg1, summ$reg1[, "Mean"] - 4*summ$reg1[, "SD"], summ$reg1[, "Mean"] + 4*summ$reg1[, "SD"])
 })

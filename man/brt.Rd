@@ -12,6 +12,7 @@ brt(
   name = "",
   debug = FALSE,
   keepTrees = FALSE,
+  fastPredict = TRUE,
   ...
 )
 }
@@ -38,6 +39,10 @@ draw function associated with this model component. Mainly intended for develope
 is required for prediction based on new data. The default is \code{FALSE} to save
 memory.}
 
+\item{fastPredict}{if \code{TRUE} (default) a fast version of prediction based
+on the stored BART trees is used. Option \code{FALSE} is available mainly
+for testing purposes.}
+
 \item{...}{parameters passed to \code{\link[dbarts]{dbarts}}.}
 }
 \value{
@@ -53,6 +58,7 @@ model's linear predictor. To use this model component one needs
 to have R package \pkg{dbarts} installed.
 }
 \examples{
+\dontrun{
 # generate data, based on an example in Friedman (1991)
 gendat <- function(n=150L, p=10L, sigma=1) {
   x <- matrix(runif(n * p), n, p)
@@ -70,13 +76,10 @@ sampler <- create_sampler(
   family = f_gaussian(var.prior=pr_invchisq(df=3, scale=var(train$y))),
   data = train
 )
-# increase burnin and n.iter below to improve MCMC convergence
-sim <- MCMCsim(sampler, n.chain=2, burnin=100, n.iter=200, thin=2,
+sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=400, thin=2,
   store.all=TRUE, verbose=FALSE)
 (summ <- summary(sim))
 plot(train$mu, summ$bart[, "Mean"]); abline(0, 1)
-# NB prediction is currently slow
-\donttest{
 pred <- predict(sim, newdata=test,
   iters=sample(seq_len(n_draws(sim)), 50),
   show.progress=FALSE
@@ -90,7 +93,7 @@ plot(test$mu, summpred[, "Mean"]); abline(0, 1)
 H.A. Chipman, E.I. Georgea and R.E. McCulloch (2010).
    BART: Bayesian additive regression trees.
    The Annals of Applied Statistics 4(1), 266-298.
-   
+
  J.H. Friedman (1991).
    Multivariate adaptive regression splines.
    The Annals of Statistics 19, 1-67.

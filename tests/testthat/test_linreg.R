@@ -34,6 +34,8 @@ test_that("single-site Gibbs sampler works", {
   expect_null(sampler$mbs)
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
+  expect_between(coef(lm(df$y ~ colMeans(as.matrix(fitted(sim))))), c(-0.25, 0.75), c(0.25, 1.5))
+  expect_lt(abs(mean(colMeans(as.matrix(residuals(sim))))), 0.1)
   expect_true((0.5 < summ$mu[, "Mean"]) && (summ$mu[, "Mean"] < 2))
   expect_true((0.5 < summ$beta1[, "Mean"]) && (summ$beta1[, "Mean"] < 2))
   expect_true((2*0.5 < summ$beta2[, "Mean"]) && (summ$beta2[, "Mean"] < 2*2))
@@ -117,6 +119,7 @@ test_that("non-zero prior mean works", {
   ml_mod <- y ~ reg(mod, prior=pr_normal(mean=c(1,1,2,3,4), precision=1e3), name="beta")
   sampler <- create_sampler(ml_mod, data=df)
   expect_length(sampler$mod[[1L]]$prior[["mean"]], 5L)
+  expect_equal(sampler$family$df.sigma, n + sampler$mod[[1]]$q)
   sim <- MCMCsim(sampler, n.iter=500, burnin=100, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$beta[, "Mean"], 0.75 * c(1,1,2,3,4), 1.5 * c(1,1,2,3,4))
@@ -132,6 +135,11 @@ test_that("fixed prior mean works", {
   summ <- summary(sim)
   expect_equal(unname(summ$beta[, "q0.05"]), f)
   expect_equal(unname(generate_data(ml_mod, data=df)$pars$beta), f)
+  expect_error(
+    sampler <- create_sampler(
+      y ~ x1 + x2 + reg(~ 0 + x3 + x4, prior = pr_fixed(c(1, 2))), data=df
+    ), "own Gibbs block"
+  )
 })
 
 test_that("linear equality restrictions on coefficients work", {
@@ -145,7 +153,7 @@ test_that("linear equality restrictions on coefficients work", {
   ml_mod <- y ~ reg(mod, prior=pr_normal(0, 1e-2), constraints=C, name="beta")
   sampler <- create_sampler(ml_mod, data=df)
   expect_true(sampler$mod$beta$constraints$eq)
-  expect_equal(sampler$mod$beta$df.add, sampler$mod$beta$q - 1)
+  expect_equal(sampler$family$df.sigma, n + sampler$mod$beta$q - 1L)
   sim <- MCMCsim(sampler, n.iter=10, burnin=0, n.chain=2, verbose=FALSE)
   summ <- summary(sim)
   expect_equal(summ$beta["x1", ], summ$beta["x2", ], tol=1e-3)

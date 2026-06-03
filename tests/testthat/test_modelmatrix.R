@@ -128,6 +128,13 @@ test_that("many special case formulas work", {
   expect_warning(model_matrix(~ f4, data))
 })
 
+test_that("standardise_formula works", {
+  f <- ~ x + z + gen(~ 1 + x, factor = ~ RW1(t))
+  fs <- standardise_formula(f)
+  expect_equal(fs, ~reg(~x + z) + gen(~1 + x, factor = ~RW1(t)))
+  expect_equal(standardise_formula(fs), fs)  # idempotent
+})
+
 data <- data.frame(
   Stratum = c("1", "1"),  # character/factor variable with a single level
   S2 = c("2", "2"),

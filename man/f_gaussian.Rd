@@ -10,12 +10,13 @@ f_gaussian(
   var.vec = ~1,
   prec.mat = NULL,
   var.model = NULL,
-  logJacobian = NULL
+  logJacobian = NULL,
+  control = gaussian_control()
 )
 }
 \arguments{
-\item{link}{the name of a link function. Currently the only allowed link functions
-for the Gaussian distribution is \code{"identity"}.}
+\item{link}{the name of a link function. Currently the only allowed link function
+for a Gaussian distribution is \code{"identity"}.}
 
 \item{var.prior}{prior for the variance parameter of a Gaussian sampling distribution.
 This can be specified by a call to one of the prior specification functions
@@ -44,10 +45,12 @@ see also \code{\link{pr_MLiG}}.}
 
 \item{logJacobian}{if the data are transformed the logarithm of the Jacobian can be supplied so that it
 is incorporated in all log-likelihood computations. This can be useful for comparing information criteria
-for different transformations. It should be supplied as a vector of the same size as the response variable,
-and is currently only supported if \code{family="gaussian"}.
+for different transformations. It should be supplied as a vector of the same size as the response variable.
 For example, when a log-transformation is used on response vector \code{y}, the vector \code{-log(y)}
 should be supplied.}
+
+\item{control}{a list with computational options. These options can
+be specified using function \code{\link{gaussian_control}}.}
 }
 \value{
 A family object.
@@ -55,4 +58,60 @@ A family object.
 \description{
 This function can be used in the \code{family} argument of \code{\link{create_sampler}}
 or \code{\link{generate_data}} to specify a Gaussian sampling distribution.
+}
+\examples{
+\dontrun{
+n <- 4000
+m <- 25
+dat <- data.frame(
+  x = rnorm(n),
+  g = factor(sample(1:m, n, replace=TRUE), levels=1:m)
+)
+v <- rnorm(m, sd=0.6)
+dat$y <- rnorm(n, mean = with(dat, 1 - 0.5*x + v[g]), sd=0.4)
+
+sampler <- create_sampler(
+  y ~ x + (1|g), data=dat
+)
+sim <- MCMCsim(sampler, store.all=TRUE)
+compute_DIC(sim)
+summary(sim)
+
+# more explicit specification, allowing non-default names, priors etc.
+sampler <- create_sampler(
+  y ~ reg(~ x, name="beta") + gen(~1, factor = ~ g, name="v"),
+  data=dat,
+  family = f_gaussian(var.prior = pr_fixed(value = 0.4^2))
+)
+sim <- MCMCsim(sampler, store.all=TRUE)
+compute_DIC(sim)
+summary(sim)
+bayesplot::mcmc_recover_intervals(as.array(sim$beta), c(1, -0.5))
+bayesplot::mcmc_recover_hist(as.array(sim$v_sigma), 0.6)
+bayesplot::mcmc_recover_scatter(as.array(sim$v), v)
+
+# heteroscedastic data
+dat$y <- rnorm(n,
+  mean = with(dat, 1 - 0.5*x + v[g]),
+  sd = with(dat, exp(0.5*(0.2 + 0.5*x)))
+)
+
+sampler <- create_sampler(
+  y ~ reg(~ x, name="beta") + gen(~1, factor = ~ g, name="v"),
+  data=dat,
+  family = f_gaussian(
+    var.prior = pr_fixed(value = 1),
+    var.model = ~ 1 + x
+  )
+)
+sim <- MCMCsim(sampler, store.all=TRUE)
+compute_DIC(sim)
+compute_WAIC(sim)
+summary(sim)
+bayesplot::mcmc_recover_intervals(as.array(sim$beta), c(1, -0.5))
+bayesplot::mcmc_recover_intervals(as.array(sim$vreg1), c(0.2, 0.5))
+bayesplot::mcmc_recover_hist(as.array(sim$v_sigma), 0.6)
+bayesplot::mcmc_recover_scatter(as.array(sim$v), v)
+}
+
 }

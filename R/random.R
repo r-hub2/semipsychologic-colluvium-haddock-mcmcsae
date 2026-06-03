@@ -102,3 +102,15 @@ rMLiG <- function(m, alpha, kappa, log.kappa) {
       -log(rgamma(m, shape = alpha, rate = kappa))
   }
 }
+
+get_PG_sampler <- function(n, PG.approx, PG.approx.m) {
+  if (PG.approx) {
+    mPG <- as.integer(PG.approx.m)
+    if (all(length(mPG) != c(1L, n))) stop("invalid value for option 'PG.approx.m'")
+    function(b, c) CrPGapprox(n, b, c, mPG)
+  } else {
+    if (!requireNamespace("BayesLogit", quietly=TRUE)) stop("please install package 'BayesLogit' and try again")
+    rpg <- BayesLogit::rpg
+    function(b, c) rpg(n, b, c)
+  }
+}

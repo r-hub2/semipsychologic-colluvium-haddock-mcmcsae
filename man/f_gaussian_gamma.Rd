@@ -4,7 +4,12 @@
 \alias{f_gaussian_gamma}
 \title{Specify a Gaussian-Gamma sampling distribution}
 \usage{
-f_gaussian_gamma(link = "identity", var.model, ...)
+f_gaussian_gamma(
+  link = "identity",
+  var.model,
+  gaussian.control = gaussian_control(),
+  ...
+)
 }
 \arguments{
 \item{link}{the name of a link function. Currently the only allowed link function
@@ -20,6 +25,8 @@ at a certain level specified by a factor variable. In addition, \code{\link{reg}
 can be used to specify regression or random effect terms. In that case the prior distribution
 of the coefficients is not exactly normal, but instead Multivariate Log inverse Gamma (MLiG),
 see also \code{\link{pr_MLiG}}.}
+
+\item{gaussian.control}{a list with computational options passed to \code{\link{f_gaussian}}.}
 
 \item{...}{further arguments passed to \code{\link{f_gamma}}.}
 }

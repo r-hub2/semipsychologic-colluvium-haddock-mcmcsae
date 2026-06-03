@@ -10,7 +10,7 @@ create_block_cMVN_sampler(
   Q,
   R = NULL,
   r = NULL,
-  sampler,
+  fam,
   name = "x",
   chol.control
 )
@@ -26,7 +26,7 @@ create_block_cMVN_sampler(
 
 \item{r}{rhs vector for equality constraints \eqn{R'x = r}, where \eqn{R'} denotes the transpose of R.}
 
-\item{sampler}{sampler object as created by \code{\link{create_sampler}}.}
+\item{fam}{family object.}
 
 \item{name}{name of the cMVN vector parameter.}
 

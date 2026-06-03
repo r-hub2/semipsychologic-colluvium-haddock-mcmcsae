@@ -39,14 +39,14 @@ glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL, Q0=NULL,
     # derive group-level design matrix as group means of unit-level data
     if (is.null(formula)) stop("no group-level formula: cannot derive group-level design matrix")
     if (intercept_only(formula)) {
-      X <- matrix(rep.int(1, e$l), ncol=1L, dimnames=list(NULL, "(Intercept)"))
+      X <- matrix(rep.int(1, e[["l"]]), ncol=1L, dimnames=list(NULL, "(Intercept)"))
     } else {
-      X <- model_matrix(formula, e$e[["data"]], sparse=FALSE)
+      X <- model_matrix(formula, e[["data"]], sparse=FALSE)
       if (remove.redundant) X <- remove_redundancy(X)
       if (is.null(e[["factor"]])) stop("cannot derive group-level design matrix")
       if (any(e$info[["types"]] == "splines")) stop("unsupported combination: splines and group-level covariates")
       X <- economizeMatrix(crossprod(aggrMatrix(
-        combine_factors(e$info[["variables"]], e$e[["data"]], enclos=environment(formula)),
+        combine_factors(e$info[["variables"]], e[["data"]], enclos=environment(formula)),
         mean=TRUE), X), strip.names=FALSE, check=TRUE
       )
     }
@@ -56,9 +56,7 @@ glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL, Q0=NULL,
     # TODO if formula is used, match levels of factor to glp$data
   }
   if (nrow(X) != e[["l"]]) stop("wrong number of rows of group-level design matrix")
-  if (!is.null(dimnames(X)[[2L]])) {
-    e$e$coef.names[[name]] <- dimnames(X)[[2L]]
-  }
+  coef.names <- dimnames(X)[[2L]]
   X <- unname(X)  # l x p0
 
   p0 <- ncol(X)
@@ -72,15 +70,15 @@ glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL, Q0=NULL,
     if (is.null(prior)) prior <- pr_normal(mean=0, precision=0)
   }
 
-  if (prior$type != "normal" || any(prior$mean != 0)) stop("only a normal prior with mean zero is currently supported for group-level effects")
+  if (prior[["type"]] != "normal" || any(prior[["mean"]] != 0)) stop("only a normal prior with mean zero is currently supported for group-level effects")
   # if modeled.Q need sparse Q0 and XX in order to combine them easily using a block-diagonal sparse template
-  prior$init(q, e$e$coef.names[[name]], sparse=e$e[["modeled.Q"]], sigma=!e$e[["sigma.fixed"]])
+  prior$init(q, coef.names, sparse=e$fam[["modeled.Q"]], sigma=!e$fam[["sigma.fixed"]])
   informative.prior <- prior[["informative"]]
   Q0 <- prior[["precision"]]
   Q0b0 <- numeric(q)  # need this in draw function, even though only b0=0 is supported
 
   # for modeled Q, the XX block of XX.ext is updated -> choose sparse
-  XX.ext <- economizeMatrix(bdiag(e[["XX"]], Q0), symmetric=TRUE, sparse=if (e$e[["modeled.Q"]]) TRUE else NULL)
+  XX.ext <- economizeMatrix(bdiag(e[["XX"]], Q0), symmetric=TRUE, sparse=if (e$fam[["modeled.Q"]]) TRUE else NULL)
   IU0 <- economizeMatrix(cbind(CdiagU(e[["l"]]), -X), drop.zeros=TRUE)
   if (e$strucA[["update.Q"]]) {
     # TODO crossprod_sym may introduce 0 fill-in --> kronecker template may fail for "unstructured" or "diagonal" var

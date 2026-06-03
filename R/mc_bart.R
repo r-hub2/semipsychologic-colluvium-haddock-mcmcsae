@@ -8,6 +8,7 @@
 #' to have R package \pkg{dbarts} installed.
 #'
 #' @examples
+#' \dontrun{
 #' # generate data, based on an example in Friedman (1991)
 #' gendat <- function(n=150L, p=10L, sigma=1) {
 #'   x <- matrix(runif(n * p), n, p)
@@ -25,13 +26,10 @@
 #'   family = f_gaussian(var.prior=pr_invchisq(df=3, scale=var(train$y))),
 #'   data = train
 #' )
-#' # increase burnin and n.iter below to improve MCMC convergence
-#' sim <- MCMCsim(sampler, n.chain=2, burnin=100, n.iter=200, thin=2,
+#' sim <- MCMCsim(sampler, n.chain=2, burnin=200, n.iter=400, thin=2,
 #'   store.all=TRUE, verbose=FALSE)
 #' (summ <- summary(sim))
 #' plot(train$mu, summ$bart[, "Mean"]); abline(0, 1)
-#' # NB prediction is currently slow
-#' \donttest{
 #' pred <- predict(sim, newdata=test,
 #'   iters=sample(seq_len(n_draws(sim)), 50),
 #'   show.progress=FALSE
@@ -57,6 +55,9 @@
 #' @param keepTrees whether to store the trees ensemble for each Monte Carlo draw. This
 #'  is required for prediction based on new data. The default is \code{FALSE} to save
 #'  memory.
+#' @param fastPredict if \code{TRUE} (default) a fast version of prediction based
+#'  on the stored BART trees is used. Option \code{FALSE} is available mainly
+#'  for testing purposes.
 #' @param ... parameters passed to \code{\link[dbarts]{dbarts}}.
 #' @returns An object with precomputed quantities and functions for sampling from
 #'  prior or conditional posterior distributions for this model component,
@@ -65,30 +66,31 @@
 #'  H.A. Chipman, E.I. Georgea and R.E. McCulloch (2010).
 #'    BART: Bayesian additive regression trees.
 #'    The Annals of Applied Statistics 4(1), 266-298.
-#'    
+#'
 #'  J.H. Friedman (1991).
 #'    Multivariate adaptive regression splines.
 #'    The Annals of Statistics 19, 1-67.
-brt <- function(formula, X=NULL, n.trees=75L,
-                name="", debug=FALSE, keepTrees=FALSE, ...) {
+brt <- function(formula, X=NULL, n.trees=75L, name="",
+                debug=FALSE, keepTrees=FALSE, fastPredict=TRUE, ...) {
   stop("function 'brt' should only be used inside a formula")
 }
 
-# additional argument e to pass sampler environment
-# in.block always FALSE for brt
-mc_brt <- function(formula, X=NULL, n.trees=75L,
-                   name="", debug=FALSE, keepTrees=FALSE,
-                   e, in.block, ...) {
+mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
+                   debug=FALSE, keepTrees=FALSE, fastPredict=TRUE,
+                   sc, fam,
+                   in.block,  # always FALSE for brt
+                   prior.only, compute.weights,
+                   data, ...) {
   type <- "brt"
   if (name == "") stop("missing model component name")
 
   if (!requireNamespace("dbarts", quietly=TRUE)) stop("package dbarts required for a model including Bayesian Additive Regression Trees")
 
-  if (e[["modeled.Q"]] && e[["Q0.type"]] == "symm") stop("BART component not compatible with non-diagonal residual variance matrix")
+  if (fam[["Q0.type"]] == "symm") stop("BART component not compatible with non-diagonal residual variance matrix")
 
   if (is.null(X)) {
     # no contrasts applied, no (urgent) need to remove redundancy
-    X <- model_matrix(formula, e[["data"]], contrasts.arg="contr.none", sparse=FALSE)
+    X <- model_matrix(formula, data, contrasts.arg="contr.none", sparse=FALSE)
   } else {
     if (is.null(dimnames(X)[[2L]])) colnames(X) <- seq_len(ncol(X))
   }
@@ -99,7 +101,7 @@ mc_brt <- function(formula, X=NULL, n.trees=75L,
   control <- dbarts::dbartsControl(n.chains=1L, updateState=FALSE, n.trees=n.trees)
 
   name_sampler <- paste0(name, "_sampler_")  # trailing '_' --> not stored by MCMCsim even if store.all=TRUE
-  lp <- function(p) copy_vector(p[[name]])
+  lp <- function(p) copy_obj(p[[name]])
   lp_update <- function(x, plus=TRUE, p) v_update(x, plus, p[[name]])
   draws_linpred <- function(obj, units=NULL, chains=NULL, draws=NULL, matrix=FALSE) {
     if (is.null(obj[[name]])) stop("no fitted values for 'brt' component; please re-run MCMCsim with 'store.all=TRUE'")
@@ -115,29 +117,35 @@ mc_brt <- function(formula, X=NULL, n.trees=75L,
 
   # TODO if sigma.fixed set prior to (almost) fix sigma to 1
   create_BART_sampler <- function() {
-    if (e[["Q0.type"]] == "diag") {
-      dbarts::dbarts(formula=X, data=e$y_eff(),
-        weights = e$Q0@x, sigma = if (e[["sigma.fixed"]]) 1 else NA_real_,
+    if (fam[["Q0.type"]] == "diag") {
+      dbarts::dbarts(formula=X, data=if (fam[["e.is.res"]]) fam[["y"]] else numeric(fam[["n"]]),
+        weights = fam[["Q0"]]@x, sigma = if (fam[["sigma.fixed"]]) 1 else NA_real_,
         control=control, ...
       )
     } else {
-      dbarts::dbarts(formula=X, data=e$y_eff(),
-        sigma = if (e[["sigma.fixed"]]) 1 else NA_real_,
+      dbarts::dbarts(formula=X, data=if (fam[["e.is.res"]]) fam[["y"]] else numeric(fam[["n"]]),
+        sigma = if (fam[["sigma.fixed"]]) 1 else NA_real_,
+        #node.prior=normal(k=40),  # passing via ... does not work
         control=control, ...
       )
+      #browser()
+      #str(do.call(dbarts::dbarts, c(
+      #  list(formula=X, data=if (fam[["e.is.res"]]) fam[["y"]] else numeric(fam[["n"]]),
+      #       sigma = if (fam[["sigma.fixed"]]) 1 else NA_real_),
+      #  list(...)
+      #)))  # yields 'incorrect nr of dims' error in $run()
     }
   }
 
   start <- function(p) {
     # TODO multinomial family
-    if (is.null(p[[name_sampler]])) {
+    if (is.null(p[[name_sampler]]))
       p[[name_sampler]] <- create_BART_sampler()
-    }
     p[[name]] <- p[[name_sampler]]$run(0L, 1L, FALSE)$train[, 1L]
     p
   }
 
-  if (e$family[["family"]] == "multinomial") {
+  if (fam[["family"]] == "multinomial") {
     edat <- new.env(parent = environment(formula))
     environment(formula) <- edat
   }
@@ -152,18 +160,18 @@ mc_brt <- function(formula, X=NULL, n.trees=75L,
   make_predict <- function(newdata=NULL, Xnew=NULL, verbose=TRUE) {
     if (is.null(newdata) && is.null(Xnew)) {
       # in-sample prediction
-      linpred <- function(p) copy_vector(p[[name]])
+      linpred <- function(p) copy_obj(p[[name]])
       linpred_update <- function(x, plus=TRUE, p) v_update(x, plus, p[[name]])
     } else {
+      if (!keepTrees) stop("out-of-sample prediction requires setting keepTrees=TRUE in brt() model specification")
       if (is.null(newdata)) {
         if (missing(Xnew)) stop("one of 'newdata' and 'Xnew' should be supplied")
       } else {
-        if (!keepTrees) stop("out-of-sample prediction requires setting keepTrees=TRUE in brt() model specification")
         nnew <- nrow(newdata)
-        if (e$family[["family"]] == "multinomial") {
+        if (fam[["family"]] == "multinomial") {
           Xnew <- NULL
-          for (k in seq_len(e[["Km1"]])) {
-            edat$cat_ <- factor(rep.int(e$cats[k], nnew), levels=e$cats[-length(e$cats)])
+          for (k in seq_len(fam[["Km1"]])) {
+            edat$cat_ <- factor(rep.int(fam$cats[k], nnew), levels=fam$cats[-length(fam$cats)])
             Xnew <- rbind(Xnew, model_matrix(formula, data=newdata, contrasts.arg="contr.none", sparse=FALSE))
           }
           edat$cat_ <- NULL
@@ -181,25 +189,31 @@ mc_brt <- function(formula, X=NULL, n.trees=75L,
       nnew <- nrow(Xnew)
 
       # predict based on Xnew using stored tree; see dbarts' 'Working with saved trees' vignette
-      # TODO rewrite in C++
-      tree_predict <- function(p) {
-        getPredictionsForTreeRecursive <- function(tree, indices) {
-          if (tree$var[1L] == -1L) {
-            predictions[indices] <<- predictions[indices] + tree$value[1L]
-            return(1L)
-          }
-          goesLeft <- Xnew[indices, tree$var[1L]] <= tree$value[1L]
-          headOfLeftBranch <- tree[-1L, ]
-          n_nodes.left <- getPredictionsForTreeRecursive(headOfLeftBranch, indices[goesLeft])
-          headOfRightBranch <- tree[seq.int(2L + n_nodes.left, dim(tree)[1L]), ]
-          n_nodes.right <- getPredictionsForTreeRecursive(headOfRightBranch, indices[!goesLeft])
-          return(1L + n_nodes.left + n_nodes.right)
+      if (fastPredict) {
+        tree_predict <- function(p) {
+          trees <- p[[name_trees]]
+          tree_predictC(trees$tree, trees$var, trees$value, Xnew, n.trees)
         }
-        trees <- p[[name_trees]]
-        predictions <- numeric(nnew)
-        for (t in seq_len(n.trees))
-          getPredictionsForTreeRecursive(trees[trees$tree == t, ], seq_len(nnew))
-        predictions
+      } else {
+        tree_predict <- function(p) {
+          getPredictionsForTreeRecursive <- function(tree, indices) {
+            if (tree$var[1L] == -1L) {
+              predictions[indices] <<- predictions[indices] + tree$value[1L]
+              return(1L)
+            }
+            goesLeft <- Xnew[indices, tree$var[1L]] <= tree$value[1L]
+            headOfLeftBranch <- tree[-1L, ]
+            n_nodes.left <- getPredictionsForTreeRecursive(headOfLeftBranch, indices[goesLeft])
+            headOfRightBranch <- tree[seq.int(2L + n_nodes.left, dim(tree)[1L]), ]
+            n_nodes.right <- getPredictionsForTreeRecursive(headOfRightBranch, indices[!goesLeft])
+            return(1L + n_nodes.left + n_nodes.right)
+          }
+          trees <- p[[name_trees]]
+          predictions <- numeric(nnew)
+          for (t in seq_len(n.trees))
+            getPredictionsForTreeRecursive(trees[trees$tree == t, ], seq_len(nnew))
+          predictions
+        }
       }
       linpred <- function(p) tree_predict(p)
       linpred_update <- function(x, plus=TRUE, p) v_update(x, plus, tree_predict(p))
@@ -208,9 +222,8 @@ mc_brt <- function(formula, X=NULL, n.trees=75L,
   }
 
   rprior <- function(p) {
-    if (is.null(p[[name_sampler]])) {
+    if (is.null(p[[name_sampler]]))
       p[[name_sampler]] <- create_BART_sampler()
-    }
     p[[name_sampler]]$sampleTreesFromPrior()
     p[[name_sampler]]$sampleNodeParametersFromPrior()
     p[[name]] <- p[[name_sampler]]$predict(X)
@@ -221,20 +234,37 @@ mc_brt <- function(formula, X=NULL, n.trees=75L,
     p
   }
 
-  if (!e[["prior.only"]]) {
+  if (!prior.only) {
     draw <- if (debug) function(p) {browser()} else function(p) {}
-    if (!e[["single.block"]]) {
-      if (e[["e.is.res"]])
-        draw <- add(draw, bquote(p$e_ <- p[["e_"]] + p[[.(name)]]))
+    if (sc[["single.block"]]) {
+      # copy_obj not currently needed here
+      if (fam[["e.is.res"]])
+        draw <- add(draw, quote(p$e_ <- copy_obj(fam[["y"]])))
+    } else {
+      if (fam[["e.is.res"]])
+        draw <- add(draw, bquote(v_update(p[["e_"]], TRUE, p[[.(name)]])))
       else
-        draw <- add(draw, bquote(p$e_ <- p[["e_"]] - p[[.(name)]]))
-      draw <- add(draw, bquote(p[[.(name_sampler)]]$setResponse(p[["e_"]])))
+        draw <- add(draw, bquote(v_update(p[["e_"]], FALSE, p[[.(name)]])))
     }
-    if (e[["modeled.Q"]])
+    if (fam[["modeled.Q"]])
       draw <- add(draw, bquote(p[[.(name_sampler)]]$setWeights(p[["Q_"]])))
+    if (sc[["single.block"]] && fam[["link"]] != "probit" &&
+        (!fam[["modeled.Q"]] || (all(fam[["family"]] != c("gaussian", "student_t", "gaussian_gamma")) && !(fam[["family"]] == "negbinomial" && !fam[["shape.fixed"]])))) {
+      # single regression component, no variance modelling, Xy fixed
+      # student_t and gaussian_gamma always has modeled.Q=TRUE, so will never get here
+      if (fam[["family"]] == "gaussian")
+        draw <- add(draw, bquote(p[[.(name_sampler)]]$setResponse(p[["e_"]])))
+      else
+        draw <- add(draw, bquote(p[[.(name_sampler)]]$setResponse(fam[["y_shifted"]] / p[["Q_"]])))
+    } else {
+      if (fam[["modeled.Q"]])
+        draw <- add(draw, bquote(p[[.(name_sampler)]]$setResponse(fam$Q_e(p) / p[["Q_"]])))
+      else
+        draw <- add(draw, bquote(p[[.(name_sampler)]]$setResponse(fam$Q_e(p))))
+    }
     draw <- draw |>
-      add(bquote(p[[.(name_sampler)]]$setSigma(.(if (e$sigma.fixed) 1 else quote(p[["sigma_"]]))))) |>
-      add(bquote(p[[.(name)]] <- p[[.(name_sampler)]]$run(0L, 1L)$train[, 1L]))
+      add(bquote(p[[.(name_sampler)]]$setSigma(.(if (fam[["sigma.fixed"]]) 1 else quote(p[["sigma_"]]))))) |>
+      add(bquote(p[[.(name)]] <- p[[.(name_sampler)]]$run(10L, 1L)$train[, 1L]))
     if (keepTrees) {
       # getTrees returns a data.frame; 2nd column 'n' is not needed for prediction
       draw <- add(draw, bquote(p[[.(name_trees)]] <- p[[.(name_sampler)]]$getTrees()[, -2L]))
@@ -243,25 +273,22 @@ mc_brt <- function(formula, X=NULL, n.trees=75L,
       # define an inverse transformation for prediction purposes
       # min.y and range.y are set below, if setResponse is used should be updated in each iteration
       # undo_scaling <- function(pred) min.y + range.y * (pred + 0.5)
-      if (e[["single.block"]]) {
-        min.y <- min(e$y_eff())
-        range.y <- max(e$y_eff()) - min.y
+      if (sc[["single.block"]]) {
+        min.y <- if (fam[["e.is.res"]]) min(fam[["y"]]) else 0
+        range.y <- if (fam[["e.is.res"]]) max(fam[["y"]]) - min.y else 0
       } else {
         draw <- add(draw, quote(min.y <- min(p[["e_"]])))
         draw <- add(draw, quote(range.y <- max(p[["e_"]]) - min.y))
       }
       draw <- add(draw, bquote(p[[.(name_trees)]]$value[p[[.(name_trees)]]$var == -1L] <- min.y/n.trees + range.y * (p[[.(name_trees)]]$value[p[[.(name_trees)]]$var == -1L] + 0.5/n.trees)))
     }
-    if (e[["single.block"]]) {
-      if (e[["e.is.res"]])
-        draw <- add(draw, bquote(p$e_ <- e$y_eff() - p[[.(name)]]))
-      else
-        draw <- add(draw, bquote(p$e_ <- p[[.(name)]]))
+    if (fam[["e.is.res"]]) {
+      draw <- add(draw, bquote(v_update(p[["e_"]], FALSE, p[[.(name)]])))
     } else {
-      if (e[["e.is.res"]])
-        draw <- add(draw, bquote(p$e_ <- p[["e_"]] - p[[.(name)]]))
+      if (sc[["single.block"]])
+        draw <- add(draw, bquote(p$e_ <- p[[.(name)]]))
       else
-        draw <- add(draw, bquote(p$e_ <- p[["e_"]] + p[[.(name)]]))
+        draw <- add(draw, bquote(v_update(p[["e_"]], TRUE, p[[.(name)]])))
     }
     draw <- add(draw, quote(p))
   }

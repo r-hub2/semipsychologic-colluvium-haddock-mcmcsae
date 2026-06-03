@@ -131,8 +131,8 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
 
   if (!is.null(coef.names)) {
     if (length(coef.names) != n) stop("incompatible length of 'coef.names'")
-    coef.names <- list(coef.names)
-    names(coef.names) <- name
+    label_funs <- list()
+    label_funs[[name]] <- function() coef.names
   }
 
   if (is.null(constraints)) {
@@ -211,10 +211,10 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         }),
         error = function(err) {
           if (length(detect_redundancy(Q)))
-            stop("Non-positive-definite matrix in model component `", name,
-                 "`. Consider using 'remove.redundant=TRUE' or increasing the coefficients' prior precision.")
-          else
-            stop(err)
+            err$message <- paste0("Non-positive-definite matrix in model component '",
+              name, "'. Consider setting remove.redundant=TRUE or increasing the coefficients' prior precision."
+            )
+          stop(err)
         }
       )
       # remove any cached Cholesky factorizations
@@ -353,15 +353,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
   if (method[["name"]] == "softTMVN") {
     useV <- method[["useV"]]
     if (!is.null(method[["CG"]]) && eq) stop("conjugate gradients with equality constraints is not supported")
-    if (method[["PG.approx"]]) {
-      mPG <- as.integer(method[["PG.approx.m"]])
-      if (all(length(mPG) != c(1L, n))) stop("invalid value for option 'PG.approx.m'")
-      rPolyaGamma <- function(b, c) CrPGapprox(ncS, b, c, mPG)
-    } else {
-      if (!requireNamespace("BayesLogit", quietly=TRUE)) stop("please install package 'BayesLogit' and try again")
-      rpg <- BayesLogit::rpg
-      rPolyaGamma <- function(b, c) rpg(ncS, b, c)
-    }
+    rPolyaGamma <- get_PG_sampler(ncS, method[["PG.approx"]], method[["PG.approx.m"]])
     if (useV) {
       # 'dual' version of MVN sampling
       rm(Q)
@@ -427,10 +419,10 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       if (eq && !reduce) {
         draw <- add(draw, quote(cholRVxR$update(matsum_RVxR(M1=crossprod_sym2(SVR, ch$solve(SVR)), w1=-1))))
         if (is.null(r))
-          draw <- add(draw, quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(-crossprod_mv(R, x)))))
+          draw <- add(draw, quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(crossprod_mv(R, x)))))
         else
-          draw <- add(draw, quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(r - crossprod_mv(R, x)))))
-        draw <- add(draw, quote(x <- x + temp - V %m*v% (S %m*v% ch$solve(crossprod_mv(S, temp)))))
+          draw <- add(draw, quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(crossprod_mv(R, x) - r))))
+        draw <- add(draw, quote(x <- x - temp + V %m*v% (S %m*v% ch$solve(crossprod_mv(S, temp)))))
       }
     } else {
       if (is.null(s))
@@ -767,12 +759,10 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
 
         if (eq && !reduce) {
           # recompute Qx and Qv
-          # TODO make this more efficient?
-          Qx <- if (zero.mu) Q %m*v% x else Q %m*v% (x - mu)
           if (zero.mu)
-            Qx <- Qx + R %m*v% (prec.eq * crossprod_mv(R, x))
+            Qx <- Q %m*v% x + R %m*v% (prec.eq * crossprod_mv(R, x))
           else
-            Qx <- Qx + R %m*v% (prec.eq * crossprod_mv(R, x - mu))
+            Qx <- Q %m*v% (x - mu) + R %m*v% (prec.eq * crossprod_mv(R, x - mu))
           Qv <- Q %m*v% v + R %m*v% (prec.eq * crossprod_mv(R, v))
         }
 
@@ -889,10 +879,10 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         if (useV) {
           start <- add(start, quote(cholRVxR$update(matsum_RVxR(M1=crossprod_sym2(SVR, ch$solve(SVR)), w1=-1))))
           if (is.null(r))
-            start <- add(quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(-crossprod_mv(R, x)))))
+            start <- add(quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(crossprod_mv(R, x)))))
           else
-            start <- add(quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(r - crossprod_mv(R, x)))))
-          add(bquote(p[[.(name)]] <- x + temp - V %m*v% (S %m*v% ch$solve(crossprod_mv(S, temp)))))
+            start <- add(quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(crossprod_mv(R, x) - r))))
+          add(bquote(p[[.(name)]] <- x - temp + V %m*v% (S %m*v% ch$solve(crossprod_mv(S, temp)))))
         } else
           start <- add(start, bquote(p[[.(name)]] <- projector$project(x, ch, r)))
       } else {
