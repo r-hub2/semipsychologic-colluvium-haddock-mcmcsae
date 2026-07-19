@@ -44,7 +44,7 @@ For the multinomial family, the left hand side of the \code{formula} argument of
     as proportions of observations in each category. This requires specifying the number
     of multinomial trials through argument \code{n.trial}.}
   \item{3}{a K-column integer matrix, where K is the number of categories, each
-    column contaning the number of 'successes' for the corresponding category.}
+    column containing the number of 'successes' for the corresponding category.}
 }
 }
 \examples{

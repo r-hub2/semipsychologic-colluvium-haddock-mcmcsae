@@ -9,7 +9,8 @@ sampler_control(
   add.eps.I = FALSE,
   eps = sqrt(.Machine$double.eps),
   recompute.e = TRUE,
-  cMVN.sampler = FALSE,
+  compute.llh = TRUE,
+  cMVN.sampler = NULL,
   CG = NULL,
   block = TRUE,
   auto.order.block = TRUE,
@@ -20,9 +21,9 @@ sampler_control(
 \arguments{
 \item{add.outer.R}{whether to add the outer product of a constraint matrix to the
 conditional posterior precision matrix of coefficients sampled in a block. This is used
-to resolve singularity due to intrinsic GMRF components.
-By default, \code{add.outer.R=NULL}, a simple heuristic is used to decide whether
-to add the outer product of possibly a submatrix of the constraint matrix.}
+to resolve singularity due to intrinsic GMRF components. Default is \code{TRUE}.
+When set to \code{NULL}, a simple heuristic is used to decide whether
+to add the outer product of (possibly a submatrix of) the constraint matrix.}
 
 \item{add.eps.I}{whether to add a small positive multiple of the identity matrix
 to the conditional posterior precision matrix of coefficients sampled in a block.
@@ -41,6 +42,9 @@ posterior precision matrix of coefficients sampled in a block.}
 \item{recompute.e}{when \code{FALSE}, residuals or linear predictors are only computed at the start of the simulation.
 This may give a modest speed-up but in some cases may be less accurate due to round-off error accumulation.
 Default is \code{TRUE}.}
+
+\item{compute.llh}{whether to compute the log-likelihood for each MCMC draw. Default is
+\code{TRUE}, but setting it to \code{FALSE} may reduce computation time a little.}
 
 \item{cMVN.sampler}{whether an extended linear system including dual variables is used
 for equality constrained multivariate normal sampling. If set to \code{TRUE} this may

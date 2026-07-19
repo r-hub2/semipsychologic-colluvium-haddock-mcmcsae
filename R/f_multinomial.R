@@ -1,4 +1,3 @@
-
 #' Specify a multinomial sampling distribution
 #'
 #' This function can be used in the \code{family} argument of \code{\link{create_sampler}}
@@ -16,7 +15,7 @@
 #'     as proportions of observations in each category. This requires specifying the number
 #'     of multinomial trials through argument \code{n.trial}.}
 #'   \item{3}{a K-column integer matrix, where K is the number of categories, each
-#'     column contaning the number of 'successes' for the corresponding category.}
+#'     column containing the number of 'successes' for the corresponding category.}
 #' }
 #'
 #' @examples
@@ -131,7 +130,7 @@ ff_multinomial <- function(link="logit", n.trial=NULL, K=NULL,
       Q_e <- function(p) y_shifted - p[["Q_"]] * p[["e_"]]
     rPolyaGamma <- get_PG_sampler(n, control[["PG.approx"]], control[["PG.approx.m"]])
     draw <- function(p) {
-      p$llh_ <- llh(p)
+      if (sc[["compute.llh"]]) p$llh_ <- llh(p)
       p$Q_ <- rPolyaGamma(ny, p[["e_"]])
       p
     }
@@ -139,7 +138,7 @@ ff_multinomial <- function(link="logit", n.trial=NULL, K=NULL,
       p$Q_ <- check_and_get(p, "Q_", n, \() rPolyaGamma(ny, p[["e_"]]), pos=TRUE)
       p
     }
-    if (!is.null(sc[["CG"]]) || sc[["cMVN.sampler"]]) {
+    if (sc[["cMVN.or.CG"]]) {
       # set up a function that multiplies by L Chol factor of Q, for sampling from N(., Q)
       cholQ <- build_chol(runif(n, 0.9, 1.1))
       # draw from MVN with variance(!) Q
@@ -151,15 +150,15 @@ ff_multinomial <- function(link="logit", n.trial=NULL, K=NULL,
     if (any(abs(y - round(y)) > .tol)) warn("one or more non-integral number of successes")
     if (any(y > ny)) stop("number of successes must not exceed number of trials")  # NB algorithm may still run
 
-    llh_0 <- sum(binomial_coef(ny, y))  # zero in case of binary data
+    llh0 <- sum(binomial_coef(ny, y))  # zero in case of binary data
     if (all(ny == 1)) {
-      llh <- function(p) llh_0 + sum(y * p[["e_"]] - log1pexpC(p[["e_"]]))
+      llh <- function(p) llh0 + sum(y * p[["e_"]] - log1pexpC(p[["e_"]]))
       llh_i <- function(draws, i, e_i) {
         nr <- dim(e_i)[1L]
         rep_each(binomial_coef(ny[i], y[i]), nr) + rep_each(y[i], nr) * e_i - log1pexpC(e_i)
       }
     } else {
-      llh <- function(p) llh_0 + sum(y * p[["e_"]] - ny * log1pexpC(p[["e_"]]))
+      llh <- function(p) llh0 + sum(y * p[["e_"]] - ny * log1pexpC(p[["e_"]]))
       llh_i <- function(draws, i, e_i) {
         nr <- dim(e_i)[1L]
         rep_each(binomial_coef(ny[i], y[i]), nr) + rep_each(y[i], nr) * e_i - rep_each(ny[i], nr) * log1pexpC(e_i)

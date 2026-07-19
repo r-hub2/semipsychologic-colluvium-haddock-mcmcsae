@@ -200,7 +200,9 @@ get_factor_info <- function(formula, data) {
   fs <- lapply(fs, \(x) match.call(match.fun(x[[1L]]), x))
   types <- vapply(fs, \(x) as.character(x[[1L]]), "")
   variables <- vapply(fs,
-    \(x) if (any(names(x) == "name")) deparse(x[["name"]]) else "",
+    \(x) if (any(names(x) == "name")) {
+           if (is_character_scalar(x[["name"]])) x[["name"]] else deparse(x[["name"]])
+         } else {""},
     ""
   )
   ncols <- integer(length(fs))
@@ -608,7 +610,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=!D, R=TRUE, cols2remov
 #'     data=nc
 #'   )
 #'   # increase burnin and n.iter below to improve MCMC convergence
-#'   sim <- MCMCsim(sampler, store.all=TRUE, burnin=100, n.iter=200, n.chain=2, verbose=FALSE)
+#'   sim <- MCMCsim(sampler, store.all=TRUE, burnin=200, n.iter=500, n.chain=2, verbose=FALSE)
 #'   (summ <- summary(sim))
 #'   nc$vs <- summ$vs[, "Mean"]
 #'   plot(nc[c("vs_true", "vs")])

@@ -1,8 +1,37 @@
-
 #' Specify a Gamma sampling distribution
 #'
 #' This function can be used in the \code{family} argument of \code{\link{create_sampler}}
 #' or \code{\link{generate_data}} to specify a Gamma sampling distribution.
+#'
+#' @examples
+#' \dontrun{
+#' n <- 3000
+#' m <- 25
+#' dat <- data.frame(
+#'   x = rnorm(n),
+#'   g = factor(sample(1:m, n, replace=TRUE), levels=1:m)
+#' )
+#' v <- rnorm(m, sd=0.6)
+#' alpha <- 1
+#' mu <- exp(with(dat, 1 - 0.5*x + v[g]))
+#' dat$y <- rgamma(n, shape=alpha, rate=alpha/mu)
+#'
+#' sampler <- create_sampler(
+#'   y ~ reg(~ x, name="beta") +       # fixed effects
+#'       gen(factor = ~ g, name="v"),  # random intercepts
+#'   data=dat, family="gamma"
+#' )
+#' sim <- MCMCsim(sampler, store.all=TRUE)
+#' compute_DIC(sim)
+#' waic(sim)
+#' summary(sim)
+#'
+#' bayesplot::mcmc_recover_intervals(as.array(sim$gamma_shape_), alpha)
+#' bayesplot::mcmc_recover_intervals(as.array(sim$beta), c(1, -0.5))
+#' bayesplot::mcmc_recover_intervals(as.array(sim$v_sigma), 0.6)
+#' yrep <- predict(sim, iters=sample(1:1000, 10))
+#' bayesplot::pp_check(dat$y, as.matrix(yrep), bayesplot::ppc_dens_overlay) + ggplot2::xlim(0, 25)
+#' }
 #'
 #' @export
 #' @param link the name of a link function. Currently the only allowed link function
@@ -64,20 +93,17 @@ ff_gamma <- function(link="log", shape.vec = ~ 1, shape.prior = pr_gamma(0.1, 0.
   scale.sigma <- scale.e
   prior.only <- is.null(y)
   sc <- sm[["control"]]
-  store_default <- function() {
-    if (alpha.fixed) NULL else "gamma_shape_"
-  }
+  store_default <- function() if (alpha.fixed) NULL else "gamma_shape_"
   if (!prior.only) {
     if (!is.numeric(y)) stop("non-numeric target value not allowed in case of Gamma sampling distribution")
     if (any(y <= 0)) stop("response variable modelled by Gamma distribution must be strictly positive")
-    draw <- function(p) {
-      p$llh_ <- llh(p)
-    }
+    draw <- if (sc[["compute.llh"]]) function(p) {p$llh_ <- llh(p)} else function(p) {}
   }
   alpha.fixed <- shape.prior[["type"]] == "fixed"
   alpha.scalar <- intercept_only(shape.vec)
   g <- function(y, p) y * exp(-p[["e_"]]) + p[["e_"]]  # TODO p[["Q_"]] case
   if (!alpha.fixed) {
+    pred_pars <- function() "gamma_shape_"
     if (!is.environment(control)) stop("f_gamma: 'control' argument must be an environment created with function set_MH")
     control$type <- match.arg(control[["type"]], c("RWLN", "gamma"))
     rprior <- function(p) {
@@ -204,30 +230,30 @@ ff_gamma <- function(link="log", shape.vec = ~ 1, shape.prior = pr_gamma(0.1, 0.
   if (!prior.only) {
     if (alpha.fixed) {
       alpha <- get_shape()
-      pllh_0 <- alpha * log(alpha) - lgamma(alpha) + (alpha - 1) * log(y)
+      pllh0 <- alpha * log(alpha) - lgamma(alpha) + (alpha - 1) * log(y)
       if (alpha.scalar) {
-        llh_0 <- (alpha - 1) * sum(log(y))
-        llh_0 <- llh_0 + n * (alpha * log(alpha) - lgamma(alpha))
-        llh <- function(p) llh_0 - alpha * sum(g(y, p))
+        llh0 <- (alpha - 1) * sum(log(y))
+        llh0 <- llh0 + n * (alpha * log(alpha) - lgamma(alpha))
+        llh <- function(p) llh0 - alpha * sum(g(y, p))
         llh_i <- function(draws, i, e_i) {
           nr <- dim(e_i)[1L]
-          rep_each(pllh_0[i], nr) - alpha * (e_i + rep_each(y[i], nr) * exp(-e_i))
+          rep_each(pllh0[i], nr) - alpha * (e_i + rep_each(y[i], nr) * exp(-e_i))
         }
       } else {
-        llh_0 <- sum((alpha - 1) * log(y))
-        llh_0 <- llh_0 + sum(alpha * log(alpha) - lgamma(alpha))
-        llh <- function(p) llh_0 - sum(alpha * g(y, p))
+        llh0 <- sum((alpha - 1) * log(y))
+        llh0 <- llh0 + sum(alpha * log(alpha) - lgamma(alpha))
+        llh <- function(p) llh0 - sum(alpha * g(y, p))
         llh_i <- function(draws, i, e_i) {
           nr <- dim(e_i)[1L]
-          rep_each(pllh_0[i], nr) - rep_each(alpha[i], nr) * (e_i + rep_each(y[i], nr) * exp(-e_i))
+          rep_each(pllh0[i], nr) - rep_each(alpha[i], nr) * (e_i + rep_each(y[i], nr) * exp(-e_i))
         }
       }
     } else {
-      llh_0 <- -sum(log(y))
+      llh0 <- -sum(log(y))
       if (alpha.scalar) {
         llh <- function(p) {
           alpha <- get_shape(p)
-          (1 - alpha) * llh_0 + n * (alpha * log(alpha) - lgamma(alpha)) - alpha * sum(g(y, p))
+          (1 - alpha) * llh0 + n * (alpha * log(alpha) - lgamma(alpha)) - alpha * sum(g(y, p))
         }
         llh_i <- function(draws, i, e_i) {
           nr <- dim(e_i)[1L]
@@ -238,7 +264,7 @@ ff_gamma <- function(link="log", shape.vec = ~ 1, shape.prior = pr_gamma(0.1, 0.
       } else {
         llh <- function(p) {
           alpha <- get_shape(p)
-          llh_0 + sum(alpha * log(alpha * y) - lgamma(alpha)) - sum(alpha * g(y, p))
+          llh0 + sum(alpha * log(alpha * y) - lgamma(alpha)) - sum(alpha * g(y, p))
         }
         llh_i <- function(draws, i, e_i) {
           nr <- dim(e_i)[1L]
@@ -293,7 +319,7 @@ ff_gamma <- function(link="log", shape.vec = ~ 1, shape.prior = pr_gamma(0.1, 0.
 #'  and a term \code{\link{vfac}(...)} for multiplicative modelled factors
 #'  at a certain level specified by a factor variable. In addition, \code{\link{reg}} and \code{\link{gen}}
 #'  can be used to specify regression or random effect terms. In that case the prior distribution
-#'  of the coefficients is not exactly normal, but instead Multivariate Log inverse Gamma (MLiG),
+#'  of the coefficients is not normal, but Multivariate Log inverse Gamma (MLiG),
 #'  see also \code{\link{pr_MLiG}}.
 #' @param gaussian.control a list with computational options passed to \code{\link{f_gaussian}}.
 #' @param ... further arguments passed to \code{\link{f_gamma}}.
@@ -334,6 +360,7 @@ ff_gaussian_gamma <- function(link="identity", var.prior, var.vec,
     c(y.family$store_default(), var.family$store_default())
   }
   if (!prior.only) {
+    pred_pars <- function() c(y.family$pred_vars(), var.family$pred_vars())
     var.family$g <- function(y, p) y * p[["Q_"]] - log(p[["Q_"]])
     environment(var.family[["g"]]) <- var.family
   }
@@ -348,7 +375,10 @@ ff_gaussian_gamma <- function(link="identity", var.prior, var.vec,
     if (is.function(var.family[["draw"]])) {
       draw <- function(p) {
         p <- y.family$draw(p)
-        var.family$draw(p)
+        if (sc[["compute.llh"]]) gaussian.llh <- p[["llh_"]]
+        p <- var.family$draw(p)
+        if (sc[["compute.llh"]]) p[["llh_"]] <- gaussian.llh + p[["llh_"]]
+        p
       }
     } else {
       draw <- y.family[["draw"]]

@@ -44,6 +44,11 @@ test_that("f_poisson works", {
   expect_between(mean(predsumm[, "Mean"]), 0.75*mean(y), 1.3*mean(y))
   compute_DIC(sim)
   compute_WAIC(sim)
+  sampler <- create_sampler(
+    y ~ 1 + x, family=f_poisson(control=poisson_control(nb.shape=200)),
+    control=sampler_control(compute.llh=FALSE)
+  )
+  expect_false("llh_" %in% names(sampler$draw(sampler$start())))
 })
 
 test_that("in-sample prediction works", {

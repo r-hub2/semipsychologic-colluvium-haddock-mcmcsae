@@ -26,7 +26,8 @@ create_cMVN_sampler(
 
 \item{r}{rhs vector for equality constraints \eqn{R'x = r}, where \eqn{R'} denotes the transpose of R.}
 
-\item{eps1}{scalar parameter to control numerical robustness against singularity of Q.}
+\item{eps1}{scalar parameter to control numerical robustness against singularity of Q.
+Currently ignored in case of no constraints.}
 
 \item{eps2}{scalar parameter associated with the constraint part to control numerical robustness.}
 

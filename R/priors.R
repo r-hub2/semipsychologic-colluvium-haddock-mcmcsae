@@ -43,7 +43,12 @@ pr_normal <- function(mean=0, precision=0, labels=NULL) {
     } else {
       if (length(coefnames) != n) stop("'coefnames' must have length 'n'")
       m <- fmatch(labels, coefnames)
-      if (anyNA(m)) stop("non-matching labels: ", paste0(labels[is.na(m)], collapse=", "))
+      NAm <- whichNA(m)
+      if (length(NAm)) {
+        m[NAm] <- fmatch(order_interactions(labels[NAm]), order_interactions(coefnames))
+        if (anyNA(m[NAm]))
+          stop("non-matching labels: ", paste0(labels[is.na(m)], collapse=", "))
+      }
       temp <- numeric(n)
       temp[m] <- mean
       mean <<- temp

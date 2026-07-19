@@ -20,7 +20,7 @@ static const double EPS = 10.0 * std::numeric_limits<double>::epsilon();
 //’ @returns A vector of size n with (approximate) Polya-Gamma draws.
 // [[Rcpp::export(rng=true)]]
 NumericVector CrPGapprox(const int n, const NumericVector & b, const NumericVector & z, const IntegerVector & m) {
-  double bi, hzi, hzi2, th, mu, Sigma, dninv, rgs;
+  double bi, hzi, hzi2, th, mu, Sigma, dninv;
   int mi;
   const int nb = b.size();
   const int nz = z.size();
@@ -40,7 +40,7 @@ NumericVector CrPGapprox(const int n, const NumericVector & b, const NumericVect
       } else {
         th = tanh(hzi);
         mu = 0.25 * th / hzi;
-        Sigma = 0.0625 * (th - hzi * (1 - th * th)) / (hzi2 * hzi);
+        Sigma = 0.0625 * (th - hzi * (1.0 - th * th)) / (hzi2 * hzi);
       }
       mi = nm == 1 ? m[0] : m[i];
       if (mi < -1) {
@@ -77,7 +77,7 @@ NumericVector CrPGapprox(const int n, const NumericVector & b, const NumericVect
           for (int j = 0; j < mi; ++j) {
             jhalf = j + 0.5;
             dninv = 2.0 / (PI2 * jhalf * jhalf + hzi2);
-            rgs += 0.25 * dninv * R::rgamma(bi, 1);
+            rgs += 0.25 * dninv * R::rgamma(bi, 1.0);
             mu -= 0.25 * dninv;
             Sigma -= 0.0625 * dninv*dninv;
           }
@@ -183,12 +183,12 @@ IntegerVector CrCRT(const NumericVector & y, const NumericVector & r, const int 
       if (yi <= two_m) {
         // exact CRT sampling
         for (int j = 0; j < yi; j++) {
-          if (R::runif(0, 1) < prob_cache[j]) count++;
+          if (R::runif(0.0, 1.0) < prob_cache[j]) count++;
         }
       } else {
         // first m_expl Bernoulli draws
         for (int j = 0; j < m_expl; j++) {
-          if (R::runif(0, 1) < prob_cache[j]) count++;
+          if (R::runif(0.0, 1.0) < prob_cache[j]) count++;
         }
         // then approximate remaining y[i] - m_expl draws
         double lambda = ri * (R::digamma(yi + ri) - digamma_m_ri);
@@ -203,12 +203,12 @@ IntegerVector CrCRT(const NumericVector & y, const NumericVector & r, const int 
       int count = 0;
       if (yi <= two_m) {
         for (int j = 0; j < yi; j++) {
-          if (R::runif(0, 1) < (ri / (ri + j))) count++;
+          if (R::runif(0.0, 1.0) < (ri / (ri + j))) count++;
         }
       } else {
         const int m_expl = std::min(m, (int)ri);
         for (int j = 0; j < m_expl; j++) {
-          if (R::runif(0, 1) < (ri / (ri + j))) count++;
+          if (R::runif(0.0, 1.0) < (ri / (ri + j))) count++;
         }
         double lambda = ri * (R::digamma(yi + ri) - R::digamma(m_expl + ri));
         count += R::rpois(lambda);

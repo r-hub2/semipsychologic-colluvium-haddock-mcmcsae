@@ -158,9 +158,7 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
   if (catsep == ":") stop("':' is not allowed as category separator in column labels")
   if (is.null(sparse)) sparse <- qd < 0.5 * q
   # 2. construct
-  if (!is.null(by)) {
-    n <- ncol(Maggr)
-  }
+  if (!is.null(by)) n <- ncol(Maggr)
   if (sparse) {
     # allocate memory for i, x slots
     i <- integer(n * (ncol(tmat) + has_intercept))
@@ -193,15 +191,15 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
     if (length(countvars)) {
       xk <- eval_in(countvars[1L], data, enclos)
       if (inherits(xk, "data.frame")) xk <- as.matrix(xk)
-      if (is.matrix(xk))
+      if (is.matrix(xk) && ncol(xk) > 1L)
         labk <- paste(countvars[1L], if (is.null(dimnames(xk)[[2L]])) seq_len(ncol(xk)) else dimnames(xk)[[2L]], sep=catsep)
       else
         labk <- countvars[1L]
       for (v in countvars[-1L]) {
         temp <- eval_in(v, data, enclos)
-        if (is.matrix(temp)) {
-          xk <- t(KhatriRao(t(xk), t(temp)))
+        if (is.matrix(temp) && ncol(temp) > 1L) {
           labk <- outer(labk, paste(v, dimnames(xk)[[2L]], sep=catsep), paste, sep=":")
+          xk <- t(KhatriRao(t(xk), t(temp)))
         } else {
           xk <- xk * temp
           labk <- paste(labk, v, sep=":")
@@ -213,21 +211,21 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
     }
     facvars <- setdiff(vnames[tmat[, k] > 0L], qvar)
     if (length(facvars)) {
-      if (length(countvars) && !is.matrix(xk)) {
-        # TODO allow matrix; --> generalize x-slot in tabMatrix to matrix (and even dgCMatrix)
-        fk <- fac2tabM(facvars, data, enclos, x=xk, drop.unused.levels=drop.unused.levels, contrasts=contr.list[[tnames[k]]], catsep=catsep)
+      if (length(countvars)) {
+        if (is.matrix(xk) && ncol(xk) > 1L) {
+          # TODO generalize x-slot in tabMatrix to matrix (and even dgCMatrix)
+          fk <- fac2tabM(facvars, data, enclos, drop.unused.levels=drop.unused.levels, contrasts=contr.list[[tnames[k]]], catsep=catsep)
+          lab[col:(col + ncol(fk)*ncol(xk) - 1L)] <- outer(dimnames(fk)[[2L]], labk, paste, sep=":")
+          fk <- t(KhatriRao(t(xk), t(fk)))  # col-index of fk runs fastest
+        } else {
+          fk <- fac2tabM(facvars, data, enclos, x=xk, drop.unused.levels=drop.unused.levels, contrasts=contr.list[[tnames[k]]], catsep=catsep)
+          lab[col:(col + ncol(fk) - 1L)] <- paste(labk, dimnames(fk)[[2L]], sep=":")
+        }
       } else {
         fk <- fac2tabM(facvars, data, enclos, drop.unused.levels=drop.unused.levels, contrasts=contr.list[[tnames[k]]], catsep=catsep)
+        lab[col:(col + ncol(fk) - 1L)] <- dimnames(fk)[[2L]]
       }
-      if (is.matrix(xk)) {
-        lab[col:(col + ncol(fk)*ncol(xk) - 1L)] <- outer(dimnames(fk)[[2L]], labk, paste, sep=":")
-        fk <- t(KhatriRao(t(xk), t(fk)))  # col-index of fk runs fastest
-      } else {
-        lab[col:(col + ncol(fk) - 1L)] <- paste0(labk, if (!is.null(labk)) ":" else "", dimnames(fk)[[2L]])
-      }
-      if (!is.null(by)) {
-        fk <- crossprod(Maggr, fk)
-      }
+      if (!is.null(by)) fk <- crossprod(Maggr, fk)
       if (sparse) {
         if (class(fk)[1L] != "dgCMatrix") {
           if (class(fk)[1L] == "tabMatrix")
@@ -249,11 +247,9 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
       }
       col <- col + ncol(fk)
     } else {
-      if (is.matrix(xk)) {
+      if (is.matrix(xk) && ncol(xk) > 1L) {
         lab[col:(col + ncol(xk) - 1L)] <- labk
-        if (!is.null(by)) {
-          xk <- crossprod(Maggr, xk)
-        }
+        if (!is.null(by)) xk <- crossprod(Maggr, xk)
         if (sparse) {
           i[at:(at + length(xk) - 1L)] <- rep.int(0:(n - 1L), ncol(xk))
           x[at:(at + length(xk) - 1L)] <- xk
@@ -265,9 +261,7 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
         col <- col + ncol(xk)
       } else {
         lab[col] <- labk
-        if (!is.null(by)) {
-          xk <- crossprod_mv(Maggr, xk)
-        }
+        if (!is.null(by)) xk <- crossprod_mv(Maggr, xk)
         if (sparse) {
           i[at:(at + length(xk) - 1L)] <- 0:(n - 1L)
           x[at:(at + length(xk) - 1L)] <- xk

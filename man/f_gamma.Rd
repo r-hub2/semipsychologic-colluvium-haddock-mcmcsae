@@ -37,6 +37,37 @@ A family object.
 This function can be used in the \code{family} argument of \code{\link{create_sampler}}
 or \code{\link{generate_data}} to specify a Gamma sampling distribution.
 }
+\examples{
+\dontrun{
+n <- 3000
+m <- 25
+dat <- data.frame(
+  x = rnorm(n),
+  g = factor(sample(1:m, n, replace=TRUE), levels=1:m)
+)
+v <- rnorm(m, sd=0.6)
+alpha <- 1
+mu <- exp(with(dat, 1 - 0.5*x + v[g]))
+dat$y <- rgamma(n, shape=alpha, rate=alpha/mu)
+
+sampler <- create_sampler(
+  y ~ reg(~ x, name="beta") +       # fixed effects
+      gen(factor = ~ g, name="v"),  # random intercepts
+  data=dat, family="gamma"
+)
+sim <- MCMCsim(sampler, store.all=TRUE)
+compute_DIC(sim)
+waic(sim)
+summary(sim)
+
+bayesplot::mcmc_recover_intervals(as.array(sim$gamma_shape_), alpha)
+bayesplot::mcmc_recover_intervals(as.array(sim$beta), c(1, -0.5))
+bayesplot::mcmc_recover_intervals(as.array(sim$v_sigma), 0.6)
+yrep <- predict(sim, iters=sample(1:1000, 10))
+bayesplot::pp_check(dat$y, as.matrix(yrep), bayesplot::ppc_dens_overlay) + ggplot2::xlim(0, 25)
+}
+
+}
 \references{
 J.W. Miller (2019).
    Fast and Accurate Approximation of the Full Conditional for Gamma Shape Parameters.

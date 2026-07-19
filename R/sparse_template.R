@@ -52,7 +52,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
 
     add.eps.I <- control[["add.eps.I"]]
     add.outer.R <- if (add.eps.I || mc[["type"]] != "block") FALSE else control[["add.outer.R"]]
-    cMVN.sampler <- if (mc[["type"]] == "block") control[["cMVN.sampler"]] else FALSE
+    cMVN.sampler <- mc[["type"]] == "block" && !is.null(control[["cMVN.sampler"]])
     if (cMVN.sampler) {
       if (update.XX) {
         mat_sum <- make_mat_sum(M1=XX, M2=Q, force.sparse=TRUE)
@@ -65,7 +65,7 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
         mbs=mc[["mcs"]], X=mc[["X"]], Q=XX_Q,
         R=R, r=mc[["r"]],
         fam=mc[["fam"]],
-        name=mc[["name"]], chol.control=control[["chol.control"]]
+        name=mc[["name"]], control=control[["cMVN.sampler"]]
       )
     } else {
       MVNsampler <- NULL

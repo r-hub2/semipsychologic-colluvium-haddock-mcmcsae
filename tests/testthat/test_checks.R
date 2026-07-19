@@ -184,3 +184,7 @@ test_that("starting values are checked", {
     "Inf"
   )
 })
+
+test_that("check_sampler_control does its checks", {
+  expect_error(check_sampler_control(sampler_control(compute.llh="a")), "must be TRUE or FALSE")
+})

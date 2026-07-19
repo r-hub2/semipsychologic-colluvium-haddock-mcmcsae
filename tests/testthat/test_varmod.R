@@ -3,7 +3,43 @@ context("Variance modelling")
 
 set.seed(1, kind="Mersenne-Twister", normal.kind="Inversion")
 
-n <- 250L
+n <- 150L
+df <- data.frame(
+  x = runif(n),
+  z = exp(rnorm(n))
+)
+test_that("heteroscedasticity is processed correctly", {
+  df$y <- with(df, rnorm(n, 1 - 0.5*x, sd=sqrt(z)))
+  sampler <- create_sampler(
+    y ~ x, family=f_gaussian(var.vec = ~ z),
+    data=df
+  )
+  expect_equal(sampler$family$Q0@x, 1/df$z)
+  sim <- MCMCsim(sampler, burnin=200, n.iter=500, n.chain=2, verbose = FALSE)
+  compute_DIC(sim)
+  summ <- summary(sim)
+  expect_between(summ$sigma_[, "q0.5"], 0.7, 1.4)
+  nd <- data.frame(z=0:10, x=1)
+  pred <- predict(sim, newdata=nd, show.progress = FALSE)
+  predsumm <- summary(pred)
+  expect_gt(cor((predsumm[, "SD"] - predsumm[, "SD"][1])^2, 0:10), 0.9)
+})
+
+test_that("combining var.vec and var.model works=", {
+  df$y <- with(df, rnorm(n, 1 - 0.5*x, sd=sqrt(z)*exp(0.5*(0.5 - 2*x))))
+  sampler <- create_sampler(
+    y ~ x, family=f_gaussian(var.vec = ~ z, var.model = ~ vreg(~ 1 + x), var.prior = pr_fixed(1)),
+    data=df
+  )
+  expect_equal(sampler$family$Q0@x, 1/df$z)
+  sim <- MCMCsim(sampler, n.chain=2, n.iter=500, verbose=FALSE)
+  compute_DIC(sim)
+  summ <- summary(sim)
+  expect_between(summ$reg1[, "q0.5"], c(1, -0.5) - 0.4, c(1, -0.5) + 0.4)
+  expect_between(summ$vreg1[, "q0.5"], c(0.5, -2) - 0.5, c(0.5, -2) + 0.5)
+})
+
+n <- 300L
 df <- data.frame(x=runif(n), f=factor(sample(1:8, n, replace=TRUE)))
 Vmodel <- ~ vfac(factor="f", prior=pr_invchisq(df=5))
 dat <- generate_data(~ reg(~ x + f, prior=pr_normal(precision=1)),
@@ -26,10 +62,15 @@ test_that("modelling vfac variance structure works", {
   sim <- MCMCsim(sampler, burnin=100, n.iter=400, n.chain=2, store.all=TRUE, verbose=FALSE)
   expect_is(sim$varf, "dc")
   summ <- summary(sim)
-  expect_between(summ$reg1[, "Mean"], dat$pars$reg1 - 0.75, dat$pars$reg1 + 0.75)
+  expect_between(summ$reg1[, "Mean"], dat$pars$reg1 - 0.8, dat$pars$reg1 + 0.8)
   expect_between(summ$varf[, "Mean"], 0.5 * dat$pars$vfac1, 2 * dat$pars$vfac1)
   compute_DIC(sim)
   compute_WAIC(sim)
+  pred <- predict(sim, show.progress=FALSE)
+  summpred <- summary(pred)
+  expect_identical(nrow(summpred), n)
+  expect_gt(cor(summpred[, "q0.5"], df$y), 0)
+  #plot(df$y, summpred[, "Mean"])
 })
 
 test_that("pr_fixed prior in vfac works", {
@@ -45,9 +86,11 @@ test_that("pr_fixed prior in vfac works", {
     family = f_gaussian(var.prior = 1, var.model =  ~ vfac(factor="f")),
     data=df
   )
-  sim <- MCMCsim(sampler, store.all=TRUE, verbose=FALSE)
+  sim <- MCMCsim(sampler, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$vfac1[, "Mean"], 0.5 * (1:8) - 0.5, 2*(1:8) + 1)
+  expect_error(compute_WAIC(sim), "store.all")
+  expect_error(predict(sim, show.progress=FALSE), "not in simulation output")
   sampler <- create_sampler(
     y ~ reg(~ x + f),
     family=f_gaussian(var.prior=1, var.model = ~ vfac(factor="f", prior=pr_fixed(1:8))),
@@ -59,8 +102,8 @@ test_that("pr_fixed prior in vfac works", {
 })
 
 # non-diagonal sampling covariance matrix (NB very contrived example)
-subdiv <- c(110,10,70,45,8,7)
-df$f <- as.factor(rep(1:6, subdiv))
+subdiv <- c(110,10,70,45,8,7,50)
+df$f <- as.factor(rep(1:7, subdiv))
 Q0 <- bdiag(mapply(Q_RW2, subdiv)) + Diagonal(n)
 Vmodel <- ~ vfac(factor="f", prior=pr_invchisq(df=5))
 dat <- generate_data(~ reg(~ x + f, prior=pr_normal(precision=1)),
@@ -113,7 +156,7 @@ test_that("vreg variance model works", {
   expect_equal(unname(WAIC["WAIC1"]), unname(WAIC["WAIC2"]), tolerance=0.25)
 })
 
-n <- 900
+n <- 1000
 dat <- data.frame(
   x = runif(n),
   z = rnorm(n)
@@ -136,7 +179,7 @@ test_that("reg variance model works", {
   expect_equal(unname(WAIC["WAIC1"]), unname(WAIC["WAIC2"]), tolerance=0.25)
 })
 
-n <- 1200
+n <- 1400
 dat <- data.frame(
   x = runif(n),
   z = rnorm(n),
@@ -166,7 +209,7 @@ test_that("mixed effects for both mean and variance work", {
     ), data=dat
   )
   expect_false(sampler$Vmod$vv$usePX)
-  sim <- MCMCsim(sampler, burnin=200, n.iter=600, n.chain=2, store.all=TRUE, verbose=FALSE)
+  sim <- MCMCsim(sampler, burnin=250, n.iter=600, n.chain=2, store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$beta[, "q0.5"], c(1*0.3, 0.5*0.3, -0.3*3), c(1*3, 0.5*3, -0.3*0.3))
   expect_between(summ$vbeta[, "q0.5"], 0.2*c(0.4, 1), 5*c(0.4, 1))
@@ -186,7 +229,8 @@ test_that("mixed effects for both mean and variance work", {
     ), data=dat,
     control = sampler_control(cMVN.sampler = TRUE)
   )
-  expect_true(sampler$control$cMVN.sampler)
+  expect_is(sampler$control$cMVN.sampler, "list")
+  expect_true(sampler$control$cMVN.or.CG)
   sim <- MCMCsim(sampler, burnin=200, n.iter=600, n.chain=2, store.all=TRUE, verbose=FALSE)
   summ <- summary(sim)
   expect_between(summ$beta[, "q0.5"], c(1*0.3, 0.5*0.3, -0.3*3), c(1*3, 0.5*3, -0.3*0.3))

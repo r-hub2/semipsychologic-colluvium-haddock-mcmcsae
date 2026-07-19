@@ -41,7 +41,7 @@ NULL
 #' @importFrom graphics plot.new points segments
 #' @importFrom methods as cbind2 new rbind2 setAs setClass setMethod signature show
 #' @importFrom stats acf as.formula density fitted make.link mvfft nextn optim
-#' @importFrom stats pnorm predict rbeta rbinom rchisq residuals rexp rgamma rnbinom rnorm
+#' @importFrom stats pnorm predict rbeta rbinom rchisq residuals rexp rgamma rnbinom rnorm rt
 #' @importFrom stats rpois runif rWishart sd setNames terms update.formula var weights
 #' @importFrom utils getFromNamespace modifyList object.size setTxtProgressBar
 #' @importFrom utils str tail txtProgressBar

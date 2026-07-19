@@ -48,19 +48,23 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
   QT <- bdiag_ddidsC(
     lapply(mcs, \(mc) if (mc[["type"]] == "gen") mc[["Q"]] else mc[["Q0"]])
   )
-  QT.ind <- 0L  # 0-based indices of components' contributions to QT@x
-  if (length(mcs) > 1L) QT.ind <- c(QT.ind,
-    if (class(QT)[1L] == "ddiMatrix")
-      cumsum(i_apply(mcs[seq_len(length(mcs) - 1L)], `[[`, "q"))
-    else
-      QT@p[cumsum(i_apply(mcs[seq_len(length(mcs) - 1L)], `[[`, "q")) + 1L]
-  )
   # individual Q matrices no longer needed (we still have kron_prod closures)
   for (mc in mcs) if (mc[["type"]] == "gen") rm("Q", envir=mc)
   if (any(b_apply(mcs, \(mc) is.function(mc[["get_Q"]])))) {
+    QT.ind <- 0L  # 0-based indices of components' contributions to QT@x
+    if (length(mcs) > 1L) QT.ind <- c(QT.ind,
+      if (class(QT)[1L] == "ddiMatrix")
+        cumsum(i_apply(mcs[seq_len(length(mcs) - 1L)], `[[`, "q"))
+      else
+        QT@p[cumsum(i_apply(mcs[seq_len(length(mcs) - 1L)], `[[`, "q")) + 1L]
+    )
+    i.getQ <- b_apply(mcs, function(x) is.function(x[["get_Q"]]))
+    Q.funs <- lapply(mcs[i.getQ], function(x) x$get_Q)  # direct refs to existing get_Q
+    QT.ind <- QT.ind[i.getQ]
+    rm(i.getQ)
     get_Qvector <- function(p) {
       Qvector <- copy_obj(QT@x)
-      for (m in seq_along(mcs)) if (is.function(mcs[[m]][["get_Q"]])) set_in_place(Qvector, QT.ind[m], mcs[[m]]$get_Q(p))
+      for (i in seq_along(QT.ind)) set_in_place(Qvector, QT.ind[i], Q.funs[[i]](p))
       Qvector
     }
   } else {
@@ -242,7 +246,7 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
                "the standard Albert-Chib sampler in this case by setting probit.HaarPXDA=FALSE ",
                "via create_sampler's control argument")
         # Haar PX-DA sandwich step
-        if (sc[["cMVN.sampler"]]) {
+        if (!is.null(sc[["cMVN.sampler"]])) {
           draw <- add(draw, quote(
             rate <- 0.5 * dotprodC(p[["z_"]], p[["z_"]] - X %m*v% MVNsampler$smplr$cholQ$solve(crossprod_mv(X, p[["z_"]]))[MVNsampler$smplr$Iq])
           ))
@@ -275,7 +279,7 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
         draw <- add(draw, quote(Xy <- crossprod_mv(X, fam$Q_e(p))))
     }
     if (is.null(sc[["CG"]])) {
-      if (sc[["cMVN.sampler"]])
+      if (!is.null(sc[["cMVN.sampler"]]))
         draw <- add(draw, bquote(coef <- MVNsampler$draw(p, Xy=Xy, X=X)[[.(name)]]))
       else
         draw <- add(draw, bquote(coef <- MVNsampler$draw(p, .(if (fam[["sigma.fixed"]]) 1 else quote(p[["sigma_"]])), Xy=Xy)[[.(name)]]))
@@ -412,7 +416,22 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
   # END draw function
 
   start <- function(p) {}
-  if (is.null(sc[["CG"]]) && !sc[["cMVN.sampler"]]) {
+  if (sc[["cMVN.or.CG"]]) {
+    start <- add(start, quote(
+      for (mc in mcs) {
+        if (mc[["type"]] == "gen" && mc[["fastGMRFprior"]]) {
+          Qv <- rexp(1L)
+          if (is.null(mc$rGMRFprior))
+            setup_priorGMRFsampler(mc, Qv)
+          p[[mc[["name"]]]] <- check_and_get(p, mc[["name"]], mc[["q"]],
+            \() if (is.null(mc[["priorA"]])) mc$rGMRFprior(Qv) else mc$rGMRFprior(Qv, rep.int(1, mc[["lD"]]))
+          )
+        } else {
+          p[[mc[["name"]]]] <- check_and_get(p, mc[["name"]], mc[["q"]], \() Crnorm(mc[["q"]], sd=fam[["scale.sigma"]]))
+        }
+      }
+    ))
+  } else {
     if (modus == "regular") {
       start <- add(start, bquote(coef <- MVNsampler$start(p, fam[["scale.sigma"]])[[.(name)]]))
     } else {
@@ -434,21 +453,6 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
           }
         } else {
           p[[mc$name]] <- check_and_get(p, mc[["name"]], mc[["q"]], \() u)
-        }
-      }
-    ))
-  } else {
-    start <- add(start, quote(
-      for (mc in mcs) {
-        if (mc[["type"]] == "gen" && mc[["fastGMRFprior"]]) {
-          Qv <- rexp(1L)
-          if (is.null(mc$rGMRFprior))
-            setup_priorGMRFsampler(mc, Qv)
-          p[[mc[["name"]]]] <- check_and_get(p, mc[["name"]], mc[["q"]],
-            \() if (is.null(mc[["priorA"]])) mc$rGMRFprior(Qv) else mc$rGMRFprior(Qv, rep.int(1, mc[["lD"]]))
-          )
-        } else {
-          p[[mc[["name"]]]] <- check_and_get(p, mc[["name"]], mc[["q"]], \() Crnorm(mc[["q"]], sd=fam[["scale.sigma"]]))
         }
       }
     ))

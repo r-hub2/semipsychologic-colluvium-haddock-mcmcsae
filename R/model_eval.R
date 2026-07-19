@@ -240,22 +240,25 @@ compute_DIC <- function(x, use.pV=FALSE) {
   post.means <- get_means(x)
   model <- x[["_model"]]
   fam <- model[["family"]]
+  if (is.null(post.means[["llh_"]]))
+    stop("cannot compute DIC; missing simulation means of 'llh_'")
   if (is.null(post.means[["e_"]]))
     stop("cannot compute DIC: missing simulation means of ", if (fam[["e.is.res"]]) "residuals" else "linear predictor", "'e_'")
-  if (any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma")) && fam[["modeled.Q"]]) {
+  if (
+    (any(fam[["family"]] == c("gaussian", "gaussian_gamma")) && fam[["modeled.Q"]]) ||
+    (fam[["family"]] == "student_t" && fam[["t.modeled.Q"]])
+  ) {
     if (is.null(post.means[["Q_"]])) stop("cannot compute DIC: missing simulation means of 'Q_'")
     if (fam[["Q0.type"]] == "symm") {
       # reconstruct mean sparse precision matrix
       post.means[["QM_"]] <- block_scale_dsCMatrix(fam[["Q0"]], post.means[["Q_"]])
     }
   }
-  if (is.null(post.means[["llh_"]]))
-    stop("cannot compute DIC; missing simulation means of 'llh_'")
-  if (any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma"))) {
+  if (any(fam[["family"]] == c("gaussian", "gaussian_gamma"))) {
     post.means[[fam[["SSR.name"]]]] <- fam$compute_SSR(post.means)
   } else if (fam[["family"]] == "multi") {
     for (fm in fam[["fam.list"]]) {
-      if (any(fm[["family"]] == c("gaussian", "student_t", "gaussian_gamma")))
+      if (any(fm[["family"]] == c("gaussian", "gaussian_gamma")))
         post.means[[fm[["SSR.name"]]]] <- fm$compute_SSR(post.means)
     }
   }
@@ -286,8 +289,12 @@ get_lppd_function <- function(x) {
   if (!(any("e_" == par_names(x)) || all_coef_names_present(x[["_model"]][["mod"]], par_names(x))))
     stop("WAIC/LOO can only be computed if all coefficients are stored. Please use 'store.all=TRUE' in MCMCsim.")
   fam <- x[["_model"]][["family"]]
-  if (fam[["modeled.Q"]] && any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma")) && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", fam[["Vmod"]])) %in% par_names(x)))
-    stop("WAIC/LOO can only be computed if all modelled variance factors are stored. Please use 'store.all=TRUE' in MCMCsim.")
+  if (fam[["modeled.Q"]]) {
+    if (
+      (any(fam[["family"]] == c("gaussian", "gaussian_gamma")) && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", fam[["Vmod"]])) %in% par_names(x))) ||
+      (fam[["family"]] == "student_t" && fam[["t.modeled.Q"]] && !all(names(Filter(function(mc) mc[["type"]] != "mc_offset", fam[["Vmod.t"]])) %in% par_names(x)))
+    ) stop("WAIC/LOO can only be computed if all modelled variance factors are stored. Please use 'store.all=TRUE' in MCMCsim.")
+  }
   llh_i
 }
 
@@ -389,10 +396,13 @@ compute_WAIC <- function(x, diagnostic=FALSE, batch.size=NULL, show.progress=TRU
     c(WAIC1=WAIC1, p_WAIC1=pWAIC1, WAIC2=WAIC2, p_WAIC2=pWAIC2)
 }
 
-#' @method waic mcdraws
+# re-export waic
+#' @importFrom loo waic
+#' @export
+loo::waic
+
 #' @export
 #' @rdname model-information-criteria
-#' @importFrom loo waic
 # based on waic.stanreg from package rstanarm
 waic.mcdraws <- function(x, by.unit=FALSE, ...) {
   fam <- x[["_model"]][["family"]]
@@ -404,16 +414,19 @@ waic.mcdraws <- function(x, by.unit=FALSE, ...) {
   if (by.unit) {
     data <- data.frame(i=seq_len(fam[["n"]]))
     f <- function(data_i, draws) llh_i(draws, data_i[["i"]])
-    loo::waic(f, data=data, draws=x)
+    waic(f, data=data, draws=x)
   } else {
-    loo::waic(as.matrix(llh_i(x)))
+    waic(as.matrix(llh_i(x)))
   }
 }
 
-#' @method loo mcdraws
+# re-export loo
+#' @importFrom loo loo
+#' @export
+loo::loo
+
 #' @export
 #' @rdname model-information-criteria
-#' @importFrom loo loo
 # TODO batch processing as in compute_WAIC
 loo.mcdraws <- function(x, by.unit=FALSE, r_eff=FALSE, n.cores=1L, ...) {
   llh_i <- get_lppd_function(x)
@@ -425,13 +438,38 @@ loo.mcdraws <- function(x, by.unit=FALSE, r_eff=FALSE, n.cores=1L, ...) {
       r_eff <- loo::relative_eff(f, chain_id=rep_each(seq_len(n_chains(x)), n_draws(x)), data=data, draws=x, cores=n.cores)
     else
       r_eff <- NULL
-    loo::loo(f, data=data, draws=x, r_eff=r_eff, cores=n.cores)
+    loo(f, data=data, draws=x, r_eff=r_eff, cores=n.cores)
   } else {
     llh <- llh_i(x)
     if (r_eff)
       r_eff <- loo::relative_eff(exp(llh), chain_id=rep_each(seq_len(n_chains(x)), n_draws(x)), cores=n.cores)
     else
       r_eff <- NULL
-    loo::loo(llh, r_eff=r_eff, cores=n.cores, ...)
+    loo(llh, r_eff=r_eff, cores=n.cores, ...)
   }
+}
+
+#' Compute a Bayesian measure of percentage of explained variance
+#'
+#' @export
+#' @param x object of class mcdraws as created by \code{\link{MCMCsim}}.
+#' @param summary if \code{TRUE} only a posterior summary is returned, otherwise
+#'  a simulation (\code{dc}) object.
+#' @returns Posterior summary or full simulation draws of a Bayesian version of
+#'  R-squared modelfit measure.
+#' @references
+#'  A. Gelman, B. Goodrich, J. Gabry and A. Vehtari (2019).
+#'    R-squared for Bayesian Regression Models.
+#'    The American Statistician 73(3), 307-309.
+bayesR2 <- function(x, summary=TRUE) {
+  if (!inherits(x, "mcdraws")) stop("'x' must be an object of class mcdraws")
+  smplr <- x[["_model"]]
+  if (smplr[["prior.only"]]) stop("BayesR2 cannot be computed from prior samples only")
+  y <- smplr[["y"]]
+  f <- function(ypred) {
+    var.ypred <- var(ypred)
+    var.ypred / (var.ypred + var(y - ypred))
+  }
+  pred <- predict(x, type="response", fun.=f, labels="bayesR2", show.progress=FALSE)
+  if (summary) summary(pred) else pred
 }

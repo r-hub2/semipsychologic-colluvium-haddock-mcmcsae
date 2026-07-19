@@ -13,7 +13,7 @@ Description: Fit multi-level models with possibly correlated
     random effects using Markov Chain Monte Carlo simulation.
     Such models allow smoothing over space and time and are useful in,
     for example, small area estimation.
-Date: 2026-06-03
+Date: 2026-07-19
 Depends: R (>= 4.1.0)
 Imports: Matrix (>= 1.6.2), Rcpp (>= 0.11.0), methods, GIGrvg (>= 0.7),
         loo (>= 2.0.0), collapse
@@ -36,7 +36,7 @@ Collate: 'AR1_sampler.R' 'GMRF_extension.R' 'MCMCsim.R' 'MH.R'
         'set_constraints.R' 'sparse_template.R' 'utils.R'
 Config/roxygen2/version: 8.0.0
 NeedsCompilation: yes
-Packaged: 2026-06-03 21:36:48 UTC; hbta
+Packaged: 2026-07-19 20:51:00 UTC; hbta
 Author: Harm Jan Boonstra [aut, cre],
   Grzegorz Baltissen [ctb]
 Maintainer: Harm Jan Boonstra <hjboonstra@gmail.com>

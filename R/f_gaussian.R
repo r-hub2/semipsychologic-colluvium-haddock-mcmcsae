@@ -289,16 +289,18 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
   if (!prior.only) {
     draw <- function(p) {}
     draw <- add(draw, bquote(p[[.(SSR.name)]] <- compute_SSR(p)))
-    if (multifam)
-      draw <- add(draw, quote(p$llh_ <- p[["llh_"]] + llh(p)))
-    else
-      draw <- add(draw, quote(p$llh_ <- llh(p)))
+    if (sc[["compute.llh"]]) {
+      if (multifam)
+        draw <- add(draw, quote(p$llh_ <- p[["llh_"]] + llh(p)))
+      else
+        draw <- add(draw, quote(p$llh_ <- llh(p)))
+    }
     if (!sigma.fixed) {
       df.sigma <- n  # likelihood contribution; any prior contributions are added by reg, gen etc components
       # any prior contributions to SSR_ are added by the model components' draw functions
       # so that the correct total SSR_ is used for drawing sigma
-      draw <- add(draw, quote(
-        for (mc in sm[["mod"]]) if (is.function(mc[["SSR_sigma"]])) p[[SSR.name]] <- p[["SSR_"]] + mc$SSR_sigma(p)
+      draw <- add(draw, bquote(
+        for (mc in sm[["mod"]]) if (is.function(mc[["SSR_sigma"]])) p[[.(SSR.name)]] <- p[[.(SSR.name)]] + mc$SSR_sigma(p)
       ))
     }
   }
@@ -398,22 +400,41 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
     }
     # compute data-level precision matrix from Q0 and scale factor computed by compute_Qfactor
     # p$Q_ by default in store.mean for use in compute_DIC
-    compute_Q <- switch(Q0.type,
-      unit = function(p, Qfactor=NULL) {
-        if (is.null(Qfactor)) p$Q_ <- compute_Qfactor(p)
-        p
-      },
-      diag = function(p, Qfactor=NULL) {
-        if (is.null(Qfactor)) p$Q_ <- Q0@x * compute_Qfactor(p)
-        p
-      },
-      symm = function(p, Qfactor=NULL) {
-        if (is.null(Qfactor)) Qfactor <- compute_Qfactor(p)
-        p$QM_ <- block_scale_dsCMatrix(Q0, Qfactor)  # store full precision matrix
-        p$Q_ <- Qfactor
-        p
-      }
-    )
+    if (multifam) {
+      compute_Q <- switch(Q0.type,
+        unit = function(p, Qfactor=NULL) {
+          if (is.null(Qfactor)) p$Q_[sub] <- compute_Qfactor(p)
+          p
+        },
+        diag = function(p, Qfactor=NULL) {
+          if (is.null(Qfactor)) p$Q_[sub] <- Q0@x * compute_Qfactor(p)
+          p
+        },
+        symm = function(p, Qfactor=NULL) {
+          if (is.null(Qfactor)) Qfactor <- compute_Qfactor(p)
+          p$QM_[sub, sub] <- block_scale_dsCMatrix(Q0, Qfactor)  # store full precision matrix
+          p$Q_[sub] <- Qfactor
+          p
+        }
+      )
+    } else {
+      compute_Q <- switch(Q0.type,
+        unit = function(p, Qfactor=NULL) {
+          if (is.null(Qfactor)) p$Q_ <- compute_Qfactor(p)
+          p
+        },
+        diag = function(p, Qfactor=NULL) {
+          if (is.null(Qfactor)) p$Q_ <- Q0@x * compute_Qfactor(p)
+          p
+        },
+        symm = function(p, Qfactor=NULL) {
+          if (is.null(Qfactor)) Qfactor <- compute_Qfactor(p)
+          p$QM_ <- block_scale_dsCMatrix(Q0, Qfactor)  # store full precision matrix
+          p$Q_ <- Qfactor
+          p
+        }
+      )
+    }
 
     if (!prior.only) {
       MHpars <- NULL
@@ -471,7 +492,7 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
     }
     draw <- add(draw, quote(p))
   }
-  if (!prior.only && (!is.null(sc[["CG"]]) || sc[["cMVN.sampler"]])) {
+  if (!prior.only && sc[["cMVN.or.CG"]]) {
     # set up a function that multiplies by L Chol factor of Q, for sampling from N(., Q)
     if (modeled.Q) {
       cholQ <- switch(Q0.type,
@@ -498,36 +519,41 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
       drawMVNvarQ <- function(p) cholQ$Ltimes(Crnorm(n), transpose=FALSE)
     }
   }
+  pred_pars <- function() {
+    out <- if (sigma.fixed) NULL else sd.name
+    if (modeled.Q) for (mc in Vmod) out <- c(out, mc[["name"]])
+    out
+  }
   if (!prior.only) {
-    llh_0 <- -0.5 * n * log(2*pi)  # constant term of log-likelihood
+    llh0 <- -0.5 * n * log(2*pi)  # constant term of log-likelihood
     if (!is.null(logJacobian)) {
       logJacobian <- as.numeric(logJacobian)
       if (length(logJacobian) != n) stop("'logJacobian' should be a vector of the same size as the response vector")
       if (anyNA(logJacobian)) stop("missing values in 'logJacobian'")
-      llh_0 <- llh_0 + sum(logJacobian)
+      llh0 <- llh0 + sum(logJacobian)
     }
     if (!modeled.Q || Q0.type == "symm")
-      llh_0 <- llh_0 + 0.5 * as.numeric(determinant(1 * Q0, logarithm=TRUE)$modulus)  # 1 * Q0 to ensure no chol object is stored with Q0 and possibly other refs to Q0
+      llh0 <- llh0 + 0.5 * as.numeric(determinant(1 * Q0, logarithm=TRUE)$modulus)  # 1 * Q0 to ensure no chol object is stored with Q0 and possibly other refs to Q0
     if (modeled.Q) {
       if (multifam) {
         if (sigma.fixed)
-          llh <- function(p) llh_0 + 0.5 * sum(log(p[["Q_"]][sub])) - 0.5 * p[[SSR.name]]
+          llh <- function(p) llh0 + 0.5 * sum(log(p[["Q_"]][sub])) - 0.5 * p[[SSR.name]]
         else
-          llh <- function(p) llh_0 + 0.5 * sum(log(p[["Q_"]][sub])) - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
+          llh <- function(p) llh0 + 0.5 * sum(log(p[["Q_"]][sub])) - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
       } else {
         if (sigma.fixed)
-          llh <- function(p) llh_0 + 0.5 * sum(log(p[["Q_"]])) - 0.5 * p[[SSR.name]]
+          llh <- function(p) llh0 + 0.5 * sum(log(p[["Q_"]])) - 0.5 * p[[SSR.name]]
         else
-          llh <- function(p) llh_0 + 0.5 * sum(log(p[["Q_"]])) - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
+          llh <- function(p) llh0 + 0.5 * sum(log(p[["Q_"]])) - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
       }
     } else {
       if (sigma.fixed)
-        llh <- function(p) llh_0 - 0.5 * p[[SSR.name]]
+        llh <- function(p) llh0 - 0.5 * p[[SSR.name]]
       else
-        llh <- function(p) llh_0 - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
+        llh <- function(p) llh0 - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
     }
     # for WAIC computation: compute log-likelihood for each observation/batch of observations, vectorized over parameter draws and observations
-    llh_0_i <- -0.5 * log(2*pi)
+    llh0_i <- -0.5 * log(2*pi)
     llh_i <- function(draws, i, e_i) {
       nr <- dim(e_i)[1L]
       all.units <- length(i) == n
@@ -560,20 +586,21 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
         }
       )
       if (is.null(logJacobian))
-        llh_0_i + 0.5 * ( log(q) - q * e_i^2 )
+        llh0_i + 0.5 * ( log(q) - q * e_i^2 )
       else
-        llh_0_i + matrix(rep_each(logJacobian[i], nr), nr, length(i)) + 0.5 * ( log(q) - q * e_i^2 )
+        llh0_i + matrix(rep_each(logJacobian[i], nr), nr, length(i)) + 0.5 * ( log(q) - q * e_i^2 )
     }
   }
+  # make_get_sds used for prediction; allow 0 variances
   make_get_sds <- function(newdata) {
     if (identical(prec.mat, "prec.mat.used")) stop("out-of-sample prediction not supported if 'prec.mat' is used")
     if (intercept_only(var.vec)) {
       sds0 <- 1
     } else {
       sds0 <- get_var_from_formula(var.vec, newdata)
-      if (any(sds0 <= 0)) stop("non-positive variance(s) in 'var.vec' for prediction")
+      if (any(sds0 < 0)) stop("negative variance(s) in 'var.vec' for prediction")
       if (all(length(sds0) != c(1L, nrow(newdata)))) stop("wrong length for prediction variance vector")
-      sds0 <- invsqrt(sds0)
+      sds0 <- sqrt(sds0)
     }
     if (modeled.Q) {
       V <- list()
@@ -584,14 +611,14 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
           V[[Vmc[["name"]]]] <- Vmc$make_predict(newdata)
       }
       function(p) {
-        var <- sds0^2
+        var <- 1
         for (Vmc in Vmod) {
           if (any(Vmc[["type"]] == c("vfac", "vreg")))
             var <- var * V[[Vmc[["name"]]]](p)
           else
             var <- var * exp(V[[Vmc[["name"]]]](p))
         }
-        sqrt(var)
+        sds0 * sqrt(var)
       }
     } else {
       function(p) sds0
@@ -642,16 +669,17 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
       nn <- nrow(newdata)
       get_sds <- make_get_sds(newdata)
       # here we assume that Q0 is diagonal
-      if (is.null(weights))
-        function(p, lp) {
-          sigma <- if (sigma.fixed) 1 else p[[sd.name]]
-          lp + sigma * get_sds(p) * Crnorm(nn)
-        }
-      else
-        function(p, lp) {
-          sigma <- if (sigma.fixed) 1 else p[[sd.name]]
-          weights * lp + sigma * sqrt(weights) * get_sds(p) * Crnorm(nn)
-        }
+      if (is.null(weights)) {
+        if (sigma.fixed)
+          function(p, lp) lp + get_sds(p) * Crnorm(nn)
+        else
+          function(p, lp) lp + p[[sd.name]] * get_sds(p) * Crnorm(nn)
+      } else {
+        if (sigma.fixed)
+          function(p, lp) weights * lp + sqrt(weights) * get_sds(p) * Crnorm(nn)
+        else
+          function(p, lp) weights * lp + p[[sd.name]] * sqrt(weights) * get_sds(p) * Crnorm(nn)
+      }
     }
   }
   rm(data)

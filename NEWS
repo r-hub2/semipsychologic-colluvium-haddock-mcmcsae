@@ -7,12 +7,12 @@ version 0.8.1
   regression coefficients should scale with residual
   standard deviation (default) or not
 - added support for lme4 random effect specifications
-- added Haar-PX-DA algorithm for to improve MCMC mixing of
+- added Haar-PX-DA algorithm to improve MCMC mixing of
   probit Bernoulli models
 - added as.data.frame method to summary of mcdraws and dc
   objects, for easier combining, analysing and viewing
 - several small speed-ups
-- fixed several small bugs
+- fixed several bugs
 - more examples, checks and tests
 
 

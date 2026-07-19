@@ -115,7 +115,8 @@ formulas <- list(
   ~ x*t, ~ I(x*t), ~ x + t*f1*f2 + f1*f2*f3,
   ~ 0 + t:x:f1:f2,
   ~ 0 + f1:z, ~ 0 + f1:z0, ~ 0 + f1:z1,
-  ~ f2:z + f2*f1*z + f3:f1*z*z0 + z + z0 + z1 + z1*z:f2
+  ~ f2:z + f2*f1*z + f3:f1*z*z0 + z + z0 + z1 + z1*z:f2,
+  ~ f1*scale(exp(x))  # NB scale returns single column matrix
 )
 test_that("many special case formulas work", {
   for (mod in formulas) {

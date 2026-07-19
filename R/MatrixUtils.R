@@ -125,7 +125,7 @@ NULL
       CsparseS_numeric_prod(M, v)
     },
     dtCMatrix = {  # possibly used by Ltimes method of cholesky object
-      class(M) <- .dgC.class.attr  # convert M to dgC
+      class(M) <- .dgC.class.attr
       Csparse_numeric_prod(M, v)
     },
     numeric = M * v,  # interpreted as diagonal M, including scalar (1 x 1) case
@@ -146,7 +146,7 @@ crossprod_mv <- function(M, v) {
       CsparseS_numeric_prod(M, v)
     },
     dtCMatrix = {  # possibly used by Ltimes method of cholesky object
-      class(M) <- .dgC.class.attr  # convert M to dgC
+      class(M) <- .dgC.class.attr
       Csparse_numeric_crossprod(M, v)
     },
     numeric = M * v,  # interpreted as diagonal M, including scalar (1 x 1) case
@@ -158,7 +158,7 @@ crossprod_mv <- function(M, v) {
 # compute D %*% Q %*% D, where D=Diagonal(x=scale)
 # if scale has length 1, it is computed as scale^2 * Q
 scale_dsCMatrix <- function(Q, scale) {
-  class(Q) <- .dgC.class.attr  # convert Q to dgC
+  class(Q) <- .dgC.class.attr
   Q <- Cscale_sparse(Q, scale)
   # convert back to dsC
   attr(Q, "uplo") <- "U"
@@ -323,7 +323,7 @@ crossprod_sym <- function(M, Q) {
       ),
     dgCMatrix =
       if (classQ == "dsCMatrix") {
-        class(Q) <- .dgC.class.attr  # convert Q to dgC
+        class(Q) <- .dgC.class.attr
         Q <- Csparse_crossprod_sym(M, Q)
         # convert back to dsC
         attr(Q, "uplo") <- "U"
@@ -715,9 +715,13 @@ combine_factors <- function(fvars, data, drop=FALSE, sep=":", lex.order=FALSE, e
   if (length(fvars)) {
     if (!is.character(fvars)) stop("'fvars' must be a character vector")
     fac <- eval_in(fvars[1L], data, enclos)
+    n <- length(fac)
     # keep all levels, including those of empty combinations, even combinations of empty levels
-    for (f in fvars[-1L])
-      fac <- interaction(fac, eval_in(f, data, enclos), drop=drop, sep=sep, lex.order=lex.order)
+    for (f in fvars[-1L]) {
+      facf <- eval_in(f, data, enclos)
+      if (length(facf) != n) stop(sprintf("'%s' and '%s' have different lengths", fvars[1L], f))
+      fac <- interaction(fac, facf, drop=drop, sep=sep, lex.order=lex.order)
+    }
   } else {
     fac <- NULL
   }

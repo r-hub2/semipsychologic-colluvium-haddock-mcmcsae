@@ -58,30 +58,45 @@ interpretation of its intercept.
 }
 \examples{
 \dontrun{
-n <- 1000
-nT <- 40
+# first generate some data based on a negative binomial structured additive regression model
+n <- 1200
+nT <- 50
 dat <- data.frame(
-  x = rnorm(n),
+  x = runif(n),
   t = factor(sample(1:nT, n, replace=TRUE), levels=1:nT)
 )
-model <- ~ reg(~ x, prior=pr_normal(precision=1), name="beta") +
-           gen(factor = ~ RW1(t), name="v")
-gd <- generate_data(model, dat, family=f_negbinomial())
-str(gd)
+# generate randow walk over time t
+v <- cumsum(rnorm(nT, sd=0.1))
+v <- v - mean(v)  # subtract mean to separate random walk from intercept
+lp <- with(dat, 1 - 0.5*x + v[t])
+shape <- 2  # inverse negative binomial dispersion parameter
+dat$y <- rnbinom(n, size=shape, mu = shape * exp(lp))
 
-dat$y <- gd$y
+# now fit a negative binomial model to this data
 sampler <- create_sampler(
-  model <- y ~ reg(~ x, name="beta") +
-             gen(factor = ~ RW1(t), name="v"),
-  data=dat, family=f_negbinomial()
+  y ~ reg(~ x, name="beta") + gen(factor = ~ RW1(t), name="v"),
+  data=dat, family = f_negbinomial()
 )
-sim <- MCMCsim(sampler, store.all=TRUE)
-summ <- summary(sim)
+sim <- MCMCsim(sampler, store.all=TRUE, plot.trace=c("v_sigma", "negbin_shape_"))
+(summ <- summary(sim))
 loo(sim)
-plot.ts(gd$pars$v)
-lines(summ$v[, "Mean"], col=2)
-bayesplot::mcmc_recover_intervals(as.array(sim$beta), gd$pars$beta)
-bayesplot::mcmc_recover_hist(as.array(sim$negbin_shape_), gd$pars$negbin_shape_)
+bayesplot::mcmc_recover_intervals(as.array(sim$beta), c(1, -0.5))
+bayesplot::mcmc_scatter(as.array(sim$beta))
+bayesplot::mcmc_recover_hist(as.array(sim$negbin_shape_), shape)
+bayesplot::mcmc_recover_hist(as.array(sim$v_sigma), 0.1)
+plot.ts(v); lines(summ$v[, "Mean"], col=2)
+pred <- predict(sim, type="response")
+summpred <- summary(pred)
+# NB prediction with type="response" does not include factor shape
+plot(exp(lp), summpred[, "Mean"]); abline(0, 1)
+plot(dat$y, shape * summpred[, "Mean"]); abline(0, 1)
+mean(dat$y); shape * mean(summpred[, "Mean"])
+# posterior predictive p-values at the observation level:
+ppred <- predict(sim, ppcheck=TRUE)
+hist(attr(ppred, "ppp"))
+# NB the peak at 1 is due to zeros in the data:
+dat$y[attr(ppred, "ppp") == 1]
+# as Pr(y_rep >= y) = 1 by construction for these cases
 }
 
 }

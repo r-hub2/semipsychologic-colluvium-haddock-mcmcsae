@@ -1,8 +1,34 @@
-
 #' Specify a Poisson sampling distribution
 #'
 #' This function can be used in the \code{family} argument of \code{\link{create_sampler}}
 #' or \code{\link{generate_data}} to specify a Poisson sampling distribution.
+#'
+#' @examples
+#' \dontrun{
+#' n <- 3000
+#' m <- 25
+#' dat <- data.frame(
+#'   x = rnorm(n),
+#'   g = factor(sample(1:m, n, replace=TRUE), levels=1:m)
+#' )
+#' v <- rnorm(m, sd=0.6)
+#' dat$y <- rpois(n, lambda=exp(with(dat, 1 - 0.5*x + v[g])))
+#'
+#' sampler <- create_sampler(
+#'   y ~ reg(~ x, name="beta") +       # fixed effects
+#'       gen(factor = ~ g, name="v"),  # random intercepts
+#'   data=dat, family="poisson"
+#' )
+#' sim <- MCMCsim(sampler, store.all=TRUE)
+#' compute_DIC(sim)
+#' waic(sim)
+#' summary(sim)
+#' 
+#' bayesplot::mcmc_recover_intervals(as.array(sim$beta), c(1, -0.5))
+#' bayesplot::mcmc_recover_intervals(as.array(sim$v_sigma), 0.6)
+#' yrep <- predict(sim, iters=sample(1:1000, 10))
+#' bayesplot::pp_check(dat$y, as.matrix(yrep), bayesplot::ppc_dens_overlay)
+#' }
 #'
 #' @export
 #' @param link the name of a link function. Currently the only allowed
@@ -59,17 +85,18 @@ ff_poisson <- function(link="log", control=poisson_control(),
       cholQ <- f[["cholQ"]]
       drawMVNvarQ <- f[["drawMVNvarQ"]]
     }
-    llh_0_i <- -lgamma(y + 1)
-    llh_0 <- sum(llh_0_i)
+    llh0_i <- -lgamma(y + 1)
+    llh0 <- sum(llh0_i)
     # Poisson log-likelihood, first remove internal offset from linear predictor p[["e_"]]
     llh <- function(p) {
       eta <- if (multifam) p[["e_"]][sub] + log.shape else p[["e_"]] + log.shape
-      llh_0 + sum(y * eta - exp(eta))
+      llh0 + sum(y * eta - exp(eta))
     }
+    assign("llh", llh, environment(draw))  # draw was defined by ff_negbinomial so we should replace its llh function
     # NB e_i must be the linear predictor excluding the internal offset
     llh_i <- function(draws, i, e_i) {
       nr <- dim(e_i)[1L]
-      rep_each(llh_0_i[i], nr) + rep_each(y[i], nr) * e_i - exp(e_i)
+      rep_each(llh0_i[i], nr) + rep_each(y[i], nr) * e_i - exp(e_i)
     }
   }
   make_rpredictive <- function(newdata, weights=NULL) {

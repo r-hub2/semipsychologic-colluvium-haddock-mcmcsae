@@ -658,6 +658,8 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     }
 
     draw <- add(draw, quote(event <- 0L))
+    Q.is.matrix <- is.matrix(Q)
+    if (ineq) S.is.matrix <- is.matrix(S)
     draw <- add(draw, quote(
       repeat {
         # compute gradient event time dt.gr, and possibly boundary event times
@@ -729,7 +731,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
           v[istar] <- -v[istar]
           if (!eq || reduce) {
             # update Qv (NB v[istar] has already changed sign)
-            if (class(Q)[1L] == "matrix")
+            if (Q.is.matrix)
               Qv <- Qv + 2 * v[istar] * Q[, istar, drop=TRUE]
             else
               Qv[iQ[[istar]]] <- Qv[iQ[[istar]]] + 2 * v[istar] * xQ[[istar]]
@@ -743,7 +745,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
           # use a simple version: flip all pi's with si != 0
           # this guarantees that sum(Sj * v) > 0 after the bounce
           # TODO check whether other options e.g. including permutations are valid
-          if (class(S)[1L] == "matrix")
+          if (S.is.matrix)
             ind <- whichv(S[, jstar, drop=TRUE] != 0, TRUE)
           else
             ind <- inds[[jstar]]

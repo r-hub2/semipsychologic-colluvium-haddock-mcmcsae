@@ -2,7 +2,7 @@
 % Please edit documentation in R/f_student_t.R
 \name{student_t_control}
 \alias{student_t_control}
-\title{Set computational options for the sampling algorithms}
+\title{Set (MCMC) computational options for a Student-t likelihood model}
 \usage{
 student_t_control(proposal = "RW", MHscale = 1, adapt = TRUE)
 }
@@ -19,5 +19,5 @@ during burnin to achieve better acceptance rates.}
 A list with computational options.
 }
 \description{
-Set computational options for the sampling algorithms
+Set (MCMC) computational options for a Student-t likelihood model
 }

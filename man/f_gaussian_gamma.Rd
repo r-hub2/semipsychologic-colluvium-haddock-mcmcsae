@@ -23,7 +23,7 @@ a regression term for the log-variance specified with \code{\link{vreg}(...)},
 and a term \code{\link{vfac}(...)} for multiplicative modelled factors
 at a certain level specified by a factor variable. In addition, \code{\link{reg}} and \code{\link{gen}}
 can be used to specify regression or random effect terms. In that case the prior distribution
-of the coefficients is not exactly normal, but instead Multivariate Log inverse Gamma (MLiG),
+of the coefficients is not normal, but Multivariate Log inverse Gamma (MLiG),
 see also \code{\link{pr_MLiG}}.}
 
 \item{gaussian.control}{a list with computational options passed to \code{\link{f_gaussian}}.}

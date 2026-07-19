@@ -75,7 +75,7 @@ sampler <- create_sampler(
 )
 sim <- MCMCsim(sampler, burnin=1000, n.iter=4000, thin=2, verbose=FALSE)
 (summ <- summary(sim))
-plot(sim, "vfac1_df")
+plot(sim, "student_t_df")
 acceptance_rates(sim)
 compute_DIC(sim)
 predictions <- predict(sim, newdata=apipop[-m, ], show.progress=FALSE,

@@ -159,8 +159,7 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
       # a single numeric value is interpreted as sample size
       data <- as.integer(data)
       if (data < 0L) stop("negative data size")
-    } else
-      data <- as.data.frame(data)
+    } else if (!inherits(data, "data.frame")) data <- as.data.frame(data)
   }
 
   family <- process_family(family)
@@ -226,7 +225,7 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
         #   compute.weights=TRUE, or cMVN or CG sampler is used
         if (!length(control[["block"]][[1L]]) || (length(control[["block"]][[1L]]) == 1L &&
             types[!(types %in% c("mc_offset", "brt"))] != "s" && !compute.weights &&
-            !is.list(control[["CG"]]) && !control[["cMVN.sampler"]] &&
+            !control[["cMVN.or.CG"]] &&
             !(family[["link"]] == "probit" && family$control[["probit.HaarPXDA"]])))
           control$block <- list()
       } else {
@@ -298,13 +297,14 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
   }
 
   if (!prior.only) {
-    if (control[["cMVN.sampler"]] || !is.null(control[["CG"]])) {
+    if (control[["cMVN.or.CG"]]) {
       if (family[["family"]] == "gamma")
         stop("conjugate gradients and 'cMVN.sampler' algorithms not supported for 'gamma' family")
       if (!length(control[["block"]])) {
         warn("conjugate gradients and 'cMVN.sampler' algorithms currently only used for blocked Gibbs sampler")
-        control$cMVN.sampler <- FALSE
+        control$cMVN.sampler <- NULL
         control$CG <- NULL
+        control$cMVN.or.CG <- FALSE
       }
     }
 
@@ -395,7 +395,7 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 
   # What parameters to store by default? This information is used by MCMCsim.
   store_default <- function(prior=FALSE) {
-    out <- if (prior) NULL else "llh_"
+    out <- if (prior || !control[["compute.llh"]]) NULL else "llh_"
     for (mc in mod) out <- c(out, mc[["store.default"]])
     out <- c(out, family$store_default())
     if (do.linpred) out <- c(out, "linpred_")
@@ -612,9 +612,9 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #' @export
 #' @param add.outer.R whether to add the outer product of a constraint matrix to the
 #'  conditional posterior precision matrix of coefficients sampled in a block. This is used
-#'  to resolve singularity due to intrinsic GMRF components.
-#'  By default, \code{add.outer.R=NULL}, a simple heuristic is used to decide whether
-#'  to add the outer product of possibly a submatrix of the constraint matrix.
+#'  to resolve singularity due to intrinsic GMRF components. Default is \code{TRUE}.
+#'  When set to \code{NULL}, a simple heuristic is used to decide whether
+#'  to add the outer product of (possibly a submatrix of) the constraint matrix.
 #' @param add.eps.I whether to add a small positive multiple of the identity matrix
 #'  to the conditional posterior precision matrix of coefficients sampled in a block.
 #'  If needed, this can resolve singularity as an alternative to \code{add.outer.R=TRUE}.
@@ -630,6 +630,8 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #' @param recompute.e when \code{FALSE}, residuals or linear predictors are only computed at the start of the simulation.
 #'  This may give a modest speed-up but in some cases may be less accurate due to round-off error accumulation.
 #'  Default is \code{TRUE}.
+#' @param compute.llh whether to compute the log-likelihood for each MCMC draw. Default is
+#'  \code{TRUE}, but setting it to \code{FALSE} may reduce computation time a little.
 #' @param cMVN.sampler whether an extended linear system including dual variables is used
 #'  for equality constrained multivariate normal sampling. If set to \code{TRUE} this may
 #'  improve the performance of the blocked Gibbs sampler, especially in case of a large number
@@ -661,16 +663,16 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #'    Algorithm 887: CHOLMOD, supernodal sparse Cholesky factorization and update/downdate.
 #'    ACM Transactions on Mathematical Software 35(3), 1-14.
 sampler_control <- function(add.outer.R=TRUE, add.eps.I=FALSE, eps=sqrt(.Machine$double.eps),
-                            recompute.e=TRUE,
-                            cMVN.sampler=FALSE, CG=NULL,
+                            recompute.e=TRUE, compute.llh=TRUE,
+                            cMVN.sampler=NULL, CG=NULL,
                             block=TRUE, auto.order.block=TRUE,
                             chol.control=chol_control(),
                             max.size.cps.template=100) {
   list(add.outer.R=add.outer.R, add.eps.I=add.eps.I, eps=eps,
-       recompute.e=recompute.e,
+       recompute.e=recompute.e, compute.llh=compute.llh,
        cMVN.sampler=cMVN.sampler, CG=CG,
        block=block, auto.order.block=auto.order.block,
-       chol.control = chol.control,
+       chol.control=chol.control,
        max.size.cps.template=max.size.cps.template
   )
 }
@@ -682,6 +684,8 @@ check_sampler_control <- function(control) {
   w <- whichv(names(control) %in% names(defaults), FALSE)
   if (length(w)) stop("unrecognized control parameters ", paste0(names(control)[w], collapse=", "))
   control <- modifyList(defaults, control, keep.null=TRUE)
+  if (!is_logical_scalar(control[["recompute.e"]])) stop("'recompute.e' must be TRUE or FALSE")
+  if (!is_logical_scalar(control[["compute.llh"]])) stop("'compute.llh' must be TRUE or FALSE")
   if (isTRUE(control[["add.eps.I"]])) {
     if (!(is_numeric_scalar(control[["eps"]]) && control[["eps"]] > 0)) stop("'eps' must be a single positive numerical value")
     control$add.outer.R <- FALSE
@@ -700,6 +704,14 @@ check_sampler_control <- function(control) {
   } else if (!is.null(control[["CG"]])) {
     control$CG <- check_CG_control(control[["CG"]])
   }
-  if (control[["cMVN.sampler"]] && is.list(control[["CG"]])) stop("'cMVN.sampler' and 'CG' cannot currently be combined")
+  if (isTRUE(control[["cMVN.sampler"]])) {
+    control$cMVN.sampler <- cMVN_control()
+  } else if (isFALSE(control[["cMVN.sampler"]])) {
+    control$cMVN.sampler <- NULL
+  } else if (!is.null(control[["cMVN.sampler"]])) {
+    control$cMVN.sampler <- check_cMVN_control(control[["cMVN.sampler"]])
+  }
+  if (is.list(control[["cMVN.sampler"]]) && is.list(control[["CG"]])) stop("'cMVN.sampler' and 'CG' cannot be combined")
+  control$cMVN.or.CG <- is.list(control[["cMVN.sampler"]]) || is.list(control[["CG"]])
   control
 }

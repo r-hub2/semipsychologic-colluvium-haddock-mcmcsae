@@ -608,6 +608,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
 #' }
 #'
 #' @param x a component of an mcdraws object corresponding to a scalar or vector model parameter.
+#'  In the case of \code{to_draws_array} \code{x} can also be a full mcdraws object.
 #' @param components optional character vector of names of draws components in an mcdraws object.
 #'  This can be used to select a subset of components to convert to
 #'   \code{\link[posterior]{draws_array}} format.
@@ -852,7 +853,7 @@ summary.dc <- function(object, probs=c(0.05, 0.5, 0.95), na.rm=FALSE, time=NULL,
   out <- matrix(NA_real_, nrow=nv, ncol=length(col_names), dimnames=list(labs, col_names))
   # for some summary statistics we use as.matrix, which can easily use too much memory for large vector parameters
   # n_eff may also use too much memory for large vector parameters
-  #   --> split into chunks of 100 columns
+  #   --> split into chunks of batch.size columns
   batch <- seq_len(batch.size)
   n.batch <- nv %/% batch.size + (nv %% batch.size > 0L)
   for (i in seq_len(n.batch)) {

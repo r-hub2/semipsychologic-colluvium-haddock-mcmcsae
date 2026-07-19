@@ -154,7 +154,7 @@ if (requireNamespace("sf")) {
     data=nc
   )
   # increase burnin and n.iter below to improve MCMC convergence
-  sim <- MCMCsim(sampler, store.all=TRUE, burnin=100, n.iter=200, n.chain=2, verbose=FALSE)
+  sim <- MCMCsim(sampler, store.all=TRUE, burnin=200, n.iter=500, n.chain=2, verbose=FALSE)
   (summ <- summary(sim))
   nc$vs <- summ$vs[, "Mean"]
   plot(nc[c("vs_true", "vs")])

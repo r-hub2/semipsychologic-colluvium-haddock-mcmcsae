@@ -17,7 +17,8 @@ to_draws_array(x, components = NULL)
 \method{as.matrix}{dc}(x, colnames = TRUE, ...)
 }
 \arguments{
-\item{x}{a component of an mcdraws object corresponding to a scalar or vector model parameter.}
+\item{x}{a component of an mcdraws object corresponding to a scalar or vector model parameter.
+In the case of \code{to_draws_array} \code{x} can also be a full mcdraws object.}
 
 \item{components}{optional character vector of names of draws components in an mcdraws object.
 This can be used to select a subset of components to convert to

@@ -16,6 +16,7 @@ test_that("logistic regression works", {
   expect_warning(sampler <- create_sampler(y ~ reg(~ x1+x2, Q0=0.1), family="binomial", data=df), "deprecated")
   expect_equal(sampler$mod[[1L]]$prior$precision, Diagonal(x=rep.int(0.1, 3)))
   sim <- MCMCsim(sampler, n.iter=600, burnin=250, n.chain=2, verbose=FALSE)
+  expect_contains(par_names(sim), "llh_")
   summ <- summary(sim)
   expect_between(summ$reg1[, "Mean"], 0.3*b, 3*b)
   compute_DIC(sim)
@@ -27,9 +28,14 @@ test_that("logistic regression works", {
 
 test_that("matrix specification of response variable is possible", {
   sampler0 <- create_sampler(y ~ reg(~ x1+x2, prior=pr_normal(precision=0.1)), family="binomial", data=df)
-  sampler <- create_sampler(cbind(y, 1-y) ~ reg(~ x1+x2, prior=pr_normal(precision=0.1)), family="binomial", data=df)
+  sampler <- create_sampler(
+    cbind(y, 1-y) ~ reg(~ x1+x2, prior=pr_normal(precision=0.1)),
+    family="binomial", data=df, control=sampler_control(compute.llh=FALSE)
+  )
+  expect_false(sampler$control$compute.llh)
   expect_equal(sampler0$y, sampler$y)
   sim <- MCMCsim(sampler, n.iter=600, burnin=250, n.chain=2, verbose=FALSE)
+  expect_false("llh_" %in% par_names(sim))
   summ <- summary(sim)
   expect_between(summ$reg1[, "Mean"], 0.3*b, 3*b)
 })

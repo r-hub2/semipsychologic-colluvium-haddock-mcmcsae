@@ -23,7 +23,9 @@ fixing the degrees of freedom parameter at a fixed value.}
 \item{control}{sampling options for the degrees of freedom parameter
 (if not fixed).}
 
-\item{...}{further arguments passed to \code{\link{f_gaussian}}.}
+\item{...}{further arguments passed to \code{\link{f_gaussian}}. Note that
+\code{var.prior}, \code{var.vec} and \code{var.model} now refer to the
+Student-t scale parameters.}
 }
 \value{
 A family object.
@@ -31,4 +33,39 @@ A family object.
 \description{
 This function can be used in the \code{family} argument of \code{\link{create_sampler}}
 or \code{\link{generate_data}} to specify a Student-t sampling distribution.
+}
+\examples{
+\dontrun{
+n <- 4000
+m <- 25
+dat <- data.frame(
+  x = rnorm(n),
+  g = factor(sample(1:m, n, replace=TRUE), levels=1:m)
+)
+v <- rnorm(m, sd=0.6)
+dat$y <- with(dat, 1 - 0.5*x + v[g]) + 0.4 * rt(n, df=2.5)
+
+sampler <- create_sampler(
+  y ~ x + (1|g), data=dat, family="student_t"
+)
+sim <- MCMCsim(sampler, store.all=TRUE)
+compute_DIC(sim)
+waic(sim)
+summary(sim)
+
+#' # more explicit specification, allowing non-default names, priors etc.
+sampler <- create_sampler(
+  y ~ reg(~ x, name="beta") + gen(~1, factor = ~ g, name="v"),
+  data=dat,
+  family = f_student_t(df.prior=pr_gamma(2, 0.2))
+)
+sim <- MCMCsim(sampler, store.all=TRUE)
+loo(sim)
+summary(sim)
+bayesplot::mcmc_recover_hist(as.array(sim$student_t_df), 2.5)
+bayesplot::mcmc_recover_intervals(as.array(sim$beta), c(1, -0.5))
+bayesplot::mcmc_recover_hist(as.array(sim$v_sigma), 0.6)
+bayesplot::mcmc_recover_scatter(as.array(sim$v), v)
+}
+
 }

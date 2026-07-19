@@ -117,7 +117,7 @@ ff_binomial <- function(link=c("logit", "probit"), n.trial=NULL,
       else
         Q_e <- function(p) p[["z_"]] - p[["e_"]]
       draw <- function(p) {
-        p$llh_ <- llh(p)
+        if (sc[["compute.llh"]]) p$llh_ <- llh(p)
         p$z_ <- CrTNprobit(p[["e_"]], y)
         p
       }
@@ -140,13 +140,13 @@ ff_binomial <- function(link=c("logit", "probit"), n.trial=NULL,
       rPolyaGamma <- get_PG_sampler(n, control[["PG.approx"]], control[["PG.approx.m"]])
       if (multifam) {
         draw <- function(p) {
-          p$llh_ <- p$llh_ + llh(p)
+          if (sc[["compute.llh"]]) p$llh_ <- p$llh_ + llh(p)
           p$Q_[sub] <- rPolyaGamma(ny, p[["e_"]][sub])
           p
         }
       } else {
         draw <- function(p) {
-          p$llh_ <- llh(p)
+          if (sc[["compute.llh"]]) p$llh_ <- llh(p)
           p[["Q_"]] <- rPolyaGamma(ny, p[["e_"]])
           p
         }
@@ -196,7 +196,7 @@ ff_binomial <- function(link=c("logit", "probit"), n.trial=NULL,
   if (!prior.only) {
     if (any(abs(y - round(y)) > .tol)) warn("one or more non-integral number of successes")
     if (any(y > ny)) stop("number of successes must not exceed number of trials")  # NB algorithm may still run
-    if (!is.null(sc[["CG"]]) || sc[["cMVN.sampler"]]) {
+    if (sc[["cMVN.or.CG"]]) {
       # set up a function that multiplies by L Chol factor of Q, for sampling from N(., Q)
       if (link == "probit") {
         cholQ <- build_chol(CdiagU(n))
@@ -216,16 +216,16 @@ ff_binomial <- function(link=c("logit", "probit"), n.trial=NULL,
         pnorm(rep_each(2*y[i] - 1, nr) * e_i, log.p=TRUE)
       }
     } else {
-      llh_0 <- sum(binomial_coef(ny, y))  # zero in case of binary data
+      llh0 <- sum(binomial_coef(ny, y))  # zero in case of binary data
       if (all(ny == 1))
         llh <- function(p) {
           e_ <- if (multifam) p[["e_"]][sub] else p[["e_"]]
-          llh_0 + sum(y * e_ - log1pexpC(e_))
+          llh0 + sum(y * e_ - log1pexpC(e_))
         }
       else
         llh <- function(p) {
           e_ <- if (multifam) p[["e_"]][sub] else p[["e_"]]
-          llh_0 + sum(y * e_ - ny * log1pexpC(e_))
+          llh0 + sum(y * e_ - ny * log1pexpC(e_))
         }
       llh_i <- function(draws, i, e_i) {
         nr <- dim(e_i)[1L]

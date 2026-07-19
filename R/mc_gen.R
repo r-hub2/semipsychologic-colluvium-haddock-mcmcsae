@@ -240,7 +240,7 @@ mc_gen <- function(formula = ~ 1, factor=NULL,
     modus == "regular" && strucA[["type"]] == "default" &&
     is.null(constraints0) && is.null(constraintsA)
   GMRFmats <- compute_GMRF_matrices(info, data,
-    D=fastGMRFprior || !is.null(priorA) || !is.null(sc[["CG"]]) || sc[["cMVN.sampler"]],
+    D=fastGMRFprior || !is.null(priorA) || sc[["cMVN.or.CG"]],
     R=GMRFconstr, sparse=if (in.block) TRUE else NULL,
     cols2remove=factor.cols.removed, scale.precision=strucA[["scale.precision"]], drop.zeros=TRUE
   )
@@ -256,7 +256,7 @@ mc_gen <- function(formula = ~ 1, factor=NULL,
     AR1.inferred <- NULL
   }
 
-  if (fastGMRFprior || !is.null(priorA) || !is.null(sc[["CG"]]) || sc[["cMVN.sampler"]]) {
+  if (fastGMRFprior || !is.null(priorA) || sc[["cMVN.or.CG"]]) {
     if (is.null(AR1.inferred)) {
       DA <- GMRFmats[["D"]]  # lD x l incidence matrix DA
       l <- ncol(DA)
@@ -827,14 +827,13 @@ mc_gen <- function(formula = ~ 1, factor=NULL,
     name_Q <- paste0(name, "_Q_")  # trailing "_" --> only temporary storage
   }
   if (in.block) get_Q <- function(p) p[[name_Q]]
-  if (!is.null(sc[["CG"]]) || sc[["cMVN.sampler"]] ||
-      (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
+  if (sc[["cMVN.or.CG"]] || (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
     name_Qv <- paste0(name, "_Qv_")
   }
   if (!is.null(AR1.inferred)) {
     draw <- add(draw, bquote(phi <- p[[.(name_AR1)]]))
     draw <- add(draw, bquote(p[[.(name_AR1)]] <- AR1sampler$draw(phi, p)))
-    if (fastGMRFprior || !is.null(priorA) || !is.null(sc[["CG"]]) || sc[["cMVN.sampler"]]) {
+    if (fastGMRFprior || !is.null(priorA) || sc[["cMVN.or.CG"]]) {
       draw <- add(draw, bquote(DA <- DA.template$update(p[[.(name_AR1)]])))
       if (is.null(priorA))
         draw <- add(draw, bquote(QA <- QA.template$update(p[[.(name_AR1)]])))
@@ -1154,8 +1153,7 @@ mc_gen <- function(formula = ~ 1, factor=NULL,
     } else {
       draw <- add(draw, bquote(p[[.(name_sigma)]] <- abs(xi) * sqrt(if (log(runif(1L)) < log.ar) sigma2_raw.star else sigma2_raw)))
     }
-    if (!is.null(sc[["CG"]]) || sc[["cMVN.sampler"]] ||
-        (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
+    if (sc[["cMVN.or.CG"]] || (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
       draw <- add(draw, bquote(Qv <- 1 / p[[.(name_sigma)]]^2))
     }
   } else if (var == "unstructured") {
@@ -1225,8 +1223,7 @@ mc_gen <- function(formula = ~ 1, factor=NULL,
   if (!is.null(priorA) || is.list(prior[["scale"]]) || strucA[["update.Q"]]) {
     draw <- add(draw, bquote(p[[.(name_Qraw)]] <- Qraw))
   }
-  if (!is.null(sc[["CG"]]) || sc[["cMVN.sampler"]] ||
-      (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
+  if (sc[["cMVN.or.CG"]] || (!is.null(AR1.inferred) && AR1sampler$MH[["type"]] != "TN")) {
     draw <- add(draw, bquote(p[[.(name_Qv)]] <- Qv))
   }
 
@@ -1385,7 +1382,7 @@ mc_gen <- function(formula = ~ 1, factor=NULL,
 
   start <- add(start, quote(p))
 
-  if (in.block && (!is.null(sc[["CG"]]) || sc[["cMVN.sampler"]])) {
+  if (in.block && sc[["cMVN.or.CG"]]) {
     # TODO avoid recomputing DA here in inferred AR1 parameter case
     if (q0 == 1L) {
       drawMVNvarQ <- function(p) {

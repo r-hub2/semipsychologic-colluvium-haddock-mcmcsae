@@ -1,4 +1,15 @@
-
+#' Specify a multi-response sampling distribution
+#'
+#' This function can be used in the \code{family} argument of \code{\link{create_sampler}}
+#' or \code{\link{generate_data}} to specify a multi-response sampling distribution.
+#' The current implementation requires the data to be in long format, disregarding
+#' the possibility that observations may be on the same units.
+#'
+#' @export
+#' @param fam.list a named list of response types.
+#' @param fam.ind a formula specifying a character or factor variable indicating
+#'  which observations are of each response type specified in \code{fam.list}.
+#' @returns A family object.
 f_multi <- function(fam.list, fam.ind) {
   if (!is.list(fam.list) || length(fam.list) == 0L)
     stop("'fam.list' must be a (non-empty) list")
@@ -79,9 +90,8 @@ ff_multi <- function(link, fam.list, fam.ind, sm, data, y=NULL) {
         if (is.function(fam$adapt)) fam$adapt(ar)
   }
   draw <- function(p) {
-    p$llh_ <- 0
-    for (fam in fam.list)
-      if (is.function(fam$draw)) p <- fam$draw(p)
+    if (sc[["compute.llh"]]) p$llh_ <- 0
+    for (fam in fam.list) if (is.function(fam$draw)) p <- fam$draw(p)
     p
   }
   start <- function(p) {
@@ -97,10 +107,17 @@ ff_multi <- function(link, fam.list, fam.ind, sm, data, y=NULL) {
     for (fam in fam.list) out <- out + fam$llh(p)
     out
   }
+  # NB in current multi-response model units are assumed to be distinct
+  #    for matched units need to add the pointwise llh contributions to each unit (cf. gaussian_gamma)
   llh_i <- function(draws, i, e_i) {
-    # TODO pass subsetted i and e_i to families' llh_i
-    out <- fam.list[[1L]]$llh_i(draws, i, e_i)
-    for (fam in fam.list[-1L]) out <- out + fam$llh_i(draws, i, e_i)
+    nr <- dim(e_i)[1L]
+    out <- matrix(NA_real_, nr, length(i))
+    ffi <- fam.fac[i]
+    for (fam in fam.list) {
+      ind.fam <- which(ffi == fam[["famid"]])
+      fi <- ind.fam - sum(fam.fac[seq_len(ind.fam[1L] - 1L)] != fam[["famid"]])
+      out[, ind.fam] <- fam$llh_i(draws, fi, e_i[, ind.fam, drop=FALSE])
+    }
     out
   }
   # weights: passed from predict.mcdraws

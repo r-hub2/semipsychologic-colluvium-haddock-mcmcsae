@@ -45,8 +45,6 @@
 #'  step of Multilevel Regression and Poststratification (MRP) the weights
 #'  are the population counts and the units are the unique combinations of
 #'  all auxiliary variables used in the model, typically stored in a single \code{data.frame}.
-# @param var variance(s) used for out-of-sample prediction. By default 1.
-# @param ny number of trials used for out-of-sample prediction in case of a binomial model. By default 1.
 # use fun. instead of fun to avoid argument name clash with parLapply
 #' @param fun. function applied to the vector of posterior predictions to compute one or multiple summaries
 #'  or test statistics. The function can have one or two arguments. The first argument is always the vector
@@ -107,6 +105,18 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
   # arg1 is flag for single argument function, i.e. function of prediction x only, otherwise function of prediction x and state p
   arg1 <- arg1 == 1L || names(formals(args(fun.)))[2L] != "p"
 
+  # check that family-specific parameters are stored in mcdraws object
+  if (type == "data" && is.function(fam[["pred_pars"]])) {
+    if (!all(fam[["pred_pars"]]() %in% par.names)) {
+      stop(sprintf(
+        "Parameters needed for prediction but not in simulation output: %s.
+         You may rerun MCMCsim with option 'store.all=TRUE' to be sure that
+         simulations of all required parameters are stored.",
+        paste(fam[["pred_pars"]]()[!(fam[["pred_pars"]]() %in% par.names)], collapse=", ")
+      ))
+    }
+  }
+
   if (is.null(newdata)) {
     if (is.null(X.)) stop("one of 'newdata' and 'X.' must be supplied")
     if (identical(X., "in-sample")) {
@@ -123,9 +133,10 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
       if (type == "data") {
         if (fam[["family"]] == "gamma") {
           # currently disallow vector shape parameter for X.="linpred" and custom X.
-          if (!fam[["alpha.scalar"]]) stop("cannot derive vector shape")
+          if (!fam[["alpha.scalar"]]) stop("cannot derive shape vector; consider using argument 'newdata'")
         }
         if (any(fam[["family"]] == c("gaussian", "student_t", "gaussian_gamma"))) {
+          # NB next conditional always TRUE for student_t and gaussian_gamma
           if (fam[["modeled.Q"]] || fam[["Q0.type"]] != "unit") stop("for prediction based on a model with non-trivial variance structure, please use argument 'newdata'")
         }
       }

@@ -12,7 +12,7 @@ create_block_cMVN_sampler(
   r = NULL,
   fam,
   name = "x",
-  chol.control
+  control
 )
 }
 \arguments{
@@ -30,7 +30,7 @@ create_block_cMVN_sampler(
 
 \item{name}{name of the cMVN vector parameter.}
 
-\item{chol.control}{options for Cholesky decomposition, see \code{\link{chol_control}}.}
+\item{control}{list with numerical control options, which can be set using function \code{\link{cMVN_control}}.}
 }
 \value{
 An environment with precomputed quantities and functions for sampling
