@@ -36,11 +36,12 @@ double trnd(const double l, const double u) {
   return x;
 }
 
-//’ Generate a random value from a standardized univariate truncated normal distribution
-//’
-//’ @param l lower truncation bound.
-//’ @param u upper truncation bound.
-//’ @returns A single draw from the standard univariate truncated normal distribution.
+//' Generate a random value from a standardized univariate truncated normal distribution
+//'
+//' @noRd
+//' @param l lower truncation bound.
+//' @param u upper truncation bound.
+//' @returns A single draw from the standard univariate truncated normal distribution.
 // [[Rcpp::export(rng=true)]]
 double Crtuvn(const double l, const double u) {
   double out;
@@ -62,17 +63,18 @@ double Crtuvn(const double l, const double u) {
   return out;
 }
 
-//’ Generate a Gibbs cycle for a standardized multivariate truncated normal distribution with dense constraint matrix
-//’
-//’ @param v start value.
-//’ @param Ut dense matrix encoding the inequality constrained linear combinations.
-//’ @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
-//’ @param eps small numerical value to stabilize the Gibbs sampler.
-//’ @returns A single draw from the standardized multivariate truncated normal distribution.
-//’ @references
-//’  Y. Li and S.K. Ghosh (2015). Efficient sampling methods for truncated multivariate normal
-//’    and student-t distributions subject to linear inequality constraints.
-//’    Journal of Statistical Theory and Practice 9(4), 712-732.
+//' Generate a Gibbs cycle for a standardized multivariate truncated normal distribution with dense constraint matrix
+//'
+//' @noRd
+//' @param v start value.
+//' @param Ut dense matrix encoding the inequality constrained linear combinations.
+//' @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
+//' @param eps small numerical value to stabilize the Gibbs sampler.
+//' @returns A single draw from the standardized multivariate truncated normal distribution.
+//' @references
+//'  Y. Li and S.K. Ghosh (2015). Efficient sampling methods for truncated multivariate normal
+//'    and student-t distributions subject to linear inequality constraints.
+//'    Journal of Statistical Theory and Practice 9(4), 712-732.
 // [[Rcpp::export(rng=true)]]
 Eigen::VectorXd Crtmvn_Gibbs_dense(const Eigen::Map<Eigen::VectorXd> & v, const Eigen::Map<Eigen::MatrixXd> Ut,
     const Eigen::Map<Eigen::VectorXd> & ustar, const double eps) {
@@ -120,13 +122,14 @@ Eigen::VectorXd Crtmvn_Gibbs_dense(const Eigen::Map<Eigen::VectorXd> & v, const 
   return out;
 }
 
-//’ Generate a Gibbs cycle for a standardized multivariate truncated normal distribution with sparse constraint matrix
-//’
-//’ @param v start value.
-//’ @param Ut sparse matrix encoding the inequality constrained linear combinations.
-//’ @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
-//’ @param eps small numerical value to stabilize the Gibbs sampler.
-//’ @returns A single draw from the standardized multivariate truncated normal distribution.
+//' Generate a Gibbs cycle for a standardized multivariate truncated normal distribution with sparse constraint matrix
+//'
+//' @noRd
+//' @param v start value.
+//' @param Ut sparse matrix encoding the inequality constrained linear combinations.
+//' @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
+//' @param eps small numerical value to stabilize the Gibbs sampler.
+//' @returns A single draw from the standardized multivariate truncated normal distribution.
 // [[Rcpp::export(rng=true)]]
 NumericVector Crtmvn_Gibbs_sparse(const NumericVector & v, const SEXP Ut, const NumericVector & ustar, const double eps) {
   double a, b, vi, x, temp;
@@ -177,20 +180,21 @@ NumericVector Crtmvn_Gibbs_sparse(const NumericVector & v, const SEXP Ut, const 
   return out;
 }  
 
-//’ Use a Gibbs within slice method to generate a next draw from a standardized multivariate truncated normal distribution with dense constraint matrix
-//’
-//’ @param v start value.
-//’ @param Ut dense matrix encoding the inequality constrained linear combinations.
-//’ @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
-//’ @param eps small numerical value to stabilize the Gibbs sampler.
-//’ @returns A single draw from the standardized multivariate truncated normal distribution.
-//’ @references
-//’  Y. Li and S.K. Ghosh (2015). Efficient sampling methods for truncated multivariate normal
-//’    and student-t distributions subject to linear inequality constraints.
-//’    Journal of Statistical Theory and Practice 9(4), 712-732.
-//’  K.A. Valeriano, C.E. Galarza and L.A. Matos (2023). Moments and random number generation
-//’    for the truncated elliptical family of distributions.
-//’    Statistics and Computing 33(1), 1-20.
+//' Use a Gibbs within slice method to generate a next draw from a standardized multivariate truncated normal distribution with dense constraint matrix
+//'
+//' @noRd
+//' @param v start value.
+//' @param Ut dense matrix encoding the inequality constrained linear combinations.
+//' @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
+//' @param eps small numerical value to stabilize the Gibbs sampler.
+//' @returns A single draw from the standardized multivariate truncated normal distribution.
+//' @references
+//'  Y. Li and S.K. Ghosh (2015). Efficient sampling methods for truncated multivariate normal
+//'    and student-t distributions subject to linear inequality constraints.
+//'    Journal of Statistical Theory and Practice 9(4), 712-732.
+//'  K.A. Valeriano, C.E. Galarza and L.A. Matos (2023). Moments and random number generation
+//'    for the truncated elliptical family of distributions.
+//'    Statistics and Computing 33(1), 1-20.
 // [[Rcpp::export(rng=true)]]
 Eigen::VectorXd Crtmvn_slice_Gibbs_dense(const Eigen::Map<Eigen::VectorXd> & v, const Eigen::Map<Eigen::MatrixXd> Ut,
                                    const Eigen::Map<Eigen::VectorXd> & ustar, const double eps) {
@@ -241,13 +245,14 @@ Eigen::VectorXd Crtmvn_slice_Gibbs_dense(const Eigen::Map<Eigen::VectorXd> & v, 
   return out;
 }
 
-//’ Use a Gibbs within slice method to generate a next draw from a standardized multivariate truncated normal distribution with sparse constraint matrix
-//’
-//’ @param v start value.
-//’ @param Ut sparse matrix encoding the inequality constrained linear combinations.
-//’ @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
-//’ @param eps small numerical value to stabilize the Gibbs sampler.
-//’ @returns A single draw from the standardized multivariate truncated normal distribution.
+//' Use a Gibbs within slice method to generate a next draw from a standardized multivariate truncated normal distribution with sparse constraint matrix
+//'
+//' @noRd
+//' @param v start value.
+//' @param Ut sparse matrix encoding the inequality constrained linear combinations.
+//' @param ustar vector encoding the (initial) lower bounds corresponding to Ut.
+//' @param eps small numerical value to stabilize the Gibbs sampler.
+//' @returns A single draw from the standardized multivariate truncated normal distribution.
 // [[Rcpp::export(rng=true)]]
 NumericVector Crtmvn_slice_Gibbs_sparse(const NumericVector & v, const SEXP Ut, const NumericVector & ustar, const double eps) {
   double a, b, vi, x, temp;
@@ -305,11 +310,12 @@ NumericVector Crtmvn_slice_Gibbs_sparse(const NumericVector & v, const SEXP Ut, 
   return out;
 }
 
-//’ Generate a vector of truncated normal variates for use in probit binomial model
-//’
-//’ @param mu vector of normal means.
-//’ @param y response vector.
-//’ @returns A vector of truncated normal variates.
+//' Generate a vector of truncated normal variates for use in probit binomial model
+//'
+//' @noRd
+//' @param mu vector of normal means.
+//' @param y response vector.
+//' @returns A vector of truncated normal variates.
 // [[Rcpp::export(rng=true)]]
 NumericVector CrTNprobit(const NumericVector & mu, const NumericVector & y) {
   double l, u;
@@ -323,27 +329,28 @@ NumericVector CrTNprobit(const NumericVector & mu, const NumericVector & y) {
   return out;
 }
 
-//’ Simulate Hamiltonian dynamics for a multivariate truncated normal distribution
-//’
-//’ @param S inequality constraint matrix, referencing either matrix or dgCMatrix
-//’ @param S_cols number of coulmns of S, i.e. number of inequalities
-//’ @param v0 generated starting velocity.
-//’ @param x0 current state.
-//’ @param s_adj adjusted rhs vector corresponding to S.
-//’ @param refl_fac precomputed vector for reflection.
-//’ @param zero_mu whether mean vector mu is all zeros.
-//’ @param mu mean vector; ignored if zero_mu is true.
-//’ @param simplified true in case of identity covariance matrix and no equality constraints.
-//’ @param VS standardized inequality matrix S; ignored if simplified is true.
-//’ @param diagnostic whether to keep track of the number of bounces.
-//’ @param bounces number of bounces off each of the inequality walls.
-//’ @param t_sim simulation time.
-//’ @param max_refl break off the simulation if there are more than so many bounces.
-//’ @returns New state x. If diagnostic, then bounces are updated.
-//’ @references
-//’  A. Pakman and L. Paninski (2014).
-//’    Exact Hamiltonian Monte Carlo for truncated multivariate gaussians.
-//’    Journal of Computational and Graphical Statistics 23(2), 518-542.
+//' Simulate Hamiltonian dynamics for a multivariate truncated normal distribution
+//'
+//' @noRd
+//' @param S inequality constraint matrix, referencing either matrix or dgCMatrix
+//' @param S_cols number of coulmns of S, i.e. number of inequalities
+//' @param v0 generated starting velocity.
+//' @param x0 current state.
+//' @param s_adj adjusted rhs vector corresponding to S.
+//' @param refl_fac precomputed vector for reflection.
+//' @param zero_mu whether mean vector mu is all zeros.
+//' @param mu mean vector; ignored if zero_mu is true.
+//' @param simplified \code{true} in case of identity covariance matrix and no equality constraints.
+//' @param VS standardized inequality matrix S; ignored if simplified is true.
+//' @param diagnostic whether to keep track of the number of bounces.
+//' @param bounces number of bounces off each of the inequality walls.
+//' @param t_sim simulation time.
+//' @param max_refl break off the simulation if there are more than so many bounces.
+//' @returns New state x. If diagnostic, then bounces are updated.
+//' @references
+//'  A. Pakman and L. Paninski (2014).
+//'    Exact Hamiltonian Monte Carlo for truncated multivariate gaussians.
+//'    Journal of Computational and Graphical Statistics 23(2), 518-542.
 // [[Rcpp::export(rng=false)]]
 Eigen::VectorXd TMVN_HMC_C(
     const SEXP S,
@@ -383,7 +390,7 @@ Eigen::VectorXd TMVN_HMC_C(
         Sx.noalias() = Sm.transpose() * (x - mu);
       }
     } else if (Rf_inherits(S, "dgCMatrix")) {
-      Eigen::MappedSparseMatrix<double> Sm = as<Eigen::MappedSparseMatrix<double> >(S);
+      Eigen::Map<Eigen::SparseMatrix<double>> Sm = as<Eigen::Map<Eigen::SparseMatrix<double>> >(S);
       Sv.noalias() = Sm.transpose() * v;
       if (zero_mu) {
         Sx.noalias() = Sm.transpose() * x;
@@ -450,7 +457,7 @@ Eigen::VectorXd TMVN_HMC_C(
       Eigen::Map<Eigen::MatrixXd> Sm = as<Eigen::Map<Eigen::MatrixXd> >(S);
       vproj = Sm.col(ind_first_hit).dot(v);
     } else {
-      Eigen::MappedSparseMatrix<double> Sm = as<Eigen::MappedSparseMatrix<double> >(S);
+      Eigen::Map<Eigen::SparseMatrix<double>> Sm = as<Eigen::Map<Eigen::SparseMatrix<double>> >(S);
       vproj = Sm.col(ind_first_hit).dot(v);
     }
     if (vproj < 0) {  // a bounce
@@ -460,7 +467,7 @@ Eigen::VectorXd TMVN_HMC_C(
           Eigen::Map<Eigen::MatrixXd> Sm = as<Eigen::Map<Eigen::MatrixXd> >(S);
           v -= alpha * Sm.col(ind_first_hit);
         } else if (Rf_inherits(S, "dgCMatrix")) {
-          Eigen::MappedSparseMatrix<double> Sm = as<Eigen::MappedSparseMatrix<double> >(S);
+          Eigen::Map<Eigen::SparseMatrix<double>> Sm = as<Eigen::Map<Eigen::SparseMatrix<double>> >(S);
           v -= alpha * Sm.col(ind_first_hit);
         }
       } else {
@@ -468,7 +475,7 @@ Eigen::VectorXd TMVN_HMC_C(
           Eigen::Map<Eigen::MatrixXd> VSm = as<Eigen::Map<Eigen::MatrixXd> >(VS);
           v -= alpha * VSm.col(ind_first_hit);
         } else if (Rf_inherits(VS, "dgCMatrix")) {
-          Eigen::MappedSparseMatrix<double> VSm = as<Eigen::MappedSparseMatrix<double> >(VS);
+          Eigen::Map<Eigen::SparseMatrix<double>> VSm = as<Eigen::Map<Eigen::SparseMatrix<double>> >(VS);
           v -= alpha * VSm.col(ind_first_hit);
         }
       }

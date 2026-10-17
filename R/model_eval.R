@@ -186,8 +186,9 @@ weights.mcdraws <- function(object, ...) get_means(object, "weights_")[[1L]]
 #' @param by.unit if \code{TRUE} the computation is carried out unit-by-unit, which is
 #'  slower but uses much less memory.
 #' @param r_eff whether to compute relative effective sample size estimates
-#'  for the likelihood of each observation. This takes more time, but should
-#'  result in a better PSIS approximation. See \code{\link[loo]{loo}}.
+#'  for the likelihood of each observation. This takes more time, but allows for
+#'  better estimates of PSIS effective sample sizes and Monte Carlo error.
+#'  See \code{\link[loo]{loo}}.
 #' @param n.cores the number of cpu cores to use. Default is one, i.e. no parallel computation.
 #' @param cl an existing cluster can be passed for parallel computation. If \code{cl} is provided,
 #'  \code{n.cores} will be set to the number of workers in that cluster. If \code{NULL} and
@@ -347,18 +348,18 @@ compute_WAIC <- function(x, diagnostic=FALSE, batch.size=NULL, show.progress=TRU
     sim_list <- split_iters(x, parts=n.cores)
     out <- parallel::parLapply(cl, X=sim_list, fun=waic_obj)
     lppd.max <- do.call(pmax, lapply(out, `[[`, "lppd"))
-    lppd <- exp(out[[1L]]$lppd - lppd.max)
+    lppd <- expC(out[[1L]]$lppd - lppd.max)
     pwaic <- out[[1L]]$var  # running posterior variance
     nA <- out[[1L]]$nS
     avg <- out[[1L]]$mean  # running posterior mean
     for (o in out[-1L]) {
-      lppd <- lppd + exp(o[["lppd"]] - lppd.max)
+      lppd <- lppd + expC(o[["lppd"]] - lppd.max)
       nAB <- nA + o[["nS"]]
       pwaic <- ((nA - 1L) * pwaic + (o[["nS"]] - 1L) * o[["var"]] + (nA * o[["nS"]] / nAB) * (avg - o[["mean"]])^2) / (nAB - 1L)
       avg <- (nA * avg + o[["nS"]] * o[["mean"]]) / nAB
       nA <- nAB
     }
-    lppd <- lppd.max + log(lppd/nA)
+    lppd <- lppd.max + logC(lppd/nA)
     lppd_sum <- sum(lppd)
     pWAIC1 <- 2 * (lppd_sum - sum(avg))
     pWAIC2 <- sum(pwaic)
@@ -442,7 +443,7 @@ loo.mcdraws <- function(x, by.unit=FALSE, r_eff=FALSE, n.cores=1L, ...) {
   } else {
     llh <- llh_i(x)
     if (r_eff)
-      r_eff <- loo::relative_eff(exp(llh), chain_id=rep_each(seq_len(n_chains(x)), n_draws(x)), cores=n.cores)
+      r_eff <- loo::relative_eff(expC(llh), chain_id=rep_each(seq_len(n_chains(x)), n_draws(x)), cores=n.cores)
     else
       r_eff <- NULL
     loo(llh, r_eff=r_eff, cores=n.cores, ...)

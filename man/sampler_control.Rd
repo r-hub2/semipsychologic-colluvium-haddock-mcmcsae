@@ -5,6 +5,7 @@
 \title{Set computational options for the sampling algorithms}
 \usage{
 sampler_control(
+  rng = set_rng(),
   add.outer.R = TRUE,
   add.eps.I = FALSE,
   eps = sqrt(.Machine$double.eps),
@@ -19,6 +20,8 @@ sampler_control(
 )
 }
 \arguments{
+\item{rng}{random number generator settings, see \code{\link{set_rng}}.}
+
 \item{add.outer.R}{whether to add the outer product of a constraint matrix to the
 conditional posterior precision matrix of coefficients sampled in a block. This is used
 to resolve singularity due to intrinsic GMRF components. Default is \code{TRUE}.

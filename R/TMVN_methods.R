@@ -38,10 +38,9 @@
 #'  options cannot be set for this use case.
 #' @param PG.approx see \code{\link{sampler_control}}.
 #' @param PG.approx.m see \code{\link{sampler_control}}.
-#' @returns A method object, for internal use only.
+#' @returns A method object for internal use.
 #' @name TMVN-methods
 NULL
-
 
 #' @export
 #' @rdname TMVN-methods

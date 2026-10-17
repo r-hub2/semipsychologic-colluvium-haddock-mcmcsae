@@ -8,14 +8,8 @@ generate_data(
   formula,
   data = NULL,
   family = "gaussian",
-  ny = NULL,
-  ry = NULL,
-  r.mod = NULL,
-  sigma.fixed = NULL,
-  sigma.mod = NULL,
-  Q0 = NULL,
-  formula.V = NULL,
-  linpred = NULL
+  linpred = NULL,
+  rng = set_rng()
 )
 }
 \arguments{
@@ -26,21 +20,9 @@ Any left-hand side of the formula is ignored.}
 
 \item{family}{sampling distribution family, see \code{\link{create_sampler}}.}
 
-\item{ny}{NO LONGER USED; see \code{\link{create_sampler}}.}
-
-\item{ry}{NO LONGER USED; see \code{\link{create_sampler}}.}
-
-\item{r.mod}{NO LONGER USED; see \code{\link{create_sampler}}.}
-
-\item{sigma.fixed}{DEPRECATED; see \code{\link{create_sampler}}.}
-
-\item{sigma.mod}{DEPRECATED; see \code{\link{create_sampler}}.}
-
-\item{Q0}{DEPRECATED; see \code{\link{create_sampler}}.}
-
-\item{formula.V}{DEPRECATED; see \code{\link{create_sampler}}.}
-
 \item{linpred}{see \code{\link{create_sampler}}.}
+
+\item{rng}{random number generator settings, see \code{\link{set_rng}}.}
 }
 \value{
 A list with a generated data vector and a list of prior means of the

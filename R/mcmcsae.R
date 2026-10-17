@@ -35,8 +35,8 @@ NULL
 #' @importMethodsFrom Matrix determinant diag isSymmetric rowSums solve t tcrossprod unname
 #' @import GIGrvg
 #' @importFrom collapse allNA allv any_duplicated anyv dapply fdroplevels fmatch
-#' @importFrom collapse fmean.default fmean.matrix fquantile fsd.matrix fsum.matrix
-#' @importFrom collapse fvar.matrix qF whichNA whichv
+#' @importFrom collapse fmean.default fmean.matrix fquantile fsd.default fsd.matrix
+#' @importFrom collapse fsum.default fsum.matrix fvar.matrix qF vec whichNA whichv
 #' @importFrom graphics abline axis legend lines matplot pairs par plot
 #' @importFrom graphics plot.new points segments
 #' @importFrom methods as cbind2 new rbind2 setAs setClass setMethod signature show

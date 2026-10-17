@@ -79,8 +79,6 @@
 predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-sample" else NULL,
                           type=c("data", "link", "response", "data_cat"),
                           weights=NULL,
-                          #var=NULL,  # DEPRECATED
-                          #ny=NULL, ry=NULL,  # DEPRECATED
                           fun.=identity, labels=NULL, ppcheck=FALSE, iters=NULL,
                           to.file=FALSE, filename, write.single.prec=FALSE,
                           show.progress=TRUE, verbose=TRUE,
@@ -259,6 +257,11 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
     if (verbose) message(length(iters) * n.chain, " draws distributed over ", n.cores, " cores")
     sim_list <- split_iters(object, iters, parts=n.cores)
     predict_obj <- function(obj) {
+      model <- obj[["_model"]]
+      if (model$control$rng[["use.randompack"]] && any(type == c("data", "data_cat"))) {
+        # make sure each worker gets its own independent rng stream
+        init_engine(model$control[["rng"]], worker_id = obj[["_chunk.id"]])
+      }
       chains <- seq_len(n_chains(obj))
       iters <- seq_len(n_draws(obj))
       if (out_type == "logical" || out_type == "integer")
@@ -376,20 +379,12 @@ predict.mcdraws <- function(object, newdata=NULL, X.=if (is.null(newdata)) "in-s
 #'  Any left-hand side of the formula is ignored.
 #' @param data see \code{\link{create_sampler}}.
 #' @param family sampling distribution family, see \code{\link{create_sampler}}.
-#' @param ny NO LONGER USED; see \code{\link{create_sampler}}.
-#' @param ry NO LONGER USED; see \code{\link{create_sampler}}.
-#' @param r.mod NO LONGER USED; see \code{\link{create_sampler}}.
-#' @param sigma.fixed DEPRECATED; see \code{\link{create_sampler}}.
-#' @param sigma.mod DEPRECATED; see \code{\link{create_sampler}}.
-#' @param Q0 DEPRECATED; see \code{\link{create_sampler}}.
-#' @param formula.V DEPRECATED; see \code{\link{create_sampler}}.
 #' @param linpred see \code{\link{create_sampler}}.
+#' @param rng random number generator settings, see \code{\link{set_rng}}.
 #' @returns A list with a generated data vector and a list of prior means of the
 #'  parameters. The parameters are drawn from their priors.
 generate_data <- function(formula, data=NULL, family="gaussian",
-                          ny=NULL, ry=NULL, r.mod=NULL,  # DEPRECATED
-                          sigma.fixed=NULL, sigma.mod=NULL, Q0=NULL, formula.V=NULL,  # DEPRECATED
-                          linpred=NULL) {
+                          linpred=NULL, rng=set_rng()) {
   if (is.function(family)) {
     fam <- family()
     if (!is.list(fam) || !is_character_scalar(fam[["family"]])) stop("unrecognised input for argument 'family'")
@@ -417,9 +412,7 @@ generate_data <- function(formula, data=NULL, family="gaussian",
     }
   }
   sampler <- create_sampler(formula=formula, data=data, family=family,
-    ny=ny, ry=ry, r.mod=r.mod,  # DEPRECATED
-    sigma.fixed=sigma.fixed, sigma.mod=sigma.mod, Q0=Q0, formula.V=formula.V,  # DEPRECATED
-    linpred=linpred, prior.only=TRUE
+    linpred=linpred, prior.only=TRUE, control=sampler_control(rng=rng)
   )
   sim <- MCMCsim(sampler, n.iter=1L, n.chain=1L, store.all=TRUE, from.prior=TRUE, verbose=FALSE)
   pars <- lapply(sim[par_names(sim)], \(x) setNames(x[[1L]][1L, ], attr(x, "labels")))

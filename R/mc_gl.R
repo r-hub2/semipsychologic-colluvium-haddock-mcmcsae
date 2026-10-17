@@ -16,19 +16,15 @@
 #'  Default is \code{FALSE}.
 #' @param prior prior specification for the group-level effects. Currently only
 #'  normal priors with mean 0 can be specified, using function \code{\link{pr_normal}}.
-#' @param Q0 prior precision matrix for the group-level effects. The default is a
-#'  zero matrix corresponding to a noninformative improper prior.
-#'  DEPRECATED, please use argument \code{prior} instead, i.e.
-#'  \code{prior = pr_normal(precision = Q0.value)}.
 #' @param data group-level data frame in which the group-level variables specified in
 #'  \code{formula} are looked up.
 #' @param name the name of the model component. This name is used in the output of the
 #'  MCMC simulation function \code{\link{MCMCsim}}. By default this name will be
 #'  the name of the corresponding generic random effects component appended by '_gl'.
 #' @returns An object with precomputed quantities for sampling from
-#'  prior or conditional posterior distributions for this model component. Only intended
+#'  prior or conditional posterior distributions for this model component, intended
 #'  for internal use by other package functions.
-glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL, Q0=NULL,
+glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL,
                   data=NULL, name="") {
 
   e <- sys.frame(-1L)
@@ -63,13 +59,7 @@ glreg <- function(formula=NULL, remove.redundant=FALSE, prior=NULL, Q0=NULL,
   # if p0 > 1, each varying effect has its own coefficient and the same design matrix glp$X
   q <- p0 * e[["q0"]]  # number of gl coefficients
 
-  if (!is.null(Q0)) {
-    warn("argument 'Q0' is deprecated; please use argument 'prior' instead")
-    if (is.null(prior)) prior <- pr_normal(precision = if (is.null(Q0)) 0 else Q0)
-  } else {
-    if (is.null(prior)) prior <- pr_normal(mean=0, precision=0)
-  }
-
+  if (is.null(prior)) prior <- pr_normal(mean=0, precision=0)
   if (prior[["type"]] != "normal" || any(prior[["mean"]] != 0)) stop("only a normal prior with mean zero is currently supported for group-level effects")
   # if modeled.Q need sparse Q0 and XX in order to combine them easily using a block-diagonal sparse template
   prior$init(q, coef.names, sparse=e$fam[["modeled.Q"]], sigma=!e$fam[["sigma.fixed"]])

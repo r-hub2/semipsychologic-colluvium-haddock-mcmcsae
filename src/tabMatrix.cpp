@@ -3,15 +3,16 @@
 using namespace Rcpp;
 
 
-//’ Create a tabMatrix
-//’
-//’ @param Dim integer vector of size two containing the number of rows and columns.
-//’ @param reduced whether zero columns are allowed.
-//’ @param perm integer vector of column indices corresponding to the unique (if any)
-//’  non-zero entry per row.
-//’ @param num whether the non-zeros can be different from 1.
-//’ @param x in case num is true, the numeric vector of nonzero values.
-//’ @returns A matrix of class \code{tabMatrix}.
+//' Create a tabMatrix
+//'
+//' @noRd
+//' @param Dim integer vector of size two containing the number of rows and columns.
+//' @param reduced whether zero columns are allowed.
+//' @param perm integer vector of column indices corresponding to the unique (if any)
+//'  non-zero entry per row.
+//' @param num whether the non-zeros can be different from 1.
+//' @param x in case num is true, the numeric vector of non-zero values.
+//' @returns A matrix of class \code{tabMatrix}.
 // [[Rcpp::export(rng=false)]]
 SEXP Ctab(const IntegerVector & Dim, const bool reduced, const IntegerVector & perm, const bool num, const NumericVector & x) {
   if (reduced && num) stop("'reduced' and 'num' should not both be true");
@@ -26,86 +27,12 @@ SEXP Ctab(const IntegerVector & Dim, const bool reduced, const IntegerVector & p
   return out;
 }
 
-//’ Matrix product of a sparse tabMatrix object with a vector
-//’
-//’ @param A a tabMatrix.
-//’ @param y a numeric vector.
-//’ @param ignore_x whether to use only the indicator part of the tabMatrix (for expansion).
-//’ @returns The vector \code{Ay}.
-// [[Rcpp::export(rng=false)]]
-NumericVector Ctab_numeric_prod(const SEXP A, const NumericVector & y, const bool ignore_x = false) {
-  if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const S4 A_s4(A);
-  const IntegerVector perm = A_s4.slot("perm");
-  const IntegerVector Dim = A_s4.slot("Dim");
-  const int n = perm.size();
-  if (Dim[1] != y.size()) stop("incompatible dimensions");
-  NumericVector out(no_init(n));
-  const bool reduced = as<bool>(A_s4.slot("reduced"));
-  const bool num = as<bool>(A_s4.slot("num"));
-  const int* perm_ptr = perm.begin();
-  const double* y_ptr = y.begin();
-  double* out_ptr = out.begin();
-  if (reduced) {
-    for (int i = 0; i < n; ++i) {
-      out_ptr[i] = (perm_ptr[i] >= 0) ? y_ptr[perm_ptr[i]] : 0.0;
-    }
-  } else if (num && !ignore_x) {
-    const Rcpp::NumericVector x = A_s4.slot("x");
-    const double* x_ptr = x.begin();
-    for (int i = 0; i < n; ++i) {
-      out_ptr[i] = x_ptr[i] * y_ptr[perm_ptr[i]];
-    }
-  } else {
-    for (int i = 0; i < n; ++i) {
-      out_ptr[i] = y_ptr[perm_ptr[i]];
-    }
-  }
-  return out;
-}
-
-//’ Matrix product of a sparse tabMatrix with a matrix
-//’
-//’ @param A a tabMatrix.
-//’ @param y a matrix.
-//’ @returns The matrix product \code{Ay}.
-// [[Rcpp::export(rng=false)]]
-Eigen::MatrixXd Ctab_dense_prod(const SEXP A, const Eigen::Map<Eigen::MatrixXd> & y) {
-  if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const S4 A_S4(A);
-  const IntegerVector perm(A_S4.slot("perm"));
-  const IntegerVector Dim(A_S4.slot("Dim"));
-  if (Dim[1] != y.rows()) stop("incompatible dimensions");
-  const int n = perm.size();
-  const bool reduced(::Rf_asLogical(A_S4.slot("reduced")));
-  const bool num(::Rf_asLogical(A_S4.slot("num")));
-  Eigen::MatrixXd out(n, y.cols());
-  if (reduced) {
-    for (int i = 0; i < n; i++) {
-      if (perm[i] < 0) {
-        out.row(i).setZero();
-      } else {
-        out.row(i) = y.row(perm[i]);
-      }
-    }
-  } else if (num) {
-    const NumericVector x(A_S4.slot("x"));
-    for (int i = 0; i < n; i++) {
-      out.row(i) = x[i] * y.row(perm[i]);
-    }
-  } else {
-    for (int i = 0; i < n; i++) {
-      out.row(i) = y.row(perm[i]);
-    }
-  }
-  return out;
-}
-
-//’ Matrix product of a matrix and the transpose of a tabMatrix
-//’
-//’ @param y a matrix.
-//’ @param A a tabMatrix.
-//’ @returns The matrix product \code{yA'}.
+//' Matrix product of a matrix and the transpose of a tabMatrix
+//'
+//' @noRd
+//' @param y a matrix.
+//' @param A a tabMatrix.
+//' @returns The matrix product \code{y t(A)}.
 // [[Rcpp::export(rng=false)]]
 Eigen::MatrixXd Cdense_tab_tcrossprod(const Eigen::Map<Eigen::MatrixXd> & y, const SEXP A) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
@@ -138,95 +65,11 @@ Eigen::MatrixXd Cdense_tab_tcrossprod(const Eigen::Map<Eigen::MatrixXd> & y, con
   return out;
 }
 
-//’ Crossproduct of a tabMatrix with a vector
-//’
-//’ @param A a tabMatrix.
-//’ @param y a numeric vector.
-//’ @returns The vector \code{A'y}.
-// [[Rcpp::export(rng=false)]]
-NumericVector Ctab_numeric_crossprod(const SEXP A, const NumericVector y) {
-  if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-
-  int* Dim = INTEGER(R_do_slot(A, Rf_install("Dim")));
-  const int n = y.size();
-
-  if (Dim[0] != n) stop("incompatible dimensions");
-
-  NumericVector out(Dim[1]);
-
-  double* p_out = REAL(out);
-  double* p_y = REAL(y);
-  int* p_perm = INTEGER(R_do_slot(A, Rf_install("perm")));
-  bool reduced = LOGICAL(R_do_slot(A, Rf_install("reduced")))[0];
-  bool num = LOGICAL(R_do_slot(A, Rf_install("num")))[0];
-
-  if (reduced) {
-    for (int i = 0; i < n; i++) {
-      int p = p_perm[i];
-      if (p >= 0) {
-        p_out[p] += p_y[i];
-      }
-    }
-  } else if (num) {
-    double* p_x = REAL(R_do_slot(A, Rf_install("x")));
-    for (int i = 0; i < n; i++) {
-      p_out[p_perm[i]] += p_x[i] * p_y[i];
-    }
-  } else {
-    for (int i = 0; i < n; i++) {
-      p_out[p_perm[i]] += p_y[i];
-    }
-  }
-
-  return out;
-}
-
-//’ Crossproduct of a tabMatrix with a matrix
-//’
-//’ @param A a tabMatrix.
-//’ @param y a numeric matrix.
-//’ @returns The vector \code{A'y}.
-// [[Rcpp::export(rng=false)]]
-NumericMatrix Ctab_dense_crossprod(const SEXP A, const NumericMatrix & y) {
-  if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
-  const S4 A_S4(A);
-  const IntegerVector perm(A_S4.slot("perm"));
-  const IntegerVector Dim(A_S4.slot("Dim"));
-  const int yrows = y.rows();
-  if (Dim[0] != yrows) stop("incompatible dimensions");
-  const int ycols = y.cols();
-  NumericMatrix out(Dim[1], ycols);
-  const bool reduced(::Rf_asLogical(A_S4.slot("reduced")));
-  const bool num(::Rf_asLogical(A_S4.slot("num")));
-  if (reduced) {
-    for (int i = 0; i < yrows; i++) {
-      if (perm[i] >= 0) {
-        for (int j = 0; j < ycols; j++) {
-          out(perm[i], j) += y(i, j);
-        }
-      }
-    }
-  } else if (num) {
-    const NumericVector x(A_S4.slot("x"));
-    for (int j = 0; j < ycols; j++) {
-      for (int i = 0; i < yrows; i++) {
-        out(perm[i], j) += x[i] * y(i, j);
-      }
-    }
-  } else {
-    for (int j = 0; j < ycols; j++) {
-      for (int i = 0; i < yrows; i++) {
-        out(perm[i], j) += y(i, j);
-      }
-    }
-  }
-  return out;
-}
-
-//’ Values of unary crossprod of tabMatrix
-//’
-//’ @param A a tabMatrix.
-//’ @returns The entries of the diagonal matrix representing the unary cross-product of A.
+//' Values of unary crossprod of tabMatrix
+//'
+//' @noRd
+//' @param A a tabMatrix.
+//' @returns The entries of the diagonal matrix representing the unary cross-product of A.
 // [[Rcpp::export(rng=false)]]
 NumericVector Ctab_unary_crossprod(const SEXP A) {
   if (!Rf_isS4(A) || !Rf_inherits(A, "tabMatrix")) stop("A is not a tabMatrix");
@@ -256,10 +99,11 @@ NumericVector Ctab_unary_crossprod(const SEXP A) {
   return diag;
 }
 
-//’ Coerce a \code{tabMatrix} to a \code{dgCMatrix}
-//’
-//’ @param M a \code{tabMatrix} object.
-//’ @returns The same matrix as a \code{dgCMatrix}.
+//' Coerce a \code{tabMatrix} to a \code{dgCMatrix}
+//'
+//' @noRd
+//' @param M a \code{tabMatrix} object.
+//' @returns The same matrix as a \code{dgCMatrix}.
 // [[Rcpp::export(rng=false)]]
 SEXP Ctab2dgC(const SEXP M) {
   if (!Rf_isS4(M) || !Rf_inherits(M, "tabMatrix")) stop("M is not a tabMatrix");
@@ -324,10 +168,11 @@ SEXP Ctab2dgC(const SEXP M) {
   return out;
 }
 
-//’ Coerce a \code{tabMatrix} to a \code{matrix}
-//’
-//’ @param M a \code{tabMatrix} object.
-//’ @returns The same matrix as an ordinary dense matrix.
+//' Coerce a \code{tabMatrix} to a \code{matrix}
+//'
+//' @noRd
+//' @param M a \code{tabMatrix} object.
+//' @returns The same matrix as an ordinary dense matrix.
 // [[Rcpp::export(rng=false)]]
 NumericMatrix Ctab2mat(const SEXP M) {
   if (!Rf_isS4(M) || !Rf_inherits(M, "tabMatrix")) stop("M is not a tabMatrix");

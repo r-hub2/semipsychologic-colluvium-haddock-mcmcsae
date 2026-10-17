@@ -1,8 +1,7 @@
 
-
 # function that creates a projection function, based on conditioning by Kriging
 # project function can take M/matrix argument, but then silently assumes NULL rhs
-# TODO more crossprod methods --> generalize crossprod_mm to other combinations without matrix factor
+# TODO more crossprod methods between (sparse) matrices
 create_projector <- function(cholQ=NULL, V=NULL, update.Q=FALSE, R) {
   # assumptions: V and R are constant
   if (is.null(cholQ)) {
@@ -24,15 +23,15 @@ create_projector <- function(cholQ=NULL, V=NULL, update.Q=FALSE, R) {
       project <- function(x, cholQ, r=NULL) {
         if (is.vector(x)) {
           if (is.null(r))
-            x - cholQ$solve(R %m*v% cholRVR$solve(crossprod_mv(R, x)))
+            x - cholQ$solve(m_op(R, cholRVR$solve(tm_op(R, x))))
           else
-            x + cholQ$solve(R %m*v% cholRVR$solve(r - crossprod_mv(R, x)))
+            x + cholQ$solve(m_op(R, cholRVR$solve(r - tm_op(R, x))))
         } else {
           x - cholQ$solve(R %*% cholRVR$solve(crossprod(R, x)))
         }
       }
       # alternative (not faster, unless R is dense, as cholV.R is usually less sparse than R):
-      # x + cholQ$solve(cholV.R %m*v% cholRVR$solve(r - crossprod_mv(R, x)), system="Lt")
+      # x + cholQ$solve(m_op(cholV.R, cholRVR$solve(r - tm_op(R, x))), system="Lt")
     } else {
       VR <- cholQ$solve(R)
       if (update.Q) {
@@ -44,9 +43,9 @@ create_projector <- function(cholQ=NULL, V=NULL, update.Q=FALSE, R) {
       project <- function(x, cholQ, r=NULL) {
         if (is.vector(x)) {
           if (is.null(r))
-            x - VR %m*v% cholRVR$solve(crossprod_mv(R, x))
+            x - m_op(VR, cholRVR$solve(tm_op(R, x)))
           else
-            x + VR %m*v% cholRVR$solve(r - crossprod_mv(R, x))
+            x + m_op(VR, cholRVR$solve(r - tm_op(R, x)))
         } else {
           x - VR %*% cholRVR$solve(crossprod(R, x))
         }
@@ -61,9 +60,9 @@ create_projector <- function(cholQ=NULL, V=NULL, update.Q=FALSE, R) {
     project <- function(x, cholQ, r=NULL) {
       if (is.vector(x)) {
         if (is.null(r))
-          x - VR.RVRinv %m*v% crossprod_mv(R, x)
+          x - m_op(VR.RVRinv, tm_op(R, x))
         else
-          x + VR.RVRinv %m*v% (r - crossprod_mv(R, x))
+          x + m_op(VR.RVRinv, r - tm_op(R, x))
       } else {
         x - VR.RVRinv %*% crossprod(R, x)
       }
@@ -86,18 +85,18 @@ eliminate_equalities <- function(R, r=NULL, Q, mu=NULL, keep.Q=FALSE, chol.contr
   Q2 <- QofR[, n1 + seq_len(n2), drop=FALSE]
   zero.x0 <- is.null(mu) || allv(mu, 0)
   if (!zero.x0) {
-    mu_z1 <- crossprod_mv(Q1, mu)
-    mu_z2 <- crossprod_mv(Q2, mu)
+    mu_z1 <- tm_op(Q1, mu)
+    mu_z2 <- tm_op(Q2, mu)
   }
   rm(R, r, QofR, mu)
   # NB cholQ will now refer to z2 subspace
   cholQ <- build_chol(crossprod_sym(Q2, Q), control=chol.control)  # chol factor L
   if (!zero.x0) {
     if (is.null(z1)) {
-      x0 <- Q2 %m*v% (mu_z2 + cholQ$solve(crossprod_mv(Q2, (Q %m*v% (Q1 %m*v% mu_z1)))))
+      x0 <- m_op(Q2, mu_z2 + cholQ$solve(tm_op(Q2, m_op(Q, m_op(Q1, mu_z1)))))
     } else {
       # fixed part of x: backtransform mu_z2_given_z1
-      Q1 %m*v% z1 + Q2 %m*v% (mu_z2 - cholQ$solve(crossprod_mv(Q2, (Q %m*v% (Q1 %m*v% (z1 - mu_z1))))))
+      x0 <- m_op(Q1, z1) + m_op(Q2, mu_z2 - cholQ$solve(tm_op(Q2, m_op(Q, m_op(Q1, z1 - mu_z1)))))
     }
     rm(mu_z1, mu_z2)
     zero.x0 <- allv(x0, 0)
@@ -117,11 +116,11 @@ eliminate_equalities <- function(R, r=NULL, Q, mu=NULL, keep.Q=FALSE, chol.contr
   #   size n of the reduced frame
 
   if (zero.x0) {
-    transform <- function(x) crossprod_mv(Q2, x)
-    untransform <- function(z) Q2 %m*v% z
+    transform <- function(x) tm_op(Q2, x)
+    untransform <- function(z) m_op(Q2, z)
   } else {
-    transform <- function(x) crossprod_mv(Q2, x - x0)
-    untransform <- function(z) x0 + Q2 %m*v% z
+    transform <- function(x) tm_op(Q2, x - x0)
+    untransform <- function(z) x0 + m_op(Q2, z)
   }
 
   # transform restriction matrix S and rhs s to the reduced frame
@@ -129,7 +128,7 @@ eliminate_equalities <- function(R, r=NULL, Q, mu=NULL, keep.Q=FALSE, chol.contr
     transform_restriction_rhs <- function(S, s) s
   } else {
     # NB here S is the untransformed restriction matrix
-    transform_restriction_rhs <- function(S, s) if (is.null(s)) -crossprod_mv(S, x0) else s - crossprod_mv(S, x0)
+    transform_restriction_rhs <- function(S, s) if (is.null(s)) -tm_op(S, x0) else s - tm_op(S, x0)
   }
   transform_restriction_matrix <- function(S) economizeMatrix(crossprod(Q2, S), drop.zeros=TRUE, allow.tabMatrix=FALSE)
 

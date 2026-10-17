@@ -205,6 +205,7 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
           labk <- paste(labk, v, sep=":")
         }
       }
+      if (typeof(xk) != "double") storage.mode(xk) <- "double"
     } else {
       xk <- NULL
       labk <- NULL
@@ -261,7 +262,7 @@ model_matrix <- function(formula, data=NULL, contrasts.arg=NULL,
         col <- col + ncol(xk)
       } else {
         lab[col] <- labk
-        if (!is.null(by)) xk <- crossprod_mv(Maggr, xk)
+        if (!is.null(by)) xk <- tm_op(Maggr, xk)
         if (sparse) {
           i[at:(at + length(xk) - 1L)] <- 0:(n - 1L)
           x[at:(at + length(xk) - 1L)] <- xk

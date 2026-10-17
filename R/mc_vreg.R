@@ -18,13 +18,6 @@
 #'  specified using function \code{\link{pr_normal}}. Alternatively, fixed values for
 #'  the coefficients can be specified using \code{\link{pr_fixed}}, e.g. to generate
 #'  data with given coefficients.
-#' @param Q0 prior precision matrix for the regression effects. The default is a
-#'  zero matrix corresponding to a noninformative improper prior.
-#'  DEPRECATED, please use argument \code{prior} instead, i.e.
-#'  \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.
-#' @param b0 prior mean for the regression effect. Defaults to a zero vector.
-#'  DEPRECATED, please use argument \code{prior} instead, i.e.
-#'  \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.
 #' @param name the name of the model component. This name is used in the output of the
 #'  MCMC simulation function \code{\link{MCMCsim}}. By default the name will be 'vreg'
 #'  with the number of the variance model term attached.
@@ -41,12 +34,12 @@
 #'    of the t distribution for longitudinal data.
 #'    Journal of Statistical Planning and Inference 141(4), 1543-1553.
 vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
-                 prior=NULL, Q0=NULL, b0=NULL, name="") {
+                 prior=NULL, name="") {
   stop("function 'vreg' should only be used inside a formula")
 }
 
 mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
-                    prior=NULL, Q0=NULL, b0=NULL, name="",
+                    prior=NULL, name="",
                     sc,  # unused
                     fam,
                     in.block,  # unused
@@ -70,14 +63,7 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
   X <- economizeMatrix(X, sparse=sparse, strip.names=FALSE, check=TRUE)
   q <- ncol(X)
 
-  if (!is.null(b0) || !is.null(Q0)) {
-    warn("arguments 'b0' and 'Q0' are deprecated; please use argument 'prior' instead")
-    if (is.null(prior))
-      prior <- pr_normal(mean = if (is.null(b0)) 0 else b0, precision = if (is.null(Q0)) 0 else Q0)
-  } else {
-    if (is.null(prior))
-      prior <- pr_normal(mean=0, precision=0)
-  }
+  if (is.null(prior)) prior <- pr_normal(mean=0, precision=0)
   switch(prior[["type"]],
     fixed = prior$init(q),
     normal = {
@@ -90,9 +76,9 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
         Q0b0 <- 0
       } else {
         if (length(prior[["mean"]]) == 1L)
-          Q0b0 <- Q0 %m*v% rep.int(prior[["mean"]], q)
+          Q0b0 <- m_op(Q0, rep.int(prior[["mean"]], q))
         else
-          Q0b0 <- Q0 %m*v% prior[["mean"]]
+          Q0b0 <- m_op(Q0, prior[["mean"]])
       }
     },
     stop("'vreg' priors must be specified using one of pr_normal and pr_fixed functions")
@@ -103,9 +89,9 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
   }
 
   if (is_ind_matrix(X) && q < fam[["n"]])
-    compute_Qfactor <- function(p) X %m*v% exp(-p[[name]])
+    compute_Qfactor <- function(p) m_op(X, expC(p[[name]], neg=TRUE))
   else
-    compute_Qfactor <- function(p) exp(X %m*v% (-p[[name]]))
+    compute_Qfactor <- function(p) expC(m_op(X, p[[name]]), neg=TRUE)
 
   # function that creates an oos prediction function (closure) based on new data
   make_predict_Vfactor <- function(newdata) {
@@ -114,9 +100,9 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
     Xnew <- unname(Xnew)
     rm(newdata)
     if (is_ind_matrix(Xnew) && q < nrow(Xnew))
-      function(p) Xnew %m*v% exp(p[[name]])
+      function(p) m_op(Xnew, expC(p[[name]]))
     else
-      function(p) exp(Xnew %m*v% p[[name]])
+      function(p) expC(m_op(Xnew, p[[name]]))
   }
 
   if (prior.only) {
@@ -145,8 +131,8 @@ mc_vreg <- function(formula=NULL, remove.redundant=FALSE, sparse=NULL, X=NULL,
       Qres <- p[["Q_"]] * p[["e_"]]^2
     else
       Qres <- p[["Q_"]] * (1 / p[[sd.name]]^2) * p[["e_"]]^2
-    Qratio <- exp(X %m*v% (gamma - gamma.star))
-    log.ar <- 0.5 * (dotprodC(gamma, Q0 %m*v% gamma) - dotprodC(gamma.star, Q0 %m*v% gamma.star)) +
+    Qratio <- expC(m_op(X, gamma - gamma.star))
+    log.ar <- 0.5 * (dotprodC(gamma, m_op(Q0, gamma)) - dotprodC(gamma.star, m_op(Q0, gamma.star))) +
               dotprodC(gamma - gamma.star, sumX) + 0.5 * sum((1 - Qratio) * Qres)
     if (log(runif(1L)) < log.ar) {
       p[[name]] <- gamma.star

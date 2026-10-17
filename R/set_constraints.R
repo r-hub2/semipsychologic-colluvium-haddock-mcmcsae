@@ -45,7 +45,7 @@ set_constraints <- function(R=NULL, r=NULL,
     check_equalities <- function(x, tol=sqrt(.Machine$double.eps)) {
       if (!is_numeric_scalar(tol) || tol < 0) stop("'tol' must be a single nonnegative number")
       if (length(x) != n) stop("wrong length of input vector")
-      dif <- if (is.null(r)) crossprod_mv(R, x) else crossprod_mv(R, x) - r
+      dif <- if (is.null(r)) tm_op(R, x) else tm_op(R, x) - r
       viol <- whichv(abs(dif) > tol, TRUE)
       if (length(viol)) {
         out <- data.frame(
@@ -88,7 +88,7 @@ set_constraints <- function(R=NULL, r=NULL,
     check_inequalities <- function(x, tol=sqrt(.Machine$double.eps)) {
       if (!is_numeric_scalar(tol) || tol < 0) stop("'tol' must be a single nonnegative number")
       if (length(x) != n) stop("wrong length of input vector")
-      dif <- if (is.null(s1)) crossprod_mv(S1, x) else crossprod_mv(S1, x) - s1
+      dif <- if (is.null(s1)) tm_op(S1, x) else tm_op(S1, x) - s1
       viol <- whichv(dif < -tol, TRUE)
       if (length(viol)) {
         out <- data.frame(
@@ -128,7 +128,7 @@ set_constraints <- function(R=NULL, r=NULL,
     check_inequalities2 <- function(x, tol=sqrt(.Machine$double.eps)) {
       if (!is_numeric_scalar(tol) || tol < 0) stop("'tol' must be a single nonnegative number")
       if (length(x) != n) stop("wrong length of input vector")
-      temp <- crossprod_mv(S2, x)
+      temp <- tm_op(S2, x)
       dif.l <- temp - l2
       dif.u <- temp - u2
       viol.l <- whichv(dif.l < -tol, TRUE)

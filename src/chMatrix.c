@@ -1,7 +1,4 @@
 
-// need to start cholmod, in addition to one started by Matrix
-// --> probably two cholmod workspaces; how (memory-)inefficient is this?
-
 #include <R_ext/RS.h>
 #include <Matrix/alloca.h>
 #include <Matrix/cholmod.h>

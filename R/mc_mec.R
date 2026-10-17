@@ -74,15 +74,6 @@
 #'  imposed on the vector of regression coefficients. Use function
 #'  \code{\link{set_constraints}} to specify the constraint matrices and
 #'  right-hand sides.
-#' @param Q0 prior precision matrix for the regression effects. The default is a
-#'  zero matrix corresponding to a noninformative improper prior.
-#'  It can be specified as a scalar value, as a numeric vector of appropriate
-#'  length, or as a matrix object. DEPRECATED, please use argument \code{prior}
-#'  instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.
-#' @param b0 prior mean for the regression effect. Defaults to a zero vector.
-#'  It can be specified as a scalar value or as a numeric vector of
-#'  appropriate length. DEPRECATED, please use argument \code{prior}
-#'  instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.
 #' @param name the name of the model component. This name is used in the output of the
 #'  MCMC simulation function \code{\link{MCMCsim}}. By default the name will be 'reg'
 #'  with the number of the model term attached.
@@ -101,14 +92,12 @@
 #'    Scandinavian Journal of Statistics 42(2), 518-529.
 mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
                 prior=NULL, scale.prior=TRUE, constraints=NULL,
-                Q0=NULL, b0=NULL,  # deprecated
                 name="", debug=FALSE) {
   stop("function 'mec' should only be used inside a formula")
 }
 
 mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
                    prior=NULL, scale.prior=TRUE, constraints=NULL,
-                   Q0=NULL, b0=NULL,
                    name="", debug=FALSE,
                    sc, fam, in.block, prior.only, compute.weights=FALSE, data) {
   type <- "mec"
@@ -179,12 +168,7 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
     v0 <- 1/diag(fam[["Q0"]])[i.me]
   }
 
-  if (!is.null(b0) || !is.null(Q0)) {
-    warn("arguments 'b0' and 'Q0' are deprecated; please use argument 'prior' instead")
-    if (is.null(prior)) prior <- pr_normal(mean = if (is.null(b0)) 0 else b0, precision = if (is.null(Q0)) 0 else Q0)
-  } else {
-    if (is.null(prior)) prior <- pr_normal(mean=0, precision=0)
-  }
+  if (is.null(prior)) prior <- pr_normal(mean=0, precision=0)
   if (prior[["type"]] != "normal") stop("only a normal prior is currently supported for 'mec' model component effects")
   use.sigma <- !fam[["sigma.fixed"]] && scale.prior
   prior$init(q, coef.names, sparse=if (in.block) TRUE else NULL, sigma=!fam[["sigma.fixed"]])  # mc_block uses x-slot of precision matrix
@@ -196,17 +180,17 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
     Q0b0 <- 0
   } else {
     if (length(prior[["mean"]]) == 1L)
-      Q0b0 <- Q0 %m*v% rep.int(prior[["mean"]], q)
+      Q0b0 <- m_op(Q0, rep.int(prior[["mean"]], q))
     else
-      Q0b0 <- Q0 %m*v% prior[["mean"]]
+      Q0b0 <- m_op(Q0, prior[["mean"]])
   }
   is.proper <- informative.prior
 
   if (!zero.mean && compute.weights) stop("weights cannot be computed if some coefficients have non-zero prior means")
 
   name_X <- paste0(name, "_X")
-  lp <- function(p) p[[name_X]] %m*v% p[[name]]
-  lp_update <- function(x, plus=TRUE, p) mv_update(x, plus, p[[name_X]], p[[name]])
+  lp <- function(p) m_op(p[[name_X]], p[[name]])
+  lp_update <- function(x, op=ADD, p) m_op(p[[name_X]], p[[name]], x, op)
   # draws_linpred method acts on (subset of) mcdraws object, used in fitted() and pointwise log-likelihood llh_i functions
   draws_linpred <- function(obj, units=NULL, chains=NULL, draws=NULL, matrix=FALSE) {
     Xi <- get_from(obj[[name_X]], vars=units, chains=chains, draws=draws)
@@ -220,6 +204,7 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
     out
   }
 
+  draw_normal <- sc[["rng"]]$draw_normal
   # function that creates an oos prediction function (closure) based on new data
   # this computes the contribution of this component to the linear predictor
   make_predict <- function(newdata=NULL, Xnew=NULL, verbose=TRUE) {
@@ -227,8 +212,8 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
       if (is.null(Xnew)) {
         # in-sample prediction
         Xnew <- X
-        linpred <- function(p) p[[name_X]] %m*v% p[[name]]
-        linpred_update <- function(x, plus=TRUE, p) mv_update(x, plus, p[[name_X]], p[[name]])
+        linpred <- function(p) m_op(p[[name_X]], p[[name]])
+        linpred_update <- function(x, op=ADD, p) m_op(p[[name_X]], p[[name]], x, op)
       } else {
         stop("for out-of-sample prediction with 'mec' components a data frame ",
              "must be supplied")
@@ -243,21 +228,21 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
       if (any(SEnew < 0)) stop("negative measurement error variance(s) in 'newdata'")
       SEnew <- sqrt(SEnew)
       if (nrow(SEnew) < 0.5 * nrow(Xnew)) {
-        linpred <- function(p) (Xnew + SEnew * Crnorm(length(SEnew))) %m*v% p[[name]]
-        linpred_update <- function(x, plus=TRUE, p) mv_update(x, plus, Xnew + SEnew * Crnorm(length(SEnew)), p[[name]])
+        linpred <- function(p) m_op(Xnew + SEnew * draw_normal(length(SEnew)), p[[name]])
+        linpred_update <- function(x, op=ADD, p) m_op(Xnew + SEnew * draw_normal(length(SEnew)), p[[name]], x, op)
       } else {
         i.me.new <- whichv(dapply(SEnew, \(x) all(x > 0), MARGIN=1L), TRUE)  # TODO add tolerance + allow list of matrix
         if (length(i.me.new) == nrow(newdata)) i.me.new <- seq_len(nrow(newdata))
         SEnew <- SEnew[i.me.new, ]
         linpred <- function(p) {
           out <- Xnew
-          out[i.me.new, ] <- out[i.me.new, ] + SEnew * Crnorm(length(SEnew))
-          out %m*v% p[[name]]
+          out[i.me.new, ] <- out[i.me.new, ] + SEnew * draw_normal(length(SEnew))
+          m_op(out, p[[name]])
         }
-        linpred_update <- function(x, plus=TRUE, p) {
+        linpred_update <- function(x, op=ADD, p) {
           out <- Xnew
-          out[i.me.new, ] <- out[i.me.new, ] + SEnew * Crnorm(length(SEnew))
-          mv_update(x, plus, out, p[[name]])
+          out[i.me.new, ] <- out[i.me.new, ] + SEnew * draw_normal(length(SEnew))
+          m_op(out, p[[name]], x, op)
         }
       }
     }
@@ -268,11 +253,11 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
   rprior <- function(p) {}
   # X, QME are assumed to be part of the prior information
   if (nme == fam[["n"]]) {
-    rprior <- add(rprior, bquote(p[[.(name_X)]] <- X + sqrt(.(if (q == 1L) quote(1/QME) else quote(V))) * Crnorm(.(nme*q))))
+    rprior <- add(rprior, bquote(p[[.(name_X)]] <- X + sqrt(.(if (q == 1L) quote(1/QME) else quote(V))) * draw_normal(.(nme*q))))
   } else {
     rprior <- rprior |>
       add(bquote(p[[.(name_X)]] <- X)) |>
-      add(bquote(p[[.(name_X)]][i.me, ] <- X[i.me, ] + sqrt(.(if (q == 1L) quote(1/QME) else quote(V))) * Crnorm(.(nme*q))))
+      add(bquote(p[[.(name_X)]][i.me, ] <- X[i.me, ] + sqrt(.(if (q == 1L) quote(1/QME) else quote(V))) * draw_normal(.(nme*q))))
   }
   rprior <- rprior |>
     add(bquote(p[[.(name)]] <- prior$rprior(p))) |>
@@ -306,17 +291,17 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
       fam$df.sigma <- fam[["df.sigma"]] + q
     SSR_sigma <- function(p) {
       delta.beta <- if (zero.mean) p[[name]] else p[[name]] - prior[["mean"]]
-      dotprodC(delta.beta, Q0 %m*v% delta.beta)
+      dotprodC(delta.beta, m_op(Q0, delta.beta))
     }
   }
 
   if (sc[["single.block"]] && sc[["length1mod"]]) {
-    if (fam[["e.is.res"]]) draw <- add(draw, quote(p$e_ <- copy_obj(fam[["y"]])))
+    if (fam[["e.is.res"]]) draw <- add(draw, bquote(v_op(p[["e_"]], .(SET), fam[["y"]])))
   } else {
     if (fam[["e.is.res"]])
-      draw <- add(draw, bquote(mv_update(p[["e_"]], plus=TRUE, p[[.(name_X)]], p[[.(name)]])))
+      draw <- add(draw, bquote(m_op(p[[.(name_X)]], p[[.(name)]], p[["e_"]], .(ADD))))
     else
-      draw <- add(draw, bquote(mv_update(p[["e_"]], plus=FALSE, p[[.(name_X)]], p[[.(name)]])))
+      draw <- add(draw, bquote(m_op(p[[.(name_X)]], p[[.(name)]], p[["e_"]], .(SUB))))
   }
 
   # 1. draw covariates p[[name_X]]
@@ -336,9 +321,9 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
   if (q == 1L) {
     draw <- add(draw, bquote(Vscaled <- 1 / (QME * scale + p[[.(name)]]^2)))
     if (nme == fam[["n"]])
-      draw <- add(draw, bquote(p[[.(name_X)]] <- X + Vscaled * p[[.(name)]] * (v0 * Qe - p[[.(name)]] * X) + sqrt(scale * Vscaled) * Crnorm(.(nme))))
+      draw <- add(draw, bquote(p[[.(name_X)]] <- X + Vscaled * p[[.(name)]] * (v0 * Qe - p[[.(name)]] * X) + sqrt(scale * Vscaled) * draw_normal(.(nme))))
     else
-      draw <- add(draw, bquote(p[[.(name_X)]][i.me] <- X[i.me] + Vscaled * p[[.(name)]] * (v0 * Qe[i.me] - p[[.(name)]] * X[i.me]) + sqrt(scale * Vscaled) * Crnorm(.(nme))))
+      draw <- add(draw, bquote(p[[.(name_X)]][i.me] <- X[i.me] + Vscaled * p[[.(name)]] * (v0 * Qe[i.me] - p[[.(name)]] * X[i.me]) + sqrt(scale * Vscaled) * draw_normal(.(nme))))
   } else {
     # V-form (independent m.e.)
     draw <- add(draw, bquote(
@@ -348,7 +333,7 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
         f <- 1 / (scale[i] + dotprodC(p[[.(name)]], Cb))
         Vx <- add_diagC(- f * base_tcrossprod(Cb), Vi)
         Xi <- X[i, ]
-        p[[.(name_X)]][i, ] <- Xi + Cb * f * (p[["e_"]][i] - dotprodC(p[[.(name)]], Xi)) + crossprod_mv(chol.default(Vx), rnorm(q))
+        p[[.(name_X)]][i, ] <- Xi + Cb * f * (p[["e_"]][i] - dotprodC(p[[.(name)]], Xi)) + tm_op(chol.default(Vx), rnorm(q))
       }
     ))
     # TODO use Rcpp, and use Q-form at least for cases where all QME[i, ] > 0, and handle list-of-matrix (correlated m.e.)
@@ -357,9 +342,9 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
   if (!in.block) {
     # 2. draw coefficients p[[name]]
     if (allv(Q0b0, 0))
-      draw <- add(draw, bquote(Xy <- crossprod_mv(p[[.(name_X)]], Qe)))
+      draw <- add(draw, bquote(Xy <- tm_op(p[[.(name_X)]], Qe)))
     else
-      draw <- add(draw, bquote(Xy <- crossprod_mv(p[[.(name_X)]], Qe) + Q0b0))
+      draw <- add(draw, bquote(Xy <- tm_op(p[[.(name_X)]], Qe) + Q0b0))
 
     if (fam[["modeled.Q"]]) {
       if (fam[["Q0.type"]] == "symm")
@@ -372,15 +357,15 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
     if (informative.prior) {
       # TODO instead of runif(n, ...) account for the structure in Qmod; lambda may not vary per unit!
       # TODO here we need M1 to be dense without zeros
-      mat_sum <- make_mat_sum(M0=Q0, M1=crossprod_sym(X, crossprod_sym(Cdiag(runif(fam[["n"]], 0.9, 1.1)), fam[["Q0"]])))
+      mat_sum <- make_mat_sum(M0=Q0, M1=crossprod_sym(X, crossprod_sym(Cdiag(sc[["rng"]]$draw_unif(fam[["n"]], 0.9, 1.1)), fam[["Q0"]])))
       MVNsampler <- create_TMVN_sampler(
-        Q=mat_sum(crossprod_sym(X, crossprod_sym(Cdiag(runif(fam[["n"]], 0.9, 1.1)), fam[["Q0"]]))),
+        Q=mat_sum(crossprod_sym(X, crossprod_sym(Cdiag(sc[["rng"]]$draw_unif(fam[["n"]], 0.9, 1.1)), fam[["Q0"]]))),
         update.Q=TRUE, name=name, constraints=constraints
       )
       draw <- add(draw, quote(MVNsampler$update(mat_sum(XX))))
     } else {
       MVNsampler <- create_TMVN_sampler(
-        Q=crossprod_sym(X, crossprod_sym(Cdiag(runif(fam[["n"]], 0.9, 1.1)), fam[["Q0"]])),
+        Q=crossprod_sym(X, crossprod_sym(Cdiag(sc[["rng"]]$draw_unif(fam[["n"]], 0.9, 1.1)), fam[["Q0"]])),
         update.Q=TRUE, name=name, constraints=constraints
       )
       draw <- add(draw, quote(MVNsampler$update(XX)))
@@ -390,11 +375,11 @@ mc_mec <- function(formula = ~ 1, sparse=NULL, X=NULL, V=NULL,
 
   # compute full residuals/fitted values
   if (fam[["e.is.res"]])
-    draw <- add(draw, bquote(mv_update(p[["e_"]], plus=FALSE, p[[.(name_X)]], p[[.(name)]])))
+    draw <- add(draw, bquote(m_op(p[[.(name_X)]], p[[.(name)]], p[["e_"]], .(SUB))))
   else if (sc[["single.block"]] && sc[["length1mod"]])
-    draw <- add(draw, bquote(p[["e_"]] <- p[[.(name_X)]] %m*v% p[[.(name)]]))
+    draw <- add(draw, bquote(p[["e_"]] <- m_op(p[[.(name_X)]], p[[.(name)]])))
   else
-    draw <- add(draw, bquote(mv_update(p[["e_"]], plus=TRUE, p[[.(name_X)]], p[[.(name)]])))
+    draw <- add(draw, bquote(m_op(p[[.(name_X)]], p[[.(name)]], p[["e_"]], .(ADD))))
   draw <- add(draw, quote(p))
 
   start <- function(p) {

@@ -78,7 +78,7 @@ ff_binomial <- function(link=c("logit", "probit"), n.trial=NULL,
   family <- "binomial"
   if (link == "logit") {
     linkinv <- make.link(link)$linkinv
-    f_mean <- function(eta) ny / (1 + exp(-eta))
+    f_mean <- function(eta) ny / (1 + expC(eta, neg=TRUE))
   } else {
     linkinv <- pnorm
     f_mean <- function(eta) ny * pnorm(eta)
@@ -116,11 +116,10 @@ ff_binomial <- function(link=c("logit", "probit"), n.trial=NULL,
         Q_e <- function(p) p[["z_"]]
       else
         Q_e <- function(p) p[["z_"]] - p[["e_"]]
-      draw <- function(p) {
-        if (sc[["compute.llh"]]) p$llh_ <- llh(p)
-        p$z_ <- CrTNprobit(p[["e_"]], y)
-        p
-      }
+      draw <- if (sc[["compute.llh"]]) function(p) {p$llh_ <- llh(p)} else function(p) {}
+      draw <- draw |>
+        add(quote(p$z_ <- CrTNprobit(p[["e_"]], y))) |>
+        add(quote(p))
       start <- function(p) {
         p$z_ <- check_and_get(p, "z_", n, \() CrTNprobit(p[["e_"]], y))
         p
@@ -139,22 +138,17 @@ ff_binomial <- function(link=c("logit", "probit"), n.trial=NULL,
       }
       rPolyaGamma <- get_PG_sampler(n, control[["PG.approx"]], control[["PG.approx.m"]])
       if (multifam) {
-        draw <- function(p) {
-          if (sc[["compute.llh"]]) p$llh_ <- p$llh_ + llh(p)
-          p$Q_[sub] <- rPolyaGamma(ny, p[["e_"]][sub])
-          p
-        }
+        draw <- if (sc[["compute.llh"]]) function(p) {p$llh_ <- p$llh_ + llh(p)} else function(p) {}
+        draw <- add(draw, quote(p$Q_[sub] <- rPolyaGamma(ny, p[["e_"]][sub])))
       } else {
-        draw <- function(p) {
-          if (sc[["compute.llh"]]) p$llh_ <- llh(p)
-          p[["Q_"]] <- rPolyaGamma(ny, p[["e_"]])
-          p
-        }
+        draw <- if (sc[["compute.llh"]]) function(p) {p$llh_ <- llh(p)} else function(p) {}
+        draw <- add(draw, quote(p[["Q_"]] <- rPolyaGamma(ny, p[["e_"]])))
         start <- function(p) {
           p$Q_ <- check_and_get(p, "Q_", n, \() rPolyaGamma(ny, p[["e_"]]), pos=TRUE)
           p
         }
       }
+      draw <- add(draw, quote(p))
     }
     if (is.vector(y) || is.factor(y)) {
       # case 1: logical, factor or character data
@@ -198,14 +192,15 @@ ff_binomial <- function(link=c("logit", "probit"), n.trial=NULL,
     if (any(y > ny)) stop("number of successes must not exceed number of trials")  # NB algorithm may still run
     if (sc[["cMVN.or.CG"]]) {
       # set up a function that multiplies by L Chol factor of Q, for sampling from N(., Q)
+      draw_normal <- sc[["rng"]]$draw_normal
       if (link == "probit") {
         cholQ <- build_chol(CdiagU(n))
-        drawMVNvarQ <- function(p) cholQ$Ltimes(Crnorm(n), transpose=FALSE)
+        drawMVNvarQ <- function(p) cholQ$Ltimes(draw_normal(n), transpose=FALSE)
       } else {
-        cholQ <- build_chol(runif(n, 0.9, 1.1))
+        cholQ <- build_chol(sc[["rng"]]$draw_unif(n, 0.9, 1.1))
         drawMVNvarQ <- function(p) {
           cholQ$update(if (multifam) p[["Q_"]][sub] else p[["Q_"]])
-          cholQ$Ltimes(Crnorm(n), transpose=FALSE)
+          cholQ$Ltimes(draw_normal(n), transpose=FALSE)
         }
       }
     }

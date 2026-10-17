@@ -9,7 +9,7 @@ setup_cluster(n.cores = NULL, seed = NULL, export = NULL)
 \arguments{
 \item{n.cores}{the number of cpu cores to use.}
 
-\item{seed}{optional random seed for reproducibility.}
+\item{seed}{no longer supported. A seed can be set in \code{\link{create_sampler}}, \code{\link{create_TMVN_sampler}}, or \code{\link{generate_data}}.}
 
 \item{export}{a character vector with names of objects to export to the workers.}
 }

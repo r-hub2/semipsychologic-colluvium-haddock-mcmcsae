@@ -53,14 +53,12 @@
 f_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
                         control=student_t_control(), ...) {
   link <- match.arg(link)
-  df.prior$init(n=1L)
   control <- check_student_t_control(control)
   dotargs <- list(...)
   # TODO
   # - allow PX
   # - allow (fixed) vector df
   # - pass on gaussian_control options
-  #c(list(family="student_t", df.prior=df.prior, var.model=var.model), lgau)
   c(list(family="student_t", link=link, df.prior=df.prior, control=control, `_raw_`=TRUE), dotargs)
 }
 
@@ -71,9 +69,14 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
   linkinv <- make.link(link)$linkinv
   prior.only <- is.null(y)
   sc <- sm[["control"]]
+  draw_t <- sc[["rng"]]$draw_t
   multifam <- !is.null(famid)
   name.t.vfac <- if (multifam) paste0(famid, "_student_t") else "student_t"
   dotargs <- list(...)
+  if (is_numeric_scalar(df.prior) && df.prior > 0) {
+    df.prior <- pr_fixed(value = df.prior)
+  } else if (!is.environment(df.prior)) stop("invalid input for df.prior")
+  df.prior$init(1L)
   if (df.prior[["type"]] == "fixed") {
     var.model <- eval(bquote(~ vfac(prior=pr_invchisq(df=df.prior[["value"]]), name=.(name.t.vfac))))
   } else if (df.prior[["type"]] == "gamma") {
@@ -100,11 +103,10 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
   y.family <- ff_gaussian(link=link, var.prior=lgau[["var.prior"]],
     var.vec=lgau[["var.vec"]], prec.mat=NULL, var.model=var.model,
     logJacobian=if (prior.only) NULL else lgau[["logJacobian"]],
-    #control=dotargs[["gaussian.control"]],
     sm=sm, data=data, y=y, famid=famid, sub=sub
   )
   rm(lgau)
-  store_default <- function() y.family$store_default()
+  store_default <- function() setdiff(y.family$store_default(), name.t.vfac)
   if (is.function(y.family[["adapt"]]))
     adapt <- function(ar) y.family$adapt(ar)
   if (is.function(y.family[["drawMVNvarQ"]])) {
@@ -135,7 +137,10 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
   }
   vfac.t <- Vmod[[which(names(Vmod) == name.t.vfac)]]
   df.fixed <- !is.list(vfac.t$prior[["df"]])
-  if (df.fixed) df.value <- vfac.t$prior[["df"]]
+  if (df.fixed) {
+    df.value <- vfac.t$prior[["df"]]
+    if (length(df.value) > 1L) stop("scalar degrees of freedom parameter expected for student-t sampling distribution")
+  }
   pred_pars <- function() {
     out <- if (sigma.fixed) NULL else sd.name
     if (!df.fixed) out <- c(out, vfac.t[["name_df"]])
@@ -157,13 +162,13 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
       q <- if (sigma.fixed) 1 else 1/p[["sigma_"]]^2
       if (t.modeled.Q) for (mc in Vmod.t) q <- q * mc$compute_Qfactor(p)
       if (Q0.type == "diag") q <- q * Q0@x
-      sumlogq <- if (length(q) == 1) n*log(q) else sum(log(q))
+      sumlogq <- if (length(q) == 1) n*log(q) else sum(logC(q))
       e2 <- if (multifam) p[["e_"]][sub]^2 else p[["e_"]]^2
       if (df.fixed) {
-        llh0 + 0.5 * sumlogq - 0.5 * (df.value + 1) * sum(log1p((q * e2) / df.value))
+        llh0 + 0.5 * sumlogq - 0.5 * (df.value + 1) * fsum.default(log1p((q * e2) / df.value))
       } else {
         df <- p[[name.df]]
-        llh0 + n*(lgamma(0.5*(df + 1)) - lgamma(0.5*df) - 0.5*log(pi*df)) + 0.5 * sumlogq - 0.5 * (df + 1) * sum(log1p((q/df) * e2))
+        llh0 + n*(lgamma(0.5*(df + 1)) - lgamma(0.5*df) - 0.5*log(pi*df)) + 0.5 * sumlogq - 0.5 * (df + 1) * fsum.default(log1p((q/df) * e2))
       }
     }
     assign("llh", llh, environment(draw))  # draw was defined by ff_gaussian so we should replace its llh function
@@ -192,14 +197,14 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
           if (mc[["type"]] == "vfac")
             q <- q * tcrossprod(1 / as.matrix.dc(draws[[mc[["name"]]]], colnames=FALSE), Xi)
           else
-            q <- q * exp(-tcrossprod(as.matrix.dc(draws[[mc[["name"]]]], colnames=FALSE), Xi))
+            q <- q * expC(tcrossprod(as.matrix.dc(draws[[mc[["name"]]]], colnames=FALSE), Xi), neg=TRUE)
         }
       }
       if (Q0.type == "diag") q <- q * rep_each(Q0@x[i], each=nr)
       if (df.fixed) {
-        out <- llh0_i + 0.5 * log(q) - 0.5 * (df + 1) * log1p((q * e_i^2) / df)
+        out <- llh0_i + 0.5 * logC(q) - 0.5 * (df + 1) * log1p((q * e_i^2) / df)
       } else {
-        out <- lgamma(0.5*(df + 1)) - lgamma(0.5*df) - 0.5*log(pi*df) + 0.5 * log(q) - 0.5 * (df + 1) * log1p((q * e_i^2) / df)
+        out <- lgamma(0.5*(df + 1)) - lgamma(0.5*df) - 0.5*log(pi*df) + 0.5 * logC(q) - 0.5 * (df + 1) * log1p((q * e_i^2) / df)
       }
       if (is.null(logJacobian))
         out
@@ -212,10 +217,10 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
     if (intercept_only(y.family[["var.vec"]])) {
       sds0 <- 1
     } else {
-      sds0 <- get_var_from_formula(y.family[["var.vec"]], newdata)
+      sds0 <- as.numeric(get_var_from_formula(y.family[["var.vec"]], newdata))
       if (any(sds0 < 0)) stop("negative variance(s) in 'var.vec' for prediction")
       if (all(length(sds0) != c(1L, nrow(newdata)))) stop("wrong length for prediction variance vector")
-      sds0 <- sqrt(sds0)
+      sds0 <- sqrtC(sds0)
     }
     if (t.modeled.Q) {
       V <- list()
@@ -231,9 +236,9 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
           if (any(Vmc[["type"]] == c("vfac", "vreg")))
             var <- var * V[[Vmc[["name"]]]](p)
           else
-            var <- var * exp(V[[Vmc[["name"]]]](p))
+            var <- var * expC(V[[Vmc[["name"]]]](p))
         }
-        sds0 * sqrt(var)
+        sds0 * sqrtC(var)
       }
     } else {
       function(p) sds0
@@ -256,14 +261,14 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
         df <- if (df.fixed) df.value else p[[name.df]]
         if (is.null(weights)) {
           if (sigma.fixed)
-            lp + invsqrt(Qfac) * rt(nn, df)
+            lp + sqrtC(Qfac, inv=TRUE) * draw_t(nn, df)
           else
-            lp + p[[sd.name]] * invsqrt(Qfac) * rt(nn, df)
+            lp + p[[sd.name]] * sqrtC(Qfac, inv=TRUE) * draw_t(nn, df)
         } else {
           if (sigma.fixed)
-            weights * lp + sqrt(weights) * invsqrt(Qfac) * rt(nn, df)
+            weights * lp + sqrtC(weights / Qfac) * draw_t(nn, df)
           else
-            weights * lp + p[[sd.name]] * sqrt(weights) * invsqrt(Qfac) * rt(nn, df)
+            weights * lp + p[[sd.name]] * sqrtC(weights / Qfac) * draw_t(nn, df)
         }
       }
     } else {
@@ -272,14 +277,15 @@ ff_student_t <- function(link="identity", df.prior=pr_gamma(2, 0.1),
       get_df <- if (df.fixed) function(p) df.value else function(p) p[[name.df]]
       if (is.null(weights)) {
         if (sigma.fixed)
-          function(p, lp) lp + get_sds(p) * rt(nn, get_df(p))
+          function(p, lp) lp + get_sds(p) * draw_t(nn, get_df(p))
         else
-          function(p, lp) lp + p[[sd.name]] * get_sds(p) * rt(nn, get_df(p))
+          function(p, lp) lp + p[[sd.name]] * get_sds(p) * draw_t(nn, get_df(p))
       } else {
+        sqrt.weights <- sqrtC(weights)
         if (sigma.fixed)
-          function(p, lp) weights * lp + sqrt(weights) * get_sds(p) * rt(nn, get_df(p))
+          function(p, lp) weights * lp + sqrt.weights * get_sds(p) * draw_t(nn, get_df(p))
         else
-          function(p, lp) weights * lp + p[[sd.name]] * sqrt(weights) * get_sds(p) * rt(nn, get_df(p))
+          function(p, lp) weights * lp + p[[sd.name]] * sqrt.weights * get_sds(p) * draw_t(nn, get_df(p))
       }
     }
   }

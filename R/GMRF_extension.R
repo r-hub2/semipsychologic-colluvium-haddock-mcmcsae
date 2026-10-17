@@ -112,12 +112,12 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
           QA.diff <- mat_sum(mc[["QA"]], idL, phi.diff, -phi.diff)
           tr.diff <- switch(mc[["var"]],
             unstructured = sum(crossprod_sym(coef.raw, QA.diff) * p[[mc[["name_Qraw"]]]]),
-            diagonal = sum(fsum.matrix(coef.raw * (QA.diff %m*m% coef.raw), na.rm=FALSE) * p[[mc[["name_Qraw"]]]]),
+            diagonal = sum(fsum.matrix(coef.raw * m_op(QA.diff, coef.raw), na.rm=FALSE) * p[[mc[["name_Qraw"]]]]),
             scalar =
               if (mc[["q0"]] == 1L)
-                dotprodC(coef.raw, QA.diff %m*v% coef.raw) * p[[mc[["name_Qraw"]]]]
+                dotprodC(coef.raw, m_op(QA.diff, coef.raw)) * p[[mc[["name_Qraw"]]]]
               else
-                sum(coef.raw * (QA.diff %m*m% coef.raw)) * p[[mc[["name_Qraw"]]]]
+                sum(coef.raw * m_op(QA.diff, coef.raw)) * p[[mc[["name_Qraw"]]]]
           )
           detQ.star <- detQ(2*phi.star, 1 - 2*phi.star)
           log.ar.post <- 0.5 * (mc[["q0"]] * (detQ.star - p[[name_detQ]]) - tr.diff)
@@ -190,13 +190,13 @@ create_GMRF_structure <- function(settings, mc, prior.only=FALSE) {
           phi.star <- control$propose(phi)
           QA.diff <- QA_diff(phi.star, phi)
           tr.diff <- switch(mc[["var"]],
-            unstructured = sum(crossprod_sym(coef.raw, QA.diff) * p[[mc$name_Qraw]]),
-            diagonal = sum(fsum.matrix(coef.raw * (QA.diff %m*m% coef.raw), na.rm=FALSE) * p[[mc$name_Qraw]]),
+            unstructured = sum(crossprod_sym(coef.raw, QA.diff) * p[[mc[["name_Qraw"]]]]),
+            diagonal = sum(fsum.matrix(coef.raw * m_op(QA.diff, coef.raw), na.rm=FALSE) * p[[mc[["name_Qraw"]]]]),
             scalar =
               if (mc[["q0"]] == 1L)
-                dotprodC(coef.raw, QA.diff %m*v% coef.raw) * p[[mc$name_Qraw]]
+                dotprodC(coef.raw, m_op(QA.diff, coef.raw)) * p[[mc[["name_Qraw"]]]]
               else
-                sum(coef.raw * (QA.diff %m*m% coef.raw)) * p[[mc$name_Qraw]]
+                sum(coef.raw * m_op(QA.diff, coef.raw)) * p[[mc[["name_Qraw"]]]]
           )
           log.ar.post <- -0.5 * (mc[["q0"]] * l * log((1 - phi.star)/(1 - phi)) + tr.diff)
           if (control$MH_accept(phi.star, phi, log.ar.post))

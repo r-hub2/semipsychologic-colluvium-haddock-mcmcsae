@@ -11,8 +11,6 @@ vreg(
   sparse = NULL,
   X = NULL,
   prior = NULL,
-  Q0 = NULL,
-  b0 = NULL,
   name = ""
 )
 }
@@ -34,15 +32,6 @@ creation of one based on \code{formula}. If \code{X} is specified \code{formula}
 specified using function \code{\link{pr_normal}}. Alternatively, fixed values for
 the coefficients can be specified using \code{\link{pr_fixed}}, e.g. to generate
 data with given coefficients.}
-
-\item{Q0}{prior precision matrix for the regression effects. The default is a
-zero matrix corresponding to a noninformative improper prior.
-DEPRECATED, please use argument \code{prior} instead, i.e.
-\code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
-
-\item{b0}{prior mean for the regression effect. Defaults to a zero vector.
-DEPRECATED, please use argument \code{prior} instead, i.e.
-\code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
 
 \item{name}{the name of the model component. This name is used in the output of the
 MCMC simulation function \code{\link{MCMCsim}}. By default the name will be 'vreg'

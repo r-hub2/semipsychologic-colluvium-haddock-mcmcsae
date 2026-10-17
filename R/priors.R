@@ -78,16 +78,16 @@ pr_normal <- function(mean=0, precision=0, labels=NULL) {
     log_prior_0 <<- -0.5 * n * log(2*pi)
     if (informative) {
       d <- diag(suppressWarnings(chol(precision, pivot=TRUE)))
-      log_prior_0 <<- log_prior_0 + sum(log(d[d > 0]))
+      log_prior_0 <<- log_prior_0 + sum(logC(d[d > 0]))
     }
     log_prior <<- function(p) {}
     log_prior <<- add(bquote(delta.beta <- p[[.(name)]] - mean))
     if (sigma) {
       log_prior <<- log_prior |>
         add(quote(sigma <- p[["sigma_"]])) |>
-        add(quote(- n * log(sigma) - 0.5 * dotprodC(delta.beta, precision %m*v% delta.beta) / sigma^2))
+        add(quote(- n * log(sigma) - 0.5 * dotprodC(delta.beta, m_op(precision, delta.beta)) / sigma^2))
     } else {
-      log_prior <<- add(log_prior, quote(- 0.5 * dotprodC(delta.beta, precision %m*v% delta.beta)))
+      log_prior <<- add(log_prior, quote(- 0.5 * dotprodC(delta.beta, m_op(precision, delta.beta))))
     }
   }
   type <- "normal"
@@ -340,7 +340,7 @@ pr_gig <- function(a, b, p) {
 pr_invchisq <- function(df=1, scale=1) {
   if (is.character(df) && any(df == c("modeled", "modelled"))) df <- list()
   if (is.character(scale) && any(scale == c("modeled", "modelled"))) scale <- list()
-  n <- rprior <- draw <- NULL
+  n <- rprior <- draw <- draw_chisq <- NULL
   if (is.list(df)) {
     if (is.null(df[["alpha0"]])) df$alpha0 <- 2  # default in prior Gamma(alpha0, beta0)
     if (is.null(df[["beta0"]])) df$beta0 <- 0.1  # default in prior Gamma(alpha0, beta0)
@@ -358,8 +358,12 @@ pr_invchisq <- function(df=1, scale=1) {
     })
   }
   if (is.list(scale) || (!is.list(scale) && !is.list(df))) psi0 <- NULL
-  init <- function(n=1L) {
+  init <- function(n=1L, rng=NULL) {
     n <<- as.integer(n)
+    if (!is.null(rng) && rng[["use.randompack"]] && n > 100L && (is.list(df) || length(df) == 1L))
+      draw_chisq <<- rng[["draw_chisq"]]
+    else
+      draw_chisq <<- rchisq
     rprior <<- function() {}
     if (is.list(df)) {
       rprior_df <<- function() rgamma(1L, df[["alpha0"]], df[["beta0"]])
@@ -376,18 +380,18 @@ pr_invchisq <- function(df=1, scale=1) {
       if (scale[["common"]]) {
         if (length(scale[["df"]]) != 1L || length(scale[["scale"]]) != 1L) stop("scalar 'df' and 'scale' expected in common scale model")
         rprior <<- rprior |>
-          add(quote(scale <- rchisq_scaled(1L, scale[["df"]], psi=psi0))) |>
-          add(bquote(1 / rchisq_scaled(.(n), df, scale)))
+          add(quote(scale <- rchisq(1L, scale[["df"]]) / psi0)) |>
+          add(bquote(df * scale / draw_chisq(.(n), df)))
       } else {
         rprior <<- add(rprior, bquote(draw_betaprime(.(n), 0.5*scale[["df"]], 0.5*df, df/psi0)))
       }
     } else {
       if (all(length(scale) != c(1L, n))) stop("scale parameter has wrong length")
       if (is.list(df)) {
-        rprior <<- add(rprior, bquote(1 / rchisq_scaled(.(n), df, scale)))
+        rprior <<- add(rprior, bquote(df * scale / draw_chisq(.(n), df)))
       } else {
         psi0 <<- df * scale
-        rprior <<- add(rprior, bquote(1 / rchisq_scaled(.(n), df, psi=psi0)))
+        rprior <<- add(rprior, bquote(psi0 / draw_chisq(.(n), df)))
       }
     }
   }
@@ -408,17 +412,17 @@ pr_invchisq <- function(df=1, scale=1) {
       # draw 1/kappa from its full conditional posterior
       if (scale[["common"]]) {
         if (is.list(df) || length(df) == 1L)
-          draw <<- add(draw, bquote(kappa_inv <- rchisq_scaled(1L, .(n) * df + scale$df, psi = psi0 + sum(df * Q))))
+          draw <<- add(draw, bquote(kappa_inv <- rchisq(1L, .(n) * df + scale[["df"]]) / (psi0 + sum(df * Q))))
         else
-          draw <<- add(draw, quote(kappa_inv <- rchisq_scaled(1L, sum(df) + scale$df, psi = psi0 + sum(df * Q))))
+          draw <<- add(draw, quote(kappa_inv <- rchisq(1L, sum(df) + scale[["df"]]) / (psi0 + sum(df * Q))))
       } else {
-        draw <<- add(draw, bquote(kappa_inv <- rchisq_scaled(.(n), df + scale$df, psi = psi0 + df * Q)))
+        draw <<- add(draw, bquote(kappa_inv <- rchisq(.(n), df + scale[["df"]]) / (psi0 + df * Q)))
       }
       draw <<- add(draw, quote(psi <- df * kappa_inv))
     } else {
       draw <<- add(draw, quote(psi <- df * scale))
     }
-    draw <<- add(draw, bquote(1 / rchisq_scaled(.(n), df + df.data, psi=psi + SSR)))
+    draw <<- add(draw, bquote((psi + SSR) / draw_chisq(.(n), df + df.data)))
   }
   type <- "invchisq"
   environment()

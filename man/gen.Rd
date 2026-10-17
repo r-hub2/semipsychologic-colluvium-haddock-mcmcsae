@@ -68,8 +68,7 @@ In the case of a single varying effect there is no difference between these choi
 
 \item{prior}{the prior specification for the variance parameters of the random effects.
 These can currently be specified by a call to \code{\link{pr_invwishart}} in case
-\code{var="unstructured"} or by a call to \code{\link{pr_invchisq}} otherwise.
-See the documentation of those prior specification functions for more details.}
+\code{var="unstructured"} or by a call to \code{\link{pr_invchisq}} or \code{\link{pr_exp}} otherwise.}
 
 \item{Q0}{precision matrix associated with \code{formula}. This can only be used in
 combination with \code{var="scalar"}.}
@@ -128,8 +127,9 @@ See \code{\link{glreg}} for details.}
 
 \item{a}{only used in case the effects are MLiG distributed, as
 assumed in case of a gamma sampling distribution, or for
-gaussian variance modelling. In those cases \code{a} controls how close
-the effects' prior is to a normal prior, see \code{\link{pr_MLiG}}.}
+gaussian variance modelling. In those cases the positive shape parameter
+\code{a} controls how close the effects' prior is to a normal prior,
+see \code{\link{pr_MLiG}}.}
 
 \item{name}{the name of the model component. This name is used in the output of the MCMC simulation
 function \code{\link{MCMCsim}}. By default the name will be 'gen' with the number of the model term attached.}

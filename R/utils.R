@@ -148,7 +148,7 @@ copy_refs <- function(from, to, names=ls(from, all.names=TRUE)) {
 }
 
 is_integer_scalar <- function(x) is.integer(x) && length(x) == 1L
-is_numeric_scalar <- function(x) any(typeof(x) == c("integer", "double")) && length(x) == 1L
+is_numeric_scalar <- function(x) is.numeric(x) && length(x) == 1L
 is_character_scalar <- function(x) is.character(x) && length(x) == 1L
 is_logical_scalar <- function(x) is.logical(x) && length(x) == 1L
 

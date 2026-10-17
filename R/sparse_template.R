@@ -119,15 +119,18 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
               if (mc[["type"]] == "block") {
                 noninf <- b_apply(mc[["mcs"]], \(x) isFALSE(x[["informative.prior"]]))
                 if (any(noninf))
-                  message("Error in setting up a multivariate normal sampler, possibly due to ",
-                       "a singular precision matrix. You may try to replace the non-informative prior ",
-                       "of model component(s) '", paste0(names(mc[["mcs"]])[noninf], collapse="', '"),
-                       "' by a (weakly) informative prior. Alternatively set 'add.eps.I' to TRUE in create_sampler control argument.")
+                  message(
+                    "Error in setting up a multivariate normal sampler, possibly due to ",
+                    "a singular precision matrix. You may try to replace the non-informative prior ",
+                    "of model component(s) '", paste0(names(mc[["mcs"]])[noninf], collapse="', '"),
+                    "' by a (weakly) informative prior. Alternatively set 'add.eps.I' to TRUE in create_sampler control argument."
+                  )
               }
               stop(e)
             } else {
               if (!add.eps.I && class(XX_Q)[1L] == "dsCMatrix" && XX_Q@Dim[1L] >= 500L) {
-                message("adding outer product of constraint matrix to the precision matrix ",
+                message(
+                  "adding outer product of constraint matrix to the precision matrix ",
                   "to improve its condition number\n",
                   "note that this may be inefficient if the resulting matrix is much less sparse"
                 )
@@ -165,10 +168,12 @@ sparse_template <- function(mc, update.XX=FALSE, control=NULL) {
                 isFALSE(x[["informative.prior"]]) || (x[["type"]] == "gen" && x[["gl"]] && isFALSE(x$glp$informative.prior))
               )
               if (any(noninf))
-                warn("Error in setting up a multivariate normal sampler, possibly due to ",
-                     "a singular precision matrix. You may try to replace the non-informative prior ",
-                     "of model component(s) '", paste0(names()[noninf], collapse="', '"),
-                     "' by a (weakly) informative prior.")
+                warn(
+                  "Error in setting up a multivariate normal sampler, possibly due to ",
+                  "a singular precision matrix. You may try to replace the non-informative prior ",
+                  "of model component(s) '", paste0(names()[noninf], collapse="', '"),
+                  "' by a (weakly) informative prior."
+                )
             }
             stop(e)
           }

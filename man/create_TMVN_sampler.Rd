@@ -16,6 +16,7 @@ create_TMVN_sampler(
   check.constraints = FALSE,
   method = NULL,
   reduce = NULL,
+  rng = set_rng(),
   chol.control = chol_control(),
   debug = FALSE
 )
@@ -55,6 +56,8 @@ options to non-default values, see \code{\link{TMVN-methods}}.}
 
 \item{reduce}{whether to a priori restrict the simulation to the subspace defined by the
 equality constraints.}
+
+\item{rng}{random number generator settings, see \code{\link{set_rng}}.}
 
 \item{chol.control}{options for Cholesky decomposition, see \code{\link{chol_control}}.}
 

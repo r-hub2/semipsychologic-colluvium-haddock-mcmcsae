@@ -1,20 +1,16 @@
 
 has_response <- function(formula) length(formula) == 3L
 
-get_response <- function(formula, data=NULL) {
-  tf <- terms(formula, data=data)
-  ind <- attr(tf, "response")
-  if (ind > 0L) {
-    vars <- as.list(attr(tf, "variables"))[-1L]
-    y <- eval(vars[[ind]], if (is_integer_scalar(data)) NULL else data, environment(formula))
-    if (is.numeric(y))
-      if (!all(is.finite(y))) stop(sum(!is.finite(y)), " missing or infinite value(s) in response variable ", deparse(vars[[ind]]))
-    else
-      if (anyNA(y)) stop(sum(is.na(y)), " missing value(s) in response variable ", deparse(vars[[ind]]))
-    y
+get_response <- function(formula, data = NULL) {
+  if (length(formula) < 3L) return(NULL)   # one-sided formula, no response
+  resp <- formula[[2L]]
+  y <- eval(resp, if (is_integer_scalar(data)) NULL else data, environment(formula))
+  if (is.numeric(y)) {
+    if (!all(is.finite(y))) stop(sum(!is.finite(y)), " missing or infinite value(s) in response variable ", deparse(resp))
   } else {
-    NULL
+    if (anyNA(y)) stop(sum(is.na(y)), " missing value(s) in response variable ", deparse(resp))
   }
+  y
 }
 
 get_types <- function(mod) {

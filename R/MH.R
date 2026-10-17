@@ -139,14 +139,14 @@ draw_df_MH_RW <- function(r, df.current, Q.current, df.mod) {
   log.ar <- r * (  0.5 * df.star * log(0.5 * df.star) - 0.5 * df.current * log(0.5 * df.current)
                    + lgamma(0.5 * df.current) - lgamma(0.5 * df.star) ) +
     df.mod[["alpha0"]] * log(df.star / df.current) +
-    (df.current - df.star) * (df.mod[["beta0"]] + 0.5 * sum(Q.current - log(Q.current)))
+    (df.current - df.star) * (df.mod[["beta0"]] + 0.5 * sum(Q.current - logC(Q.current)))
   if (log(runif(1L)) < log.ar) df.star else df.current
 }
 
 # random walk with drift: Metropolis Adjusted Langevin Algorithm
 draw_df_MH_mala <- function(r, df.current, Q.current, df.mod) {
   # compute mala drift
-  temp <- df.mod[["beta0"]] + 0.5 * sum(Q.current - log(Q.current))
+  temp <- df.mod[["beta0"]] + 0.5 * sum(Q.current - logC(Q.current))
   drift <- df.mod[["alpha0"]] + 0.5 * r * df.current * (1 - log(0.5 * df.current) - digamma(0.5 * df.current)) - df.current * temp
   # draw new degrees of freedom value from mala proposal
   df.star <- exp(df.mod[["tau"]] * rnorm(1L, mean=0.5 * drift)) * df.current

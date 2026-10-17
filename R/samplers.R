@@ -157,9 +157,11 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
   if (!is.null(data) && !inherits(data, "data.frame")) {
     if (is.numeric(data) && length(data) == 1L) {
       # a single numeric value is interpreted as sample size
+      if (data < 0) stop("negative data size")
       data <- as.integer(data)
-      if (data < 0L) stop("negative data size")
-    } else if (!inherits(data, "data.frame")) data <- as.data.frame(data)
+    } else {
+      data <- as.data.frame(data)
+    }
   }
 
   family <- process_family(family)
@@ -223,10 +225,12 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
         control$block <- list(names(mod)[!(types %in% c("mc_offset", "brt"))])
         # single component by default not handled as a block, unless
         #   compute.weights=TRUE, or cMVN or CG sampler is used
+        #   or the family is gamma or probit binomial with Haar PXDA
         if (!length(control[["block"]][[1L]]) || (length(control[["block"]][[1L]]) == 1L &&
             types[!(types %in% c("mc_offset", "brt"))] != "s" && !compute.weights &&
             !control[["cMVN.or.CG"]] &&
-            !(family[["link"]] == "probit" && family$control[["probit.HaarPXDA"]])))
+            !(family[["link"]] == "probit" && family$control[["probit.HaarPXDA"]])) &&
+            family[["family"]] != "gamma")
           control$block <- list()
       } else {
         control$block <- list()
@@ -387,7 +391,7 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 
   lin_predict <- function(p, pred) {
     out <- pred[[1L]]$linpred(p)
-    for (obj in pred[-1L]) obj$linpred_update(out, plus=TRUE, p)
+    for (obj in pred[-1L]) obj$linpred_update(out, op=ADD, p)
     out
   }
 
@@ -436,13 +440,13 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
   if (family[["e.is.res"]]) {  # residuals
     compute_e <- function(p) {
       e <- y - mod[[1L]]$lp(p)
-      for (mc in mod[-1L]) mc$lp_update(e, plus=FALSE, p)
+      for (mc in mod[-1L]) mc$lp_update(e, op=SUB, p)
       e
     }
   } else {  # linear predictor
     compute_e <- function(p) {
       e <- mod[[1L]]$lp(p)
-      for (mc in mod[-1L]) mc$lp_update(e, plus=TRUE, p)
+      for (mc in mod[-1L]) mc$lp_update(e, op=ADD, p)
       e
     }
   }
@@ -474,13 +478,14 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
   } else {
     draw <- function(p) {}
   }
+  draw_normal <- control$rng[["draw_normal"]]
   start <- function(p=list()) {
     if (!is.list(p)) stop("input to 'start' function must be a list")
     if (offset.only) {
       p$e_ <- compute_e(p)
     } else {
       if (is.null(p[["e_"]])) {
-        p$e_ <- Crnorm(n, sd=family[["scale.e"]])
+        p$e_ <- draw_normal(n, sd=family[["scale.e"]])
       } else {
         if (length(p[["e_"]]) != n) stop("wrong length for 'e_' start value")
         p$e_ <- copy_obj(p[["e_"]])
@@ -610,6 +615,7 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #' \code{\link{create_sampler}}.
 #'
 #' @export
+#' @param rng random number generator settings, see \code{\link{set_rng}}.
 #' @param add.outer.R whether to add the outer product of a constraint matrix to the
 #'  conditional posterior precision matrix of coefficients sampled in a block. This is used
 #'  to resolve singularity due to intrinsic GMRF components. Default is \code{TRUE}.
@@ -662,13 +668,15 @@ create_sampler <- function(formula, data=NULL, family="gaussian",
 #'  Y. Chen, T.A. Davis, W.W. Hager and S. Rajamanickam (2008).
 #'    Algorithm 887: CHOLMOD, supernodal sparse Cholesky factorization and update/downdate.
 #'    ACM Transactions on Mathematical Software 35(3), 1-14.
-sampler_control <- function(add.outer.R=TRUE, add.eps.I=FALSE, eps=sqrt(.Machine$double.eps),
+sampler_control <- function(rng=set_rng(),
+                            add.outer.R=TRUE, add.eps.I=FALSE, eps=sqrt(.Machine$double.eps),
                             recompute.e=TRUE, compute.llh=TRUE,
                             cMVN.sampler=NULL, CG=NULL,
                             block=TRUE, auto.order.block=TRUE,
                             chol.control=chol_control(),
                             max.size.cps.template=100) {
-  list(add.outer.R=add.outer.R, add.eps.I=add.eps.I, eps=eps,
+  list(rng=rng,
+       add.outer.R=add.outer.R, add.eps.I=add.eps.I, eps=eps,
        recompute.e=recompute.e, compute.llh=compute.llh,
        cMVN.sampler=cMVN.sampler, CG=CG,
        block=block, auto.order.block=auto.order.block,

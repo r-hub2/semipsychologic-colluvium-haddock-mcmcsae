@@ -208,7 +208,7 @@ make_det <- function(M, chol.control=chol_control(perm=FALSE)) {
     # for moderate dimensions eigenvalues are the fastest way for simple determinant updates
     ev0 <- eigen(M, only.values=TRUE)$values
     rm(M, chol.control)
-    function(w1, w2) sum(log(w1 * ev0 + w2))
+    function(w1, w2) sum(logC(w1 * ev0 + w2))
   } else {
     d <- nrow(M)
     if (is.matrix(M)) {

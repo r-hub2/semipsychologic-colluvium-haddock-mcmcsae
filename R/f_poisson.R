@@ -55,7 +55,7 @@ ff_poisson <- function(link="log", control=poisson_control(),
                        sm, data, y=NULL, famid=NULL, sub=NULL) {
   family <- "poisson"
   linkinv <- make.link(link)$linkinv
-  f_mean <- function(eta) exp(eta)
+  f_mean <- function(eta) expC(eta)
   # NB shape0 is only used as an internal negbinomial parameter, and only for model fitting
   shape0 <- control[["nb.shape"]]
   log.shape <- log(shape0)
@@ -90,13 +90,13 @@ ff_poisson <- function(link="log", control=poisson_control(),
     # Poisson log-likelihood, first remove internal offset from linear predictor p[["e_"]]
     llh <- function(p) {
       eta <- if (multifam) p[["e_"]][sub] + log.shape else p[["e_"]] + log.shape
-      llh0 + sum(y * eta - exp(eta))
+      llh0 + fsum.default(y * eta - expC(eta))
     }
     assign("llh", llh, environment(draw))  # draw was defined by ff_negbinomial so we should replace its llh function
     # NB e_i must be the linear predictor excluding the internal offset
     llh_i <- function(draws, i, e_i) {
       nr <- dim(e_i)[1L]
-      rep_each(llh0_i[i], nr) + rep_each(y[i], nr) * e_i - exp(e_i)
+      rep_each(llh0_i[i], nr) + rep_each(y[i], nr) * e_i - expC(e_i)
     }
   }
   make_rpredictive <- function(newdata, weights=NULL) {
@@ -108,9 +108,9 @@ ff_poisson <- function(link="log", control=poisson_control(),
       nn <- nrow(newdata)
     }
     if (is.null(weights))
-      function(p, lp) rpois(nn, lambda=exp(lp))
+      function(p, lp) rpois(nn, lambda=expC(lp))
     else
-      function(p, lp) rpois(nn, lambda=weights * exp(lp))
+      function(p, lp) rpois(nn, lambda=weights * expC(lp))
   }
   rm(data)
   environment()

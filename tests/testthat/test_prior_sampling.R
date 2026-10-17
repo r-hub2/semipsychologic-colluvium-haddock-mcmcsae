@@ -5,10 +5,6 @@ set.seed(1, kind="Mersenne-Twister", normal.kind="Inversion")
 
 test_that("prior predictive sampling works", {
   df <- data.frame(int=rep(1, 1000))
-  expect_warning(
-    dat <- generate_data(~ reg(~ 1, prior=pr_fixed(2)), sigma.mod=pr_fixed(4), data=df),
-    "deprecated"
-  )
   dat <- generate_data(~ reg(~ 1, prior=pr_fixed(2)), family=f_gaussian(var.prior=4), data=df)
   expect_between(mean(dat$y), 1.5, 2.5)
   expect_between(sd(dat$y), 1.5, 2.5)

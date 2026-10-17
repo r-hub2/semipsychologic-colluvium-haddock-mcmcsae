@@ -66,4 +66,15 @@ test_that("conjugate gradient sampler for a simple regression model works", {
   expect_between(summ$b[, "Mean"], 0.5*dat$pars$b, 2*dat$pars$b)
   expect_between(summ$sigma_[, "Mean"], 0.9 * 1e-3, 1.1 * 1e-3)
   expect_gt(compute_DIC(sim)["p_DIC"], 0)
+  # fixed variance
+  sampler <- create_sampler(
+    y ~ reg(~ x1 + x2, name="b"), data=df,
+    family=f_gaussian(var.prior = pr_fixed(1)),
+    control=list(CG=TRUE)
+  )
+  expect_length(sampler$control$block, 1L)  # for CG need mc_block
+  sim <- MCMCsim(sampler, verbose=FALSE, n.chain=2L, n.iter=700L)
+  summ <- summary(sim)
+  expect_between(summ$b[, "Mean"], 0.5*dat$pars$b, 2*dat$pars$b)
+  expect_gt(compute_DIC(sim)["p_DIC"], 0)
 })

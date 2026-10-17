@@ -1,7 +1,6 @@
 #' Solve Ax=b by preconditioned conjugate gradients
 #'
-#' @export
-#' @keywords internal
+#' @noRd
 #' @param b right hand side vector.
 #' @param env environment containing at least a function \code{A_times} that computes
 #'  the matrix-vector product Ax for some input vector x, and a function \code{M_solve}
@@ -54,14 +53,15 @@ CG <- function(b, env, x=0*b, max.it=length(b), e = 1e6 * length(b), verbose=FAL
 # for N(Q^-1 X' Q0 y, Q^-1)
 # where Q = X' Q0 X + oplus_k QA_k x QV_k is q x q and (for mc_gen) QA_k = DA_k' DA_k may be singular
 # NB experimental feature for now, needs more testing
-#' @keywords internal
+#'
+#' @noRd
 #' @param mbs block component containing several model components.
 #' @param X design matrix.
 #' @param fam family object.
 #' @param control a list of options for the conjugate gradient algorithm that can be passed
-#'   using function \code{\link{CG_control}}.
+#'  using function \code{\link{CG_control}}.
 #' @returns An environment with precomputed quantities and functions for multiplication
-#'   by A and by an (inverse) preconditioning matrix.
+#'  by A and by an (inverse) preconditioning matrix.
 #' @references
 #'  A. Nishimura and M.A. Suchard (2022).
 #'    Prior-preconditioned conjugate gradient method for accelerated Gibbs sampling in
@@ -98,13 +98,13 @@ setup_CG_sampler <- function(mbs, X, fam, control=CG_control()) {
     if (fam[["modeled.Q"]]) {
       Q_x <- switch(fam[["Q0.type"]],
         unit=, diag = function(p, x) p[["Q_"]] * x,
-        symm = function(p, x) p[["QM_"]] %m*v% x
+        symm = function(p, x) m_op(p[["QM_"]], x)
       )
     } else {
       Q_x <- switch(fam[["Q0.type"]],
         unit = function(p, x) x,
         diag = function(p, x) fam[["Q0"]]@x * x,
-        symm = function(p, x) fam[["Q0"]] %m*v% x
+        symm = function(p, x) m_op(fam[["Q0"]], x)
       )
     }
   } else {
@@ -131,11 +131,10 @@ setup_CG_sampler <- function(mbs, X, fam, control=CG_control()) {
   # QT = oplus_k QA x QV is created in parent's draw function
   if (fam[["sigma.fixed"]])
     A_times <- function(x, X, QT, cholQV, p)
-      crossprod_mv(X, Q_x(p, X %m*v% x)) + QT %m*v% x
+      tm_op(X, Q_x(p, m_op(X, x)), m_op(QT, x), ADD)
   else
     A_times <- function(x, X, QT, cholQV, p)
-      crossprod_mv(X, Q_x(p, X %m*v% x)) + (QT %m*v% x) * p[["sigma_"]]^2
-
+      tm_op(X, Q_x(p, m_op(X, x)), m_op(QT, x) * p[["sigma_"]]^2, ADD)
   for (mc in mbs) {
     if (mc[["type"]] == "gen") {
       # TODO
@@ -170,8 +169,8 @@ setup_CG_sampler <- function(mbs, X, fam, control=CG_control()) {
         for (mc in mbs) {
           if (mc[["type"]] == "gen") {
             DA <- if (is.null(mc[["AR1.inferred"]])) mc[["DA"]] else mc[["DA.template"]]$update(p[[mc$name_AR1]])
-            temp <- DA %m*m% t.default(cholQV[[mc$name]]$solve(matrix(x[mc$block.i], nrow=mc[["q0"]])))
-            out[mc$block.i] <- as.numeric(t.default(crossprod_mm(DA, mc$cholDD$solve(temp))))
+            temp <- m_op(DA, t.default(cholQV[[mc$name]]$solve(matrix(x[mc$block.i], nrow=mc[["q0"]]))))
+            out[mc$block.i] <- as.numeric(t.default(tm_op(DA, mc$cholDD$solve(temp))))
           } else {
             out[mc$block.i] <- mc[["gamma"]] * x[mc$block.i]
           }
@@ -185,9 +184,9 @@ setup_CG_sampler <- function(mbs, X, fam, control=CG_control()) {
         for (mc in mbs) {
           if (mc[["type"]] == "gen") {
             DA <- if (is.null(mc[["AR1.inferred"]])) mc[["DA"]] else mc[["DA.template"]]$update(p[[mc$name_AR1]])
-            temp <- DA %m*m% t.default(cholQV[[mc$name]]$solve(matrix(x[mc$block.i], nrow=mc[["q0"]])))
+            temp <- m_op(DA, t.default(cholQV[[mc$name]]$solve(matrix(x[mc$block.i], nrow=mc[["q0"]]))))
             temp <- mc$cholDD$solve(temp)
-            out[mc$block.i] <- as.numeric(t.default(crossprod_mm(DA, mc$cholDD$solve(temp))))
+            out[mc$block.i] <- as.numeric(t.default(tm_op(DA, mc$cholDD$solve(temp))))
           } else {
             out[mc$block.i] <- mc[["gamma"]] * x[mc$block.i]
           }
@@ -202,9 +201,9 @@ setup_CG_sampler <- function(mbs, X, fam, control=CG_control()) {
         for (mc in mbs) {
           if (mc[["type"]] == "gen") {
             DA <- if (is.null(mc[["AR1.inferred"]])) mc[["DA"]] else mc[["DA.template"]]$update(p[[mc$name_AR1]])
-            temp <- DA %m*m% t.default(cholQV[[mc$name]]$solve(matrix(scale * x[mc$block.i], nrow=mc[["q0"]])))
+            temp <- m_op(DA, t.default(cholQV[[mc$name]]$solve(matrix(scale * x[mc$block.i], nrow=mc[["q0"]]))))
             temp <- mc$cholDD$solve(temp)
-            out[mc$block.i] <- as.numeric(t.default(crossprod_mm(DA, mc$cholDD$solve(temp))))
+            out[mc$block.i] <- as.numeric(t.default(tm_op(DA, mc$cholDD$solve(temp))))
           } else {
             out[mc$block.i] <- mc[["gamma"]] * x[mc$block.i]
           }
@@ -221,7 +220,7 @@ setup_CG_sampler <- function(mbs, X, fam, control=CG_control()) {
   # for multi-response family there is no global sigma_ parameter
   draw <- function(p, Xy, X, QT, fam, start=NULL) {
     if (is.null(p[["sigma_"]])) sigma <- 1 else sigma <- p[["sigma_"]]
-    u <- Xy + sigma * crossprod_mv(X, fam$drawMVNvarQ(p))
+    u <- Xy + sigma * tm_op(X, fam$drawMVNvarQ(p))
     for (mc in mbs) {
       if (mc[["type"]] == "gen")
         u[mc$block.i] <- u[mc$block.i] + sigma^2 * mc$drawMVNvarQ(p)

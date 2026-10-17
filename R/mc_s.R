@@ -118,9 +118,9 @@ mc_s <- function(..., unit.precision=FALSE, name="", debug=FALSE,
       }
     }
 
-    lp_update <- function(x, plus=TRUE, p) {
-      if (qf > 0L) mf$lp_update(x, plus, p)
-      mr$lp_update(x, plus, p)
+    lp_update <- function(x, op=ADD, p) {
+      if (qf > 0L) mf$lp_update(x, op, p)
+      mr$lp_update(x, op, p)
     }
 
     rprior <- function(p) {
@@ -155,12 +155,12 @@ mc_s <- function(..., unit.precision=FALSE, name="", debug=FALSE,
       linpred <- function(p) {
         out <- pred.r$linpred(p)
         if (qf > 0L)
-          pred.f$linpred_update(out, TRUE, p)
+          pred.f$linpred_update(out, ADD, p)
         out
       }
-      linpred_update <- function(x, plus=TRUE, p) {
-        pred.r$linpred_update(x, plus, p)
-        if (qf > 0L) pred.f$linpred_update(x, plus, p)
+      linpred_update <- function(x, op=ADD, p) {
+        pred.r$linpred_update(x, op, p)
+        if (qf > 0L) pred.f$linpred_update(x, op, p)
         x
       }
       environment()

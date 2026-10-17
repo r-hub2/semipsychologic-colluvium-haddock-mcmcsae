@@ -1,20 +1,20 @@
 
 # mcs: sublist of mod components to be sampled in a block
-create_mc_block <- function(mcs, fam, sc, prior.only, 
+create_mc_block <- function(mcs, fam, sc, prior.only,
                             compute.weights=FALSE, linpred=NULL) {
   type <- "block"
   name <- "coef_"
   debug <- any(b_apply(mcs, `[[`, "debug"))
 
   if (fam[["family"]] == "gamma") {
-    modus <- "gamma"       # model for log(mean) of gamma
+    modus <- if (fam[["control"]][["use.PGDA"]]) "regular" else "gamma"  # model for log(mean) of gamma
   } else if (all(s_apply(mcs, `[[`, "name") %in% names(fam[["Vmod"]]))) {
     if (fam[["family"]] == "gaussian_gamma")
       modus <- "vargamma"  # model for log(var) of gaussian and log(mean) of gamma
     else
-      modus <- "var"       # model for log(var) of gaussian
+      modus <- "var"  # model for log(var) of gaussian
   } else {
-    modus <- "regular"     # model for mean of gaussian/binomial/...
+    modus <- "regular"  # model for mean of gaussian/binomial/...
   }
 
   if (sc[["auto.order.block"]]) {
@@ -85,7 +85,7 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
 
   if (is.null(sc[["CG"]])) {
     if (fam[["modeled.Q"]]) {
-      XX <- crossprod_sym(X, crossprod_sym(Cdiag(runif(fam[["n"]], 0.9, 1.1)), fam[["Q0"]]))
+      XX <- crossprod_sym(X, crossprod_sym(Cdiag(sc[["rng"]]$draw_unif(fam[["n"]], 0.9, 1.1)), fam[["Q0"]]))
     } else {
       XX <- economizeMatrix(crossprod_sym(X, fam[["Q0"]]),
         symmetric=TRUE, drop.zeros=TRUE
@@ -178,20 +178,20 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
       for (m in seq_along(mcs)) {
         # TODO linpred function (NB name clash) --> apply exp() only once
         #      or exploit index design matrices to reduce cost of exp()
-        draw <- add(draw, bquote(p[["Q_"]] <- p[["Q_"]] * exp(mcs[[.(m)]]$lp(p))))
+        draw <- add(draw, bquote(p[["Q_"]] <- p[["Q_"]] * expC(mcs[[.(m)]]$lp(p))))
       }
   } else if (sc[["single.block"]]) {
     if (fam[["e.is.res"]])
-      draw <- add(draw, quote(p$e_ <- copy_obj(fam[["y"]])))
+      draw <- add(draw, bquote(v_op(p[["e_"]], .(SET), fam[["y"]])))
     # otherwise p$e_ = 0
   } else {
     for (m in seq_along(mcs)) {
       # residuals could also be computed using the block X,
       #   but this way it is usually faster due to more efficient matrix types
       if (fam[["e.is.res"]])
-        draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], TRUE, p)))
+        draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], .(ADD), p)))
       else
-        draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], FALSE, p)))
+        draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], .(SUB), p)))
     }
   }
   # update the block-diagonal joint precision matrix
@@ -246,17 +246,17 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
                "the standard Albert-Chib sampler in this case by setting probit.HaarPXDA=FALSE ",
                "via create_sampler's control argument")
         # Haar PX-DA sandwich step
-        if (!is.null(sc[["cMVN.sampler"]])) {
+        if (is.null(sc[["cMVN.sampler"]])) {
           draw <- add(draw, quote(
-            rate <- 0.5 * dotprodC(p[["z_"]], p[["z_"]] - X %m*v% MVNsampler$smplr$cholQ$solve(crossprod_mv(X, p[["z_"]]))[MVNsampler$smplr$Iq])
+            rate <- 0.5 * dotprodC(p[["z_"]], p[["z_"]] - m_op(X, MVNsampler$cholQ$solve(tm_op(X, p[["z_"]]))))
           ))
         } else {
           draw <- add(draw, quote(
-            rate <- 0.5 * dotprodC(p[["z_"]], p[["z_"]] - X %m*v% MVNsampler$cholQ$solve(crossprod_mv(X, p[["z_"]])))
+            rate <- 0.5 * dotprodC(p[["z_"]], p[["z_"]] - m_op(X, MVNsampler$smplr$cholQ$solve(tm_op(X, p[["z_"]]))[MVNsampler$smplr[["Iq"]]]))
           ))
         }
         draw <- add(draw, quote(
-          p[["z_"]] <- p[["z_"]] * sqrt(
+          p[["z_"]] <- p[["z_"]] * sqrtC(
             rgamma(1L, 
               shape = 0.5*fam[["n"]],
               rate = rate
@@ -267,16 +267,16 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
     }
     if (sc[["single.block"]] && !fam[["modeled.Q"]] && !any(s_apply(mcs, `[[`, "type") == "mec") && fam[["link"]] != "probit") {
       # necessarily e.is.res=TRUE, i.e. gaussian(-derived) family
-      Xy <- crossprod_mv(X, fam[["Q0"]] %m*v% fam[["y"]])
+      Xy <- tm_op(X, m_op(fam[["Q0"]], fam[["y"]]))
       if (nonzero.mean) {
         Xy <- Xy + Q0b0
         rm(Q0b0)
       }
     } else {
       if (nonzero.mean)
-        draw <- add(draw, quote(Xy <- crossprod_mv(X, fam$Q_e(p)) + Q0b0))
+        draw <- add(draw, quote(Xy <- tm_op(X, fam$Q_e(p)) + Q0b0))
       else
-        draw <- add(draw, quote(Xy <- crossprod_mv(X, fam$Q_e(p))))
+        draw <- add(draw, quote(Xy <- tm_op(X, fam$Q_e(p))))
     }
     if (is.null(sc[["CG"]])) {
       if (!is.null(sc[["cMVN.sampler"]]))
@@ -303,14 +303,14 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
           kappa <- alpha * fam[["y"]]
         } else {
           kappa0 <- alpha * fam[["y"]]
-          draw <- add(draw, quote(kappa <- kappa0 * exp(-p[["e_"]])))
+          draw <- add(draw, quote(kappa <- kappa0 * expC(p[["e_"]], neg=TRUE)))
         }
       } else {
         draw <- add(draw, quote(alpha <- fam$get_shape(p)))
         if (sc[["single.block"]])
           draw <- add(draw, quote(kappa <- alpha * fam[["y"]]))
         else
-          draw <- add(draw, quote(kappa <- alpha * fam[["y"]] * exp(-p[["e_"]])))
+          draw <- add(draw, quote(kappa <- alpha * fam[["y"]] * expC(p[["e_"]], neg=TRUE)))
       }
     } else if (modus == "vargamma") {
       if (fam[["alpha.fixed"]]) {
@@ -331,12 +331,13 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
       }
     }
     draw <- add(draw, quote(cholQ$update(mat_sum(QT))))  # TODO if only reg components cholQ is fixed
+    if (modus != "regular") draw_MLiG <- sc$rng[["draw_MLiG"]]
     if (modus == "var" || modus == "vargamma")
-      draw <- add(draw, bquote(Hz <- crossprod_mv(X, rMLiG(.(fam[["n"]]), 0.5, vkappa))))
+      draw <- add(draw, bquote(Hz <- tm_op(X, draw_MLiG(.(fam[["n"]]), 0.5, vkappa))))
     if (modus == "gamma")
-      draw <- add(draw, bquote(Hz <- crossprod_mv(X, rMLiG(.(fam[["n"]]), alpha, kappa))))
+      draw <- add(draw, bquote(Hz <- tm_op(X, draw_MLiG(.(fam[["n"]]), alpha, kappa))))
     else if (modus == "vargamma")
-      draw <- add(draw, bquote(Hz <- Hz + crossprod_mv(X, rMLiG(.(fam[["n"]]), alpha, kappa))))
+      draw <- add(draw, bquote(Hz <- tm_op(X, draw_MLiG(.(fam[["n"]]), alpha, kappa), Hz, .(ADD))))
     # prior contributions from mcs
     draw <- add(draw, quote(
       for (m in seq_along(mcs)) {
@@ -345,13 +346,13 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
           reg =
             if (mc[["informative.prior"]]) {
               if (mc[["zero.mean"]])
-                z <- rMLiG(mc[["q"]], mc$prior[["a"]], mc$prior[["a"]])
+                z <- draw_MLiG(mc[["q"]], mc$prior[["a"]], mc$prior[["a"]])
               else
-                z <- rMLiG(mc[["q"]], mc$prior[["a"]], mc$prior[["a"]] * exp(sqrt(mc$prior$precision/mc$prior$a) * mc$prior$mean))
+                z <- draw_MLiG(mc[["q"]], mc$prior[["a"]], mc$prior[["a"]] * exp(sqrt(mc$prior$precision/mc$prior$a) * mc$prior$mean))
               Hz[mc$block.i] <- Hz[mc$block.i] + sqrt(mc$prior$precision/mc$prior[["a"]]) * z
             },
           gen = {
-            z <- rMLiG(mc[["q"]], mc[["a"]], mc[["a"]])
+            z <- draw_MLiG(mc[["q"]], mc[["a"]], mc[["a"]])
             Hz[mc$block.i] <- Hz[mc$block.i] + z / (p[[mc$name_sigma]] * sqrt(mc[["a"]]))
           },
           stop("only reg and gen components supported")
@@ -382,33 +383,33 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
     }
     if (modus == "var" || modus == "vargamma") {
       if (fam[["single.V.block"]])
-        draw <- add(draw, bquote(p[["Q_"]] <- exp(-mcs[[.(m)]]$lp(p))))
+        draw <- add(draw, bquote(p[["Q_"]] <- expC(mcs[[.(m)]]$lp(p), neg=TRUE)))
       else
-        draw <- add(draw, bquote(p[["Q_"]] <- p[["Q_"]] * exp(-mcs[[.(m)]]$lp(p))))
+        draw <- add(draw, bquote(p[["Q_"]] <- p[["Q_"]] * expC(mcs[[.(m)]]$lp(p), neg=TRUE)))
     } else {
       if (fam[["e.is.res"]]) {
-        draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], FALSE, p)))
+        draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], .(SUB), p)))
       } else {
         if (m == 1L && sc[["single.block"]]) {
           # case !e.is.res where p$e_ = 'y_eff' = 0
           draw <- add(draw, quote(p$e_ <- mcs[[1L]]$lp(p)))
         } else {
-          draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], TRUE, p)))
+          draw <- add(draw, bquote(mcs[[.(m)]]$lp_update(p[["e_"]], .(ADD), p)))
         }
       }
     }
   }
   if (compute.weights) {
     # TODO solve-sparse method that returns dense
-    draw <- add(draw, quote(p$weights_ <- X %m*m% as.matrix(MVNsampler[["cholQ"]]$solve(linpred))))
+    draw <- add(draw, quote(p$weights_ <- m_op(X, as.matrix(MVNsampler[["cholQ"]]$solve(linpred)))))
     if (fam[["modeled.Q"]]) {
       if (fam[["Q0.type"]] == "symm")
-        draw <- add(draw, quote(p$weights_ <- p[["QM_"]] %m*m% p[["weights_"]]))
+        draw <- add(draw, quote(p$weights_ <- m_op(p[["QM_"]], p[["weights_"]])))
       else
         draw <- add(draw, quote(p$weights_ <- p[["Q_"]] * p[["weights_"]]))
     } else {
       if (fam[["Q0.type"]] != "unit") {
-        draw <- add(draw, quote(p$weights_ <- fam[["Q0"]] %m*m% p[["weights_"]]))
+        draw <- add(draw, quote(p$weights_ <- m_op(fam[["Q0"]], p[["weights_"]])))
       }
     }
   }
@@ -422,12 +423,12 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
         if (mc[["type"]] == "gen" && mc[["fastGMRFprior"]]) {
           Qv <- rexp(1L)
           if (is.null(mc$rGMRFprior))
-            setup_priorGMRFsampler(mc, Qv)
+            setup_priorGMRFsampler(mc, Qv, sc[["rng"]])
           p[[mc[["name"]]]] <- check_and_get(p, mc[["name"]], mc[["q"]],
             \() if (is.null(mc[["priorA"]])) mc$rGMRFprior(Qv) else mc$rGMRFprior(Qv, rep.int(1, mc[["lD"]]))
           )
         } else {
-          p[[mc[["name"]]]] <- check_and_get(p, mc[["name"]], mc[["q"]], \() Crnorm(mc[["q"]], sd=fam[["scale.sigma"]]))
+          p[[mc[["name"]]]] <- check_and_get(p, mc[["name"]], mc[["q"]], \() sc[["rng"]]$draw_normal(mc[["q"]], sd=fam[["scale.sigma"]]))
         }
       }
     ))
@@ -436,7 +437,7 @@ create_mc_block <- function(mcs, fam, sc, prior.only,
       start <- add(start, bquote(coef <- MVNsampler$start(p, fam[["scale.sigma"]])[[.(name)]]))
     } else {
       # account for scaling of covariates
-      start <- add(start, bquote(coef <- Crnorm(.(q)) / colwise_maxabs(X)))
+      start <- add(start, bquote(coef <- sc[["rng"]]$draw_normal(.(q)) / colwise_maxabs(X)))
     }
     start <- add(start, quote(
       for (mc in mcs) {

@@ -6,7 +6,7 @@
 \alias{[,tabMatrix,index,missing,missing-method}
 \alias{[,tabMatrix,missing,index,logical-method}
 \alias{[,tabMatrix,missing,index,missing-method}
-\title{S4 method for row and column subsetting a 'tabMatrix'}
+\title{S4 methods for row and column subsetting a 'tabMatrix'}
 \usage{
 \S4method{[}{tabMatrix,index,missing,logical}(x, i, j, ..., drop = TRUE)
 
@@ -31,6 +31,6 @@
 The selected rows/columns as a tabMatrix or a vector.
 }
 \description{
-S4 method for row and column subsetting a 'tabMatrix'
+S4 methods for row and column subsetting a 'tabMatrix'
 }
 \keyword{internal}

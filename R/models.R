@@ -111,7 +111,44 @@ combine_X0_XA <- function(X0, XA) {
   n <- nrow(X0)
   q0 <- ncol(X0)
   qA <- ncol(XA)
-  if ((is_unit_diag(XA) || class(XA)[1L] == "tabMatrix") && !large_and_sparse(X0)) {
+  if (q0 == 1L && !large_and_sparse(X0)) {
+    x <- as.numeric(X0)
+    if (allv(x, 1)) {
+      out <- XA
+    } else {
+      out <- XA
+      out <- switch(class(XA)[1L],
+        matrix = x * XA,
+        ddiMatrix = {
+          if (XA@diag == "U") {
+            attr(XA, "diag") <- "N"
+            attr(XA, "x") <- x
+          } else {
+            v_op(x, MUL, XA@x)
+          }
+          XA
+        },
+        tabMatrix = {
+          if (XA@num) {
+            v_op(x, MUL, XA@x)
+          } else {
+            attr(XA, "num") <- TRUE
+            if (XA@reduced) {
+              attr(XA, "x") <- x * (XA@perm >= 0L)
+              attr(XA, "reduced") <- FALSE
+            } else {
+              attr(XA, "x") <- x
+            }
+          }
+          XA
+        },
+        dgCMatrix = {
+          v_op(x[XA@i + 1L], MUL, XA@x) 
+        },
+        stop("unexpected XA matrix type")
+      )
+    }
+  } else if ((is_unit_diag(XA) || class(XA)[1L] == "tabMatrix") && !large_and_sparse(X0)) {
     fac <- if (is_unit_diag(XA)) seq_len(n) else XA@perm + 1L
     x <- X0
     if (class(XA)[1L] == "tabMatrix") {
@@ -157,10 +194,10 @@ compute_XA <- function(factor.info=NULL, data=NULL) {
       if (factor.info[["types"]][f] == "splines") {
         Xf <- drop0(splines::splineDesign(fs[[f]][["knots"]], variable, fs[[f]][["degree"]] + 1L,
           sparse=TRUE, outer.ok=TRUE), tol=.tol, is.Csparse=TRUE)
-        labs <- as.vector(outer(labs, paste0("bs", seq_len(ncol(Xf))), FUN=paste, sep=if (identical(labs, "")) "" else ":"))
+        labs <- vec(outer(labs, paste0("bs", seq_len(ncol(Xf))), FUN=paste, sep=if (identical(labs, "")) "" else ":"))
       } else {
         Xf <- aggrMatrix(variable, facnames=TRUE)
-        labs <- as.vector(outer(labs, dimnames(Xf)[[2L]], FUN=paste, sep=if (identical(labs, "")) "" else ":"))
+        labs <- vec(outer(labs, dimnames(Xf)[[2L]], FUN=paste, sep=if (identical(labs, "")) "" else ":"))
       }
       out <- KhatriRao(t(Xf), out)
     }
@@ -269,12 +306,12 @@ get_factor_info <- function(formula, data) {
 }
 
 eval_in <- function(text, data, enclos=emptyenv()) {
-  if (text == "local_" && all("local_" != dimnames(data)[[2L]])) return(seq_len(n_row(data)))
-  if (text == "global_" && all("global_" != dimnames(data)[[2L]])) return(rep.int(1, n_row(data)))
+  if (text == "local_" && all("local_" != names(data))) return(seq_len(n_row(data)))
+  if (text == "global_" && all("global_" != names(data))) return(rep.int(1, n_row(data)))
   if (is_integer_scalar(data))
-    eval(substitute(evalq(expr, NULL, enclos), list(expr=str2lang(text))))
+    eval(str2lang(text), NULL, enclos)
   else
-    eval(substitute(evalq(expr, data, enclos), list(expr=str2lang(text))))
+    eval(str2lang(text), data, enclos)
 }
 
 #' Compute (I)GMRF incidence, precision and restriction matrices corresponding to a generic model component
@@ -495,7 +532,7 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=!D, R=TRUE, cols2remov
         } else {
           comp <- dapply(out[["R"]], \(x) whichv(x, 0, invert=TRUE), MARGIN=2L)
         }
-        mvar <- lapply(comp, \(ind) exp(fmean.default(log(mvar[ind]), na.rm=FALSE)))
+        mvar <- lapply(comp, \(ind) expC(fmean.default(logC(mvar[ind]), na.rm=FALSE)))
         f <- numeric(ncol(out[["D"]]))
         for (i in seq_along(comp)) {
           if (length(comp[[i]]) == 1L) {
@@ -517,9 +554,9 @@ compute_GMRF_matrices <- function(factor, data, D=TRUE, Q=!D, R=TRUE, cols2remov
         }
         out$D <- economizeMatrix(out[["D"]] %*% Cdiag(f), ...)
       } else {
-        mvar <- exp(fmean.default(log(mvar), na.rm=FALSE))
+        mvar <- expC(fmean.default(logC(mvar), na.rm=FALSE))
         if (mvar > 0)
-          out$D <- sqrt(mvar) * out[["D"]]
+          out$D <- sqrtC(mvar) * out[["D"]]
         else warn("zero marginal variance detected; will not scale precision matrix")
       }
     }
@@ -776,7 +813,7 @@ D_RW1 <- function(n, w=NULL, circular=FALSE) {
   } else {
     w <- as.numeric(w)
     if (any(w <= 0) || length(w) != n-1L) stop("w must be a positive vector of length n-1")
-    sqrt.w <- sqrt(w)
+    sqrt.w <- sqrtC(w)
     if (circular)
       bandSparse(n, n, c(0L, 1L, 1L-n), list(-c(sqrt.w, sqrt.w[n-1L]), c(sqrt.w, sqrt.w[n-1L]), sqrt.w[n-1L]))
     else

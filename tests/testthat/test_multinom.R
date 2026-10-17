@@ -145,3 +145,17 @@ test_that("multinomial (categorical) random effects model works", {
     all(summpred[1:10, "Mean"] + summpred[11:20, "Mean"] <= 1)
   )
 })
+
+test_that("build_multinom_X works", {
+  n <- 100
+  dat <- data.frame(
+    x = runif(n),
+    z = rnorm(n)
+  )
+  X <- build_multinom_X(~ x + I(z * (cat_ == "2")), dat, cats=as.character(1:5))
+  expect_true(nrow(X) == 5*n)
+  expect_equal(X[(n + 1L):(2*n), 3], dat$z)
+  expect_true(all(X[-((n + 1L):(2*n)), 3] == 0))
+  X <- build_multinom_X(~ 0 + cat_ / (x + z), dat, cats=as.character(1:5))
+  expect_equal(dim(X), c(5*n, 5*3))
+})

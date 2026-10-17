@@ -1,5 +1,5 @@
 Package: mcmcsae
-Version: 0.8.1
+Version: 0.8.2
 Authors@R: c(
   person("Harm Jan", "Boonstra", email="hjboonstra@gmail.com", role=c("aut", "cre")),
   person("Grzegorz", "Baltissen", role="ctb"))
@@ -13,13 +13,13 @@ Description: Fit multi-level models with possibly correlated
     random effects using Markov Chain Monte Carlo simulation.
     Such models allow smoothing over space and time and are useful in,
     for example, small area estimation.
-Date: 2026-07-19
+Date: 2026-10-16
 Depends: R (>= 4.1.0)
 Imports: Matrix (>= 1.6.2), Rcpp (>= 0.11.0), methods, GIGrvg (>= 0.7),
         loo (>= 2.0.0), collapse
-Suggests: dbarts, BayesLogit, lintools, splines, mgcv, spdep, sf,
-        bayesplot, coda, posterior, parallel, testthat, roxygen2,
-        knitr, rmarkdown, survey
+Suggests: dbarts, BayesLogit, randompack, lintools, splines, mgcv,
+        spdep, sf, bayesplot, coda, posterior, parallel, testthat,
+        roxygen2, knitr, rmarkdown, survey
 LinkingTo: Rcpp, RcppEigen, Matrix, GIGrvg
 VignetteBuilder: knitr
 Collate: 'AR1_sampler.R' 'GMRF_extension.R' 'MCMCsim.R' 'MH.R'
@@ -34,9 +34,9 @@ Collate: 'AR1_sampler.R' 'GMRF_extension.R' 'MCMCsim.R' 'MH.R'
         'models.R' 'parallel.R' 'plots.R' 'prediction.R' 'priors.R'
         'projection.R' 'random.R' 'samplers.R' 'sbc.R'
         'set_constraints.R' 'sparse_template.R' 'utils.R'
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.0
 NeedsCompilation: yes
-Packaged: 2026-07-19 20:51:00 UTC; hbta
+Packaged: 2026-10-17 13:56:36 UTC; hjboo
 Author: Harm Jan Boonstra [aut, cre],
   Grzegorz Baltissen [ctb]
 Maintainer: Harm Jan Boonstra <hjboonstra@gmail.com>

@@ -118,7 +118,7 @@ AR1_sampler <- function(mc) {
       attr(Q, "x") <- p[[mc[["name_Q"]]]]
       v <- p[[name_v]]
       log.ar.post <- AR1.exp * log((1 - phi.star^2) / (1 - phi^2)) +
-        0.5 * (dotprodC(v, Q %m*v% v) - dotprodC(v, Q.star %m*v% v))
+        0.5 * (dotprodC(v, m_op(Q.star, v, m_op(Q, v), SUB)))
       if (tnprior)
         log.ar.post <- log.ar.post + 0.5 * prec0 * ((phi - mu0)^2 - (phi.star - mu0)^2)
       if (MH$MH_accept(phi.star, phi, log.ar.post)) phi.star else phi

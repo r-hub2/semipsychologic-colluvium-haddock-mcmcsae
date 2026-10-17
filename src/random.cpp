@@ -9,15 +9,16 @@ static const double PI2 = M_PI * M_PI;
 static const double EPS = 10.0 * std::numeric_limits<double>::epsilon();
 
 
-//’ Draw a vector of (approximate) Polya-Gamma variates
-//’
-//’ @param n the size of the vector.
-//’ @param b shape parameter. Either a scalar or vector of nonnegative doubles of size n.
-//’ @param z exponential tilting parameter. Either a scalar or vector of doubles of size n.
-//’ @param m integer scalar or vector of size n specifying the number of explicit gamma draws
-//’  used in the approximation. A -1 value indicates that a normal moment matching approximation
-//’  is to be used. For a value less than -1 a default choice for the approximation will be used.
-//’ @returns A vector of size n with (approximate) Polya-Gamma draws.
+//' Draw a vector of (approximate) Polya-Gamma variates
+//'
+//' @noRd
+//' @param n the size of the vector.
+//' @param b shape parameter. Either a scalar or vector of nonnegative doubles of size n.
+//' @param z exponential tilting parameter. Either a scalar or vector of doubles of size n.
+//' @param m integer scalar or vector of size n specifying the number of explicit gamma draws
+//'  used in the approximation. A -1 value indicates that a normal moment matching approximation
+//'  is to be used. For a value less than -1 a default choice for the approximation will be used.
+//' @returns A vector of size n with (approximate) Polya-Gamma draws.
 // [[Rcpp::export(rng=true)]]
 NumericVector CrPGapprox(const int n, const NumericVector & b, const NumericVector & z, const IntegerVector & m) {
   double bi, hzi, hzi2, th, mu, Sigma, dninv;
@@ -88,13 +89,13 @@ NumericVector CrPGapprox(const int n, const NumericVector & b, const NumericVect
   return out;
 }
 
-
-//’ Draw a vector of normal variates
-//’
-//’ @param n the size of the vector.
-//’ @param mean scalar mean.
-//’ @param sd scalar standard deviation.
-//’ @returns A vector of size n with draws from a normal distribution.
+//' Draw a vector of normal variates
+//'
+//' @noRd
+//' @param n the size of the vector.
+//' @param mean scalar mean.
+//' @param sd scalar standard deviation.
+//' @returns A vector of size n with draws from a normal distribution.
 // [[Rcpp::export(rng=true)]]
 NumericVector Crnorm(const int n, const double mean = 0, const double sd = 1) {
   return rnorm(n, mean, sd);
@@ -108,13 +109,14 @@ double do_rgig1(double lambda, double chi, double psi) {
   return as<double>(fun(1, lambda, chi, psi));
 }
 
-//’ Draw a vector of generalized inverse gaussian (GiG) variates
-//’
-//’ @param n the size of the vector.
-//’ @param p (vector of) shape parameters.
-//’ @param a (vector of) shape/scale parameters.
-//’ @param b (vector of) shape/scale parameters.
-//’ @returns A vector of size n with draws from a GiG distribution.
+//' Draw a vector of generalized inverse gaussian (GiG) variates
+//'
+//' @noRd
+//' @param n the size of the vector.
+//' @param p (vector of) shape parameters.
+//' @param a (vector of) shape/scale parameters.
+//' @param b (vector of) shape/scale parameters.
+//' @returns A vector of size n with draws from a GiG distribution.
 // [[Rcpp::export(rng=true)]]
 NumericVector Crgig(const int n, const NumericVector & p, const NumericVector & a, const NumericVector & b) {
   NumericVector out = no_init(n);
@@ -149,17 +151,18 @@ NumericVector Crgig(const int n, const NumericVector & p, const NumericVector & 
   return out;
 }
 
-
-//’ Draw a vector of (approximate) Chinese Restaurant Table (CRT) variates
-// Used in a Gibbs sampler for negative binomial model with modeled shape parameter.
-// The approximation is based on Le Cam's theorem, i.e. the approximation of a convolution
-// of Bernoulli random variables by a Poisson distribution. The sampling is exact for all
-// values of \code{y} less than or equal to \code{2*m}.
-//’
-//’ @param y data vector.
-//’ @param r (inverse) dispersion or shape parameter, can be scalar or vector.
-//’ @param m positive integer; larger values give more accuracy but slower performance.
-//’ @returns A vector of (approximate) CRT variates.
+//' Draw a vector of (approximate) Chinese Restaurant Table (CRT) variates
+//'
+//' Used in a Gibbs sampler for negative binomial model with modeled shape parameter.
+//' The approximation is based on Le Cam's theorem, i.e. the approximation of a convolution
+//' of Bernoulli random variables by a Poisson distribution. The sampling is exact for all
+//' values of \code{y} less than or equal to \code{2*m}.
+//'
+//' @noRd
+//' @param y data vector.
+//' @param r (inverse) dispersion or shape parameter, can be scalar or vector.
+//' @param m positive integer; larger values give more accuracy but slower performance.
+//' @returns A vector of (approximate) CRT variates.
 // [[Rcpp::export(rng=true)]]
 IntegerVector CrCRT(const NumericVector & y, const NumericVector & r, const int m=20) {
   const int n = y.size();

@@ -76,14 +76,14 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
         inverse <- function() cholM
       } else {
         if (type == "ddiMatrix") {
-          cholM <- sqrt(M@x + Imult)  # a vector is sufficient as internal representation
-          update <- function(parent, mult=0) cholM <<- sqrt(parent@x + mult)
+          cholM <- sqrtC(M@x + Imult)  # a vector is sufficient as internal representation
+          update <- function(parent, mult=0) cholM <<- sqrtC(parent@x + mult)
         } else {
-          cholM <- sqrt(M + Imult)
-          update <- function(parent, mult=0) cholM <<- sqrt(parent + mult)
+          cholM <- sqrtC(M + Imult)
+          update <- function(parent, mult=0) cholM <<- sqrtC(parent + mult)
         }
         Ltimes <- function(x, transpose=TRUE) cholM * x
-        logdet <- function() sum(log(cholM))
+        logdet <- function() sum(logC(cholM))
         solve <- function(rhs, system="A") {
           switch(class(rhs)[1L],
             numeric=, matrix =
@@ -133,9 +133,9 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
         Ltimes <- function(x, transpose=TRUE) {
           L <- expand1(cholM, which="L")
           if (transpose)
-            if (is.vector(x)) crossprod_mv(L, x[P]) else crossprod_mv(L, x[P, , drop=FALSE])
+            tm_op(L, if (is.vector(x)) x[P] else x[P, , drop=FALSE])
           else
-            if (is.vector(x)) (L %m*v% x)[iP] else (L %m*v% x)[iP, , drop=FALSE]
+            if (is.vector(x)) m_op(L, x)[iP] else m_op(L, x)[iP, , drop=FALSE]
         }
         solve <- function(rhs, system="A") {
           switch(class(rhs)[1L],
@@ -163,10 +163,7 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
       } else {
         Ltimes <- function(x, transpose=TRUE) {
           L <- expand1(cholM, which="L")
-          if (transpose)
-            if (is.vector(x)) crossprod_mv(L, x) else crossprod_mm(L, x)
-          else
-            if (is.vector(x)) L %m*v% x else L %m*m% x
+          if (transpose) tm_op(L, x) else m_op(L, x)
         }
         solve <- function(rhs, system="A")
           switch(class(rhs)[1L],
@@ -194,12 +191,8 @@ build_chol <- function(M, Imult=0, control=chol_control(), LDL=FALSE) {
         else
           cholM <<- Ccholesky(add_diagC(parent, mult))
       }
-      Ltimes <- function(x, transpose=TRUE) {
-        if (transpose)
-          if (is.vector(x)) cholM %m*v% x else cholM %m*m% x
-        else
-          if (is.vector(x)) crossprod_mv(cholM, x) else crossprod_mm(cholM, x)
-      }
+      Ltimes <- function(x, transpose=TRUE)
+        if (transpose) m_op(cholM, x) else tm_op(cholM, x)
       logdet <- function() as.numeric(determinant.matrix(cholM, logarithm=TRUE)[["modulus"]])
       solve <- function(rhs, system="A") {
         switch(class(rhs)[1L],

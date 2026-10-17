@@ -208,7 +208,7 @@ tab_isPermutation <- function(M) {
   M@Dim[1L] == M@Dim[2L] && !M@num && identical(sort(M@perm), 0:(M@Dim[1L] - 1L))
 }
 
-#' S4 method for row and column subsetting a 'tabMatrix'
+#' S4 methods for row and column subsetting a 'tabMatrix'
 #'
 #' @keywords internal
 #' @param x a tabMatrix object.
@@ -323,6 +323,8 @@ setMethod("rbind2", c("tabMatrix", "tabMatrix"), \(x, y, ...) {
   out
 })
 
+setMethod("rbind2", c("NULL", "tabMatrix"), \(x, y, ...) y)
+setMethod("rbind2", c("tabMatrix", "NULL"), \(x, y, ...) x)
 setMethod("rbind2", c("tabMatrix", "Matrix"), \(x, y, ...)
   rbind2(Ctab2dgC(x), y, ...)
 )
@@ -341,6 +343,8 @@ setMethod("rbind2", c("tabMatrix", "matrix"), \(x, y, ...)
 setMethod("rbind2", c("matrix", "tabMatrix"), \(x, y, ...)
   rbind2(x, Ctab2dgC(y), ...)
 )
+setMethod("cbind2", c("NULL", "tabMatrix"), \(x, y, ...) y)
+setMethod("cbind2", c("tabMatrix", "NULL"), \(x, y, ...) x)
 setMethod("cbind2", c("tabMatrix", "matrix"), \(x, y, ...)
   cbind2(Ctab2dgC(x), y, ...)
 )
@@ -370,8 +374,6 @@ setMethod("anyNA", "tabMatrix", \(x, recursive=FALSE)
 
 setMethod("show", "tabMatrix", \(object) str(object))
 
-# expand a vector, using the indicator part of tabM
-expand_mv <- function(tabM, v) Ctab_numeric_prod(tabM, v, TRUE)
 
 remove_levels <- function(f, l=1L) {
   lvs <- attr(f, "levels")

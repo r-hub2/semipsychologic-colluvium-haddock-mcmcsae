@@ -9,6 +9,7 @@
 #'
 #' @examples
 #' \dontrun{
+#' if (requireNamespace("dbarts", quietly=TRUE)) {
 #' # generate data, based on an example in Friedman (1991)
 #' gendat <- function(n=150L, p=10L, sigma=1) {
 #'   x <- matrix(runif(n * p), n, p)
@@ -36,6 +37,7 @@
 #' )
 #' (summpred <- summary(pred))
 #' plot(test$mu, summpred[, "Mean"]); abline(0, 1)
+#' }
 #' }
 #'
 #' @export
@@ -102,7 +104,7 @@ mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
 
   name_sampler <- paste0(name, "_sampler_")  # trailing '_' --> not stored by MCMCsim even if store.all=TRUE
   lp <- function(p) copy_obj(p[[name]])
-  lp_update <- function(x, plus=TRUE, p) v_update(x, plus, p[[name]])
+  lp_update <- function(x, op=ADD, p) v_op(x, op, p[[name]])
   draws_linpred <- function(obj, units=NULL, chains=NULL, draws=NULL, matrix=FALSE) {
     if (is.null(obj[[name]])) stop("no fitted values for 'brt' component; please re-run MCMCsim with 'store.all=TRUE'")
     if (matrix)
@@ -128,12 +130,6 @@ mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
         #node.prior=normal(k=40),  # passing via ... does not work
         control=control, ...
       )
-      #browser()
-      #str(do.call(dbarts::dbarts, c(
-      #  list(formula=X, data=if (fam[["e.is.res"]]) fam[["y"]] else numeric(fam[["n"]]),
-      #       sigma = if (fam[["sigma.fixed"]]) 1 else NA_real_),
-      #  list(...)
-      #)))  # yields 'incorrect nr of dims' error in $run()
     }
   }
 
@@ -143,11 +139,6 @@ mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
       p[[name_sampler]] <- create_BART_sampler()
     p[[name]] <- p[[name_sampler]]$run(0L, 1L, FALSE)$train[, 1L]
     p
-  }
-
-  if (fam[["family"]] == "multinomial") {
-    edat <- new.env(parent = environment(formula))
-    environment(formula) <- edat
   }
 
   if (keepTrees) {
@@ -161,7 +152,7 @@ mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
     if (is.null(newdata) && is.null(Xnew)) {
       # in-sample prediction
       linpred <- function(p) copy_obj(p[[name]])
-      linpred_update <- function(x, plus=TRUE, p) v_update(x, plus, p[[name]])
+      linpred_update <- function(x, op=ADD, p) v_op(x, op, p[[name]])
     } else {
       if (!keepTrees) stop("out-of-sample prediction requires setting keepTrees=TRUE in brt() model specification")
       if (is.null(newdata)) {
@@ -169,12 +160,7 @@ mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
       } else {
         nnew <- nrow(newdata)
         if (fam[["family"]] == "multinomial") {
-          Xnew <- NULL
-          for (k in seq_len(fam[["Km1"]])) {
-            edat$cat_ <- factor(rep.int(fam$cats[k], nnew), levels=fam$cats[-length(fam$cats)])
-            Xnew <- rbind(Xnew, model_matrix(formula, data=newdata, contrasts.arg="contr.none", sparse=FALSE))
-          }
-          edat$cat_ <- NULL
+          Xnew <- build_multinom_X(formula, newdata, fam[["cats"]][-length(fam[["cats"]])], contrasts.arg="contr.none", sparse=FALSE)
         } else {
           Xnew <- model_matrix(formula, newdata, contrasts.arg="contr.none", sparse=FALSE)
         }
@@ -216,7 +202,7 @@ mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
         }
       }
       linpred <- function(p) tree_predict(p)
-      linpred_update <- function(x, plus=TRUE, p) v_update(x, plus, tree_predict(p))
+      linpred_update <- function(x, op=ADD, p) v_op(x, op, tree_predict(p))
     }
     environment()
   }
@@ -237,14 +223,13 @@ mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
   if (!prior.only) {
     draw <- if (debug) function(p) {browser()} else function(p) {}
     if (sc[["single.block"]]) {
-      # copy_obj not currently needed here
       if (fam[["e.is.res"]])
-        draw <- add(draw, quote(p$e_ <- copy_obj(fam[["y"]])))
+        draw <- add(draw, bquote(v_op(p[["e_"]], .(SET), fam[["y"]])))
     } else {
       if (fam[["e.is.res"]])
-        draw <- add(draw, bquote(v_update(p[["e_"]], TRUE, p[[.(name)]])))
+        draw <- add(draw, bquote(v_op(p[["e_"]], .(ADD), p[[.(name)]])))
       else
-        draw <- add(draw, bquote(v_update(p[["e_"]], FALSE, p[[.(name)]])))
+        draw <- add(draw, bquote(v_op(p[["e_"]], .(SUB), p[[.(name)]])))
     }
     if (fam[["modeled.Q"]])
       draw <- add(draw, bquote(p[[.(name_sampler)]]$setWeights(p[["Q_"]])))
@@ -283,12 +268,12 @@ mc_brt <- function(formula, X=NULL, n.trees=75L, name="",
       draw <- add(draw, bquote(p[[.(name_trees)]]$value[p[[.(name_trees)]]$var == -1L] <- min.y/n.trees + range.y * (p[[.(name_trees)]]$value[p[[.(name_trees)]]$var == -1L] + 0.5/n.trees)))
     }
     if (fam[["e.is.res"]]) {
-      draw <- add(draw, bquote(v_update(p[["e_"]], FALSE, p[[.(name)]])))
+      draw <- add(draw, bquote(v_op(p[["e_"]], .(SUB), p[[.(name)]])))
     } else {
       if (sc[["single.block"]])
         draw <- add(draw, bquote(p$e_ <- p[[.(name)]]))
       else
-        draw <- add(draw, bquote(v_update(p[["e_"]], TRUE, p[[.(name)]])))
+        draw <- add(draw, bquote(v_op(p[["e_"]], .(ADD), p[[.(name)]])))
     }
     draw <- add(draw, quote(p))
   }

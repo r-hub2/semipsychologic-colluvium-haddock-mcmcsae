@@ -34,7 +34,7 @@ plot.dc <- function(x, nrows, ncols, ask=FALSE, ...) {
     drawsi <- do.call(cbind, drawsi)  # niter x nchain matrix
     lab <- if (is.null(labs)) "" else labs[i]
     trace_plot(drawsi, ylab=lab)
-    drawsi <- as.vector(drawsi)  # concatenate the chains
+    drawsi <- vec(drawsi)  # concatenate the chains
     plot(density(drawsi, ...), main=lab)
     acf(drawsi, main="")  # note that the concatenation of chains disturbs the acf a little, especially if the chains are short
   }

@@ -21,7 +21,6 @@ S3method(weights,mcdraws)
 export("%m*v%")
 export("labels<-")
 export(AR1)
-export(CG)
 export(CG_control)
 export(GMRF_structure)
 export(MCMCsim)
@@ -31,6 +30,8 @@ export(R_hat)
 export(SBC_test)
 export(acceptance_rates)
 export(aggrMatrix)
+export(apply_m)
+export(apply_tm)
 export(bayesR2)
 export(binomial_control)
 export(brt)
@@ -42,7 +43,6 @@ export(computeDesignMatrix)
 export(compute_DIC)
 export(compute_WAIC)
 export(create_TMVN_sampler)
-export(create_cMVN_sampler)
 export(create_sampler)
 export(crossprod_mv)
 export(custom)
@@ -55,6 +55,7 @@ export(f_multinomial)
 export(f_negbinomial)
 export(f_poisson)
 export(f_student_t)
+export(gamma_control)
 export(gaussian_control)
 export(gen)
 export(gen_control)
@@ -102,8 +103,8 @@ export(sampler_control)
 export(season)
 export(set_MH)
 export(set_constraints)
+export(set_rng)
 export(setup_cluster)
-export(sim_marg_var)
 export(spatial)
 export(splines)
 export(stop_cluster)
@@ -111,6 +112,8 @@ export(student_t_control)
 export(to_draws_array)
 export(to_mcmc)
 export(transform_dc)
+export(upd_m)
+export(upd_tm)
 export(vfac)
 export(vreg)
 export(waic)
@@ -123,99 +126,116 @@ importClassesFrom(Matrix,dgCMatrix)
 importClassesFrom(Matrix,dsCMatrix)
 importClassesFrom(Matrix,generalMatrix)
 importClassesFrom(Matrix,sparseMatrix)
-importFrom(Matrix,.M2m)
-importFrom(Matrix,.diag2sparse)
-importFrom(Matrix,.m2sparse)
-importFrom(Matrix,.updateCHMfactor)
-importFrom(Matrix,Diagonal)
-importFrom(Matrix,KhatriRao)
-importFrom(Matrix,Matrix)
-importFrom(Matrix,bandSparse)
-importFrom(Matrix,bdiag)
-importFrom(Matrix,coerce)
-importFrom(Matrix,diag)
-importFrom(Matrix,drop0)
-importFrom(Matrix,expand1)
-importFrom(Matrix,forceSymmetric)
-importFrom(Matrix,invertPerm)
-importFrom(Matrix,isDiagonal)
-importFrom(Matrix,nnzero)
-importFrom(Matrix,rsparsematrix)
-importFrom(Matrix,sparseMatrix)
+importFrom(Matrix,
+  .M2m,
+  .diag2sparse,
+  .m2sparse,
+  .updateCHMfactor,
+  Diagonal,
+  KhatriRao,
+  Matrix,
+  bandSparse,
+  bdiag,
+  coerce,
+  diag,
+  drop0,
+  expand1,
+  forceSymmetric,
+  invertPerm,
+  isDiagonal,
+  nnzero,
+  rsparsematrix,
+  sparseMatrix
+)
 importFrom(Rcpp,evalCpp)
-importFrom(collapse,allNA)
-importFrom(collapse,allv)
-importFrom(collapse,any_duplicated)
-importFrom(collapse,anyv)
-importFrom(collapse,dapply)
-importFrom(collapse,fdroplevels)
-importFrom(collapse,fmatch)
-importFrom(collapse,fmean.default)
-importFrom(collapse,fmean.matrix)
-importFrom(collapse,fquantile)
-importFrom(collapse,fsd.matrix)
-importFrom(collapse,fsum.matrix)
-importFrom(collapse,fvar.matrix)
-importFrom(collapse,qF)
-importFrom(collapse,whichNA)
-importFrom(collapse,whichv)
-importFrom(graphics,abline)
-importFrom(graphics,axis)
-importFrom(graphics,legend)
-importFrom(graphics,lines)
-importFrom(graphics,matplot)
-importFrom(graphics,pairs)
-importFrom(graphics,par)
-importFrom(graphics,plot)
-importFrom(graphics,plot.new)
-importFrom(graphics,points)
-importFrom(graphics,segments)
-importFrom(loo,loo)
-importFrom(loo,waic)
-importFrom(methods,as)
-importFrom(methods,cbind2)
-importFrom(methods,new)
-importFrom(methods,rbind2)
-importFrom(methods,setAs)
-importFrom(methods,setClass)
-importFrom(methods,setMethod)
-importFrom(methods,show)
-importFrom(methods,signature)
-importFrom(stats,acf)
-importFrom(stats,as.formula)
-importFrom(stats,density)
-importFrom(stats,fitted)
-importFrom(stats,make.link)
-importFrom(stats,mvfft)
-importFrom(stats,nextn)
-importFrom(stats,optim)
-importFrom(stats,pnorm)
-importFrom(stats,predict)
-importFrom(stats,rWishart)
-importFrom(stats,rbeta)
-importFrom(stats,rbinom)
-importFrom(stats,rchisq)
-importFrom(stats,residuals)
-importFrom(stats,rexp)
-importFrom(stats,rgamma)
-importFrom(stats,rnbinom)
-importFrom(stats,rnorm)
-importFrom(stats,rpois)
-importFrom(stats,rt)
-importFrom(stats,runif)
-importFrom(stats,sd)
-importFrom(stats,setNames)
-importFrom(stats,terms)
-importFrom(stats,update.formula)
-importFrom(stats,var)
-importFrom(stats,weights)
-importFrom(utils,getFromNamespace)
-importFrom(utils,modifyList)
-importFrom(utils,object.size)
-importFrom(utils,setTxtProgressBar)
-importFrom(utils,str)
-importFrom(utils,tail)
-importFrom(utils,txtProgressBar)
+importFrom(collapse,
+  allNA,
+  allv,
+  any_duplicated,
+  anyv,
+  dapply,
+  fdroplevels,
+  fmatch,
+  fmean.default,
+  fmean.matrix,
+  fquantile,
+  fsd.default,
+  fsd.matrix,
+  fsum.default,
+  fsum.matrix,
+  fvar.matrix,
+  qF,
+  vec,
+  whichNA,
+  whichv
+)
+importFrom(graphics,
+  abline,
+  axis,
+  legend,
+  lines,
+  matplot,
+  pairs,
+  par,
+  plot,
+  plot.new,
+  points,
+  segments
+)
+importFrom(loo,
+  loo,
+  waic
+)
+importFrom(methods,
+  as,
+  cbind2,
+  new,
+  rbind2,
+  setAs,
+  setClass,
+  setMethod,
+  show,
+  signature
+)
+importFrom(stats,
+  acf,
+  as.formula,
+  density,
+  fitted,
+  make.link,
+  mvfft,
+  nextn,
+  optim,
+  pnorm,
+  predict,
+  rWishart,
+  rbeta,
+  rbinom,
+  rchisq,
+  residuals,
+  rexp,
+  rgamma,
+  rnbinom,
+  rnorm,
+  rpois,
+  rt,
+  runif,
+  sd,
+  setNames,
+  terms,
+  update.formula,
+  var,
+  weights
+)
+importFrom(utils,
+  getFromNamespace,
+  modifyList,
+  object.size,
+  setTxtProgressBar,
+  str,
+  tail,
+  txtProgressBar
+)
 importMethodsFrom(Matrix,"%*%")
 importMethodsFrom(Matrix,Cholesky)
 importMethodsFrom(Matrix,as.matrix)

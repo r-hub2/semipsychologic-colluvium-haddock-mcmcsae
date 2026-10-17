@@ -1,8 +1,7 @@
 
 #' Set up a function for direct sampling from a constrained multivariate normal distribution
 #'
-#'
-#' @export
+#' @noRd
 #' @param D factor of precision matrix Q such that Q=D'D.
 #' @param Q precision matrix.
 #' @param update.Q whether to update (D and) Q for each draw.
@@ -103,7 +102,7 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
     qstar <- nrow(D)
     rm(Q.expanded)
     draw <- function(u) {
-      rhs[Iq] <- crossprod_mv(D, Crnorm(qstar))
+      rhs[Iq] <- tm_op(D, Crnorm(qstar))
       cholQ$solve(rhs)[Iq]
     }
     formals(draw) <- alist()
@@ -111,10 +110,9 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
   environment()
 }
 
-
-#' Set up a a function for direct sampling from a constrained multivariate normal distribution
+#' Set up a function for direct sampling from a constrained multivariate normal distribution
 #'
-#' @keywords internal
+#' @noRd
 #' @param mbs block component containing several model components.
 #' @param X design matrix.
 #' @param Q precision matrix.
@@ -124,7 +122,7 @@ create_cMVN_sampler <- function(D=NULL, Q=NULL, update.Q=FALSE, R=NULL, r=NULL,
 #' @param name name of the cMVN vector parameter.
 #' @param control list with numerical control options, which can be set using function \code{\link{cMVN_control}}.
 #' @returns An environment with precomputed quantities and functions for sampling
-#'   from a multivariate normal distribution subject to equality constraints.
+#'  from a multivariate normal distribution subject to equality constraints.
 create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, fam, name="x", control) {
 
   if (name == "") stop("empty name")
@@ -139,7 +137,7 @@ create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, fam, name="x", 
   # for multi-response family there is no global sigma_ parameter
   draw <- function(p, Xy, X) {
     if (is.null(p[["sigma_"]])) sigma <- 1 else sigma <- p[["sigma_"]]
-    u <- Xy + sigma * crossprod_mv(X, fam$drawMVNvarQ(p))
+    u <- Xy + sigma * tm_op(X, fam$drawMVNvarQ(p))
     for (mc in mbs) {
       if (mc[["type"]] == "gen")
         u[mc$block.i] <- u[mc$block.i] + sigma^2 * mc$drawMVNvarQ(p)
@@ -168,8 +166,8 @@ create_block_cMVN_sampler <- function(mbs, X, Q, R=NULL, r=NULL, fam, name="x", 
 # mv <- sim_marg_var(D=D_season(n, 12), R=R_season(n, 12))
 # plot(seq_len(n), mv)
 #
-#' @export
-#' @param D factor of precision matrix Q such that Q=D'D.
+#' @noRd
+#' @param D factor of precision matrix Q such that \eqn{Q=D'D}.
 #' @param Q precision matrix.
 #' @param R equality restriction matrix.
 #' @param r rhs vector for equality constraints \eqn{R'x = r}, where \eqn{R'} denotes the transpose of R.

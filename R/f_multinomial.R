@@ -111,7 +111,7 @@ ff_multinomial <- function(link="logit", n.trial=NULL, K=NULL,
     ny <- if (length(ny0) == 1L) rep.int(ny0, n_row(data)) else ny0
     ny <- get_sequential_trials(ny, y, K - 1L)
     # remove from y the part corresponding to the last category
-    y <- as.vector(y[, -length(cats)])
+    y <- vec(y[, -length(cats)])
   }
   if (any(abs(ny0 - round(ny0)) > .tol)) {
     warn("one or more non-integral number of trials")
@@ -140,11 +140,12 @@ ff_multinomial <- function(link="logit", n.trial=NULL, K=NULL,
     }
     if (sc[["cMVN.or.CG"]]) {
       # set up a function that multiplies by L Chol factor of Q, for sampling from N(., Q)
-      cholQ <- build_chol(runif(n, 0.9, 1.1))
+      draw_normal <- sc[["rng"]]$draw_normal
+      cholQ <- build_chol(sc[["rng"]]$draw_unif(n, 0.9, 1.1))
       # draw from MVN with variance(!) Q
       drawMVNvarQ <- function(p) {
         cholQ$update(p[["Q_"]])
-        cholQ$Ltimes(Crnorm(n), transpose=FALSE)
+        cholQ$Ltimes(draw_normal(n), transpose=FALSE)
       }
     }
     if (any(abs(y - round(y)) > .tol)) warn("one or more non-integral number of successes")
@@ -246,7 +247,7 @@ get_sequential_trials <- function(ny, y, ncols) {
   out <- matrix(NA_integer_, length(ny), ncols)
   out[, 1L] <- ny
   for (j in seq_len(ncols - 1L)) out[, j + 1L] <- out[, j] - y[, j]
-  as.vector(out)
+  vec(out)
 }
 
 #' Set computational options for the sampling algorithms
@@ -279,4 +280,16 @@ check_multinomial_control <- function(control) {
   if (any(is.na(control[["PG.approx.m"]]) | control[["PG.approx.m"]] < -2L | is.infinite(control[["PG.approx.m"]])))
     stop("'PG.approx.m' value(s) out of range or missing")
   control
+}
+
+# create design matrix for multinomial model by concatenating over categories
+build_multinom_X <- function(formula, data, cats, ...) {
+  edat <- new.env(parent = environment(formula))
+  environment(formula) <- edat
+  n0 <- n_row(data)
+  Xlist <- lapply(seq_along(cats), function(k) {
+    edat$cat_ <- factor(rep.int(cats[k], n0), levels=cats)
+    model_matrix(formula, data, ...)
+  })
+  do.call(rbind, Xlist)
 }

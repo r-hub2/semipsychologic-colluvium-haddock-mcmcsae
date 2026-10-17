@@ -13,7 +13,10 @@ b <- c(0.8, 2, 1)
 df$y <- rbinom(n, 1, prob=1/(1 + exp(-(b[1] + b[2]*df$x1 + b[3]*df$x2))))
 
 test_that("logistic regression works", {
-  expect_warning(sampler <- create_sampler(y ~ reg(~ x1+x2, Q0=0.1), family="binomial", data=df), "deprecated")
+  sampler <- create_sampler(
+    y ~ reg(~ x1+x2, prior=pr_normal(precision=0.1)),
+    family="binomial", data=df
+  )
   expect_equal(sampler$mod[[1L]]$prior$precision, Diagonal(x=rep.int(0.1, 3)))
   sim <- MCMCsim(sampler, n.iter=600, burnin=250, n.chain=2, verbose=FALSE)
   expect_contains(par_names(sim), "llh_")

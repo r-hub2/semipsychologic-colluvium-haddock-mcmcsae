@@ -51,9 +51,9 @@ mc_mc_offset <- function(formula, value=NULL, name="",
     else
       lp <<- function(p) copy_obj(offset)
     if (allv(offset, 0))
-      lp_update <<- function(x, plus=TRUE, p) NULL
+      lp_update <<- function(x, op=ADD, p) NULL
     else
-      lp_update <<- function(x, plus=TRUE, p) v_update(x, plus, offset)
+      lp_update <<- function(x, op=ADD, p) v_op(x, op, offset)
   }
 
   make_predict <- function(newdata=NULL, Xnew=NULL, verbose=TRUE) {
@@ -64,7 +64,7 @@ mc_mc_offset <- function(formula, value=NULL, name="",
         nnew <- n
       } else {
         if (!is.vector(Xnew) || ncol(Xnew) != 1L) stop("wrong input for 'Xnew'")
-        newoffset <- as.vector(Xnew)
+        newoffset <- vec(Xnew)
         nnew <- length(newoffset)
       }
     } else {
@@ -80,9 +80,9 @@ mc_mc_offset <- function(formula, value=NULL, name="",
     else
       linpred <- function(p) copy_obj(newoffset)
     if (allv(newoffset, 0))
-      linpred_update <- function(x, plus=TRUE, p) NULL
+      linpred_update <- function(x, op=ADD, p) NULL
     else
-      linpred_update <- function(x, plus=TRUE, p) v_update(x, plus, newoffset)
+      linpred_update <- function(x, op=ADD, p) v_op(x, op, newoffset)
     environment()
   }
   # assume that lp, lp_update are used for model fitting only (--> include internal offset)
@@ -91,9 +91,9 @@ mc_mc_offset <- function(formula, value=NULL, name="",
   else
     lp <- function(p) copy_obj(offset)
   if (allv(offset, 0))
-    lp_update <- function(x, plus=TRUE, p) NULL
+    lp_update <- function(x, op=ADD, p) NULL
   else
-    lp_update <- function(x, plus=TRUE, p) v_update(x, plus, offset)
+    lp_update <- function(x, op=ADD, p) v_op(x, op, offset)
   scalar <- length(pred.offset) == 1L
   # draws_linpred method acts on (subset of) mcdraws object, used in fitted() and pointwise log-likelihood llh_i functions
   # here internal offset (Poisson approx) is excluded

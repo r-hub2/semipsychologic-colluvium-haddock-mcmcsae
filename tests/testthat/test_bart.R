@@ -1,5 +1,6 @@
 
 context("Bayesian Additive Regression Trees")
+skip_if_not_installed("dbarts")
 
 # for reproducibility, even across platforms:
 set.seed(1, kind="Mersenne-Twister", normal.kind="Inversion")

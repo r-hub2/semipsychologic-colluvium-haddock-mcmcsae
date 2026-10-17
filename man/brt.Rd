@@ -59,6 +59,7 @@ to have R package \pkg{dbarts} installed.
 }
 \examples{
 \dontrun{
+if (requireNamespace("dbarts", quietly=TRUE)) {
 # generate data, based on an example in Friedman (1991)
 gendat <- function(n=150L, p=10L, sigma=1) {
   x <- matrix(runif(n * p), n, p)
@@ -86,6 +87,7 @@ pred <- predict(sim, newdata=test,
 )
 (summpred <- summary(pred))
 plot(test$mu, summpred[, "Mean"]); abline(0, 1)
+}
 }
 
 }

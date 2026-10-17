@@ -1,4 +1,14 @@
 
+version 0.8.2
+- small changes to C++ code for mapped sparse matrices to be compatible with
+  Eigen 5.0 as used by upcoming version of RcppEigen
+- added option of Polya-Gamma data augmentation for an approximate Gibbs sampler
+  for gamma sampling distribution family
+- support for faster rng via R package randompack
+- deprecated arguments b0 and Q0 for normal prior mean and precision have been
+  removed; now they must be specified through function pr_normal
+
+
 version 0.8.1
 - new family "multi" for multi-response models, see f_multi
 - Student-t sampling distribution now supported more directly
@@ -11,7 +21,6 @@ version 0.8.1
   probit Bernoulli models
 - added as.data.frame method to summary of mcdraws and dc
   objects, for easier combining, analysing and viewing
-- several small speed-ups
 - fixed several bugs
 - more examples, checks and tests
 

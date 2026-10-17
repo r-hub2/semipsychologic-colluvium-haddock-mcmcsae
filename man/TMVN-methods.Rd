@@ -84,7 +84,7 @@ options cannot be set for this use case.}
 \item{PG.approx.m}{see \code{\link{sampler_control}}.}
 }
 \value{
-A method object, for internal use only.
+A method object for internal use.
 }
 \description{
 These functions are intended for use in the \code{method} argument of \code{\link{create_TMVN_sampler}}.

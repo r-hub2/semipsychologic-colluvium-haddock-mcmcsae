@@ -9,7 +9,6 @@ glreg(
   formula = NULL,
   remove.redundant = FALSE,
   prior = NULL,
-  Q0 = NULL,
   data = NULL,
   name = ""
 )
@@ -26,11 +25,6 @@ Default is \code{FALSE}.}
 \item{prior}{prior specification for the group-level effects. Currently only
 normal priors with mean 0 can be specified, using function \code{\link{pr_normal}}.}
 
-\item{Q0}{prior precision matrix for the group-level effects. The default is a
-zero matrix corresponding to a noninformative improper prior.
-DEPRECATED, please use argument \code{prior} instead, i.e.
-\code{prior = pr_normal(precision = Q0.value)}.}
-
 \item{data}{group-level data frame in which the group-level variables specified in
 \code{formula} are looked up.}
 
@@ -40,7 +34,7 @@ the name of the corresponding generic random effects component appended by '_gl'
 }
 \value{
 An object with precomputed quantities for sampling from
- prior or conditional posterior distributions for this model component. Only intended
+ prior or conditional posterior distributions for this model component, intended
  for internal use by other package functions.
 }
 \description{

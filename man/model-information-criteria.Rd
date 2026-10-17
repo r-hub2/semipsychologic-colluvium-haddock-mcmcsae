@@ -50,8 +50,9 @@ slower but uses much less memory.}
 used by \code{waic.mcdraws}.}
 
 \item{r_eff}{whether to compute relative effective sample size estimates
-for the likelihood of each observation. This takes more time, but should
-result in a better PSIS approximation. See \code{\link[loo]{loo}}.}
+for the likelihood of each observation. This takes more time, but allows for
+better estimates of PSIS effective sample sizes and Monte Carlo error.
+See \code{\link[loo]{loo}}.}
 }
 \value{
 For \code{compute_DIC} a vector with the deviance information criterion and

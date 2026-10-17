@@ -112,7 +112,7 @@ f_negbinomial <- function(link="log", shape.vec = ~ 1, inv.shape.prior = pr_invc
     gig = {},
     stop("unsupported prior")
   )
-  inv.shape.prior$init(n=1L)
+  inv.shape.prior$init(1L)
   list(family="negbinomial", link=link, shape.vec=shape.vec,
        inv.shape.prior=inv.shape.prior, control=control, `_raw_`=TRUE)
 }
@@ -132,7 +132,7 @@ ff_negbinomial <- function(link="log", shape.vec = ~ 1, inv.shape.prior = pr_inv
   shape.fixed <- inv.shape.prior[["type"]] == "fixed"
   shape.scalar <- intercept_only(shape.vec)
   if (shape.fixed)
-    f_mean <- function(eta) shape0 * exp(eta)
+    f_mean <- function(eta) shape0 * expC(eta)
   else
     f_mean <- function(eta) stop("TODO fitted values or residuals for negative binomial family with inferred shape parameter")
   scale.e <- 2.5
@@ -179,15 +179,11 @@ ff_negbinomial <- function(link="log", shape.vec = ~ 1, inv.shape.prior = pr_inv
   }
   if (!prior.only) {
     if (multifam) {
-      draw <- function(p) {
-        if (sc[["compute.llh"]]) p$llh_ <- p[["llh_"]] + llh(p)
-        e_ <- p[["e_"]][sub]
-      }
+      draw <- if (sc[["compute.llh"]]) function(p) {p$llh_ <- p[["llh_"]] + llh(p)} else function(p) {}
+      draw <- add(draw, quote(e_ <- p[["e_"]][sub]))
     } else {
-      draw <- function(p) {
-        if (sc[["compute.llh"]]) p$llh_ <- llh(p)
-        e_ <- p[["e_"]]
-      }
+      draw <- if (sc[["compute.llh"]]) function(p) {p$llh_ <- llh(p)} else function(p) {}
+      draw <- add(draw, quote(e_ <- p[["e_"]]))
     }
     start <- function(p) {}
     if (shape.fixed) {
@@ -274,11 +270,12 @@ ff_negbinomial <- function(link="log", shape.vec = ~ 1, inv.shape.prior = pr_inv
     start <- add(start, quote(p))
     if (sc[["cMVN.or.CG"]]) {
       # set up a function that multiplies by L Chol factor of Q, for sampling from N(., Q)
-      cholQ <- build_chol(runif(n, 0.9, 1.1))
+      draw_normal <- sc[["rng"]]$draw_normal
+      cholQ <- build_chol(sc[["rng"]]$draw_unif(n, 0.9, 1.1))
       # draw from MVN with variance(!) Q
       drawMVNvarQ <- function(p) {
         cholQ$update(if (multifam) p[["Q_"]][sub] else p[["Q_"]])
-        cholQ$Ltimes(Crnorm(n), transpose=FALSE)
+        cholQ$Ltimes(draw_normal(n), transpose=FALSE)
       }
     }
     if (!is.numeric(y)) stop("non-numeric target value not allowed in case of negative binomial sampling distribution")
@@ -334,13 +331,13 @@ ff_negbinomial <- function(link="log", shape.vec = ~ 1, inv.shape.prior = pr_inv
     if (is.null(weights)) {
       function(p, lp) {
         size <- get_shape(p)
-        rnbinom(nn, size, mu=size*exp(lp))
+        rnbinom(nn, size, mu=size*expC(lp))
       }
       #rnbinom(length(lp), size=get_shape(p), prob=1/(1 + exp(lp)))
     } else {
       function(p, lp) {
         size <- weights * get_shape(p)
-        rnbinom(nn, size, mu=size*exp(lp))
+        rnbinom(nn, size, mu=size*expC(lp))
       }
     }
   }

@@ -5,10 +5,11 @@
 #'
 #' @export
 #' @param n.cores the number of cpu cores to use.
-#' @param seed optional random seed for reproducibility.
+#' @param seed no longer supported. A seed can be set in \code{\link{create_sampler}}, \code{\link{create_TMVN_sampler}}, or \code{\link{generate_data}}.
 #' @param export a character vector with names of objects to export to the workers.
 #' @returns An object representing the cluster.
 setup_cluster <- function(n.cores=NULL, seed=NULL, export=NULL) {
+  if (!is.null(seed)) stop("setting a seed in setup_cluster is no longer supported; see the help page")
   if (is.null(n.cores)) {
     n.cores <- max(1L, parallel::detectCores() - 1L)
   } else {
@@ -20,7 +21,7 @@ setup_cluster <- function(n.cores=NULL, seed=NULL, export=NULL) {
   parallel::clusterCall(cl, \(x) .libPaths(x), .libPaths())
   parallel::clusterEvalQ(cl, library(mcmcsae))
   # set up independent RNG streams, selecting L'Ecuyer-CMRG RNG
-  if (!is.null(seed)) parallel::clusterSetRNGStream(cl, seed)
+  parallel::clusterSetRNGStream(cl)
   if (!is.null(export)) parallel::clusterExport(cl, export)
   cl
 }
@@ -224,6 +225,7 @@ split_iters <- function(obj, iters=NULL, parts=NULL) {
   if (all(obj_class != c("dc", "mcdraws"))) stop("unsupported class '", obj_class, "'")
   for (k in seq_along(out)) {
     if (obj_class == "mcdraws") {
+      out[[k]][["_chunk.id"]] <- k
       out[[k]][["_info"]] <- obj[["_info"]]
       out[[k]][["_info"]]$n.draw <- length(its[[k]])
       out[[k]][["_model"]] <- obj[["_model"]]

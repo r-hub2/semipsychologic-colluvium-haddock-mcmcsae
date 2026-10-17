@@ -105,8 +105,9 @@ of workers in that cluster.}
 \item{cl}{an existing cluster can be passed for parallel computation. If \code{NULL} and
 \code{n.cores > 1}, a new cluster is created.}
 
-\item{seed}{a random seed (integer). For parallel computation it is used to independently
-seed RNG streams for all workers.}
+\item{seed}{no longer supported. Use \code{\link{set_rng}} instead to set
+random number generator options including a seed through \code{\link{create_sampler}}'s
+\code{control} argument.}
 
 \item{export}{a character vector with names of objects to export to the workers. This may
 be needed for parallel execution if expressions in \code{pred} depend on global variables.}

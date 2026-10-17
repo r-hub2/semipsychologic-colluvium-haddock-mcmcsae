@@ -67,6 +67,7 @@
 #'  options to non-default values, see \code{\link{TMVN-methods}}.
 #' @param reduce whether to a priori restrict the simulation to the subspace defined by the
 #'  equality constraints.
+#' @param rng random number generator settings, see \code{\link{set_rng}}. 
 #' @param chol.control options for Cholesky decomposition, see \code{\link{chol_control}}.
 #' @param debug if \code{TRUE} a breakpoint is set at the beginning of the TMVN sampling
 #'  function \code{draw}.
@@ -113,10 +114,13 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
                                 constraints=NULL,
                                 check.constraints = FALSE,
                                 method=NULL, reduce=NULL,
-                                chol.control=chol_control(), debug=FALSE) {
+                                rng=set_rng(), chol.control=chol_control(), debug=FALSE) {
 
   if (name == "") stop("empty name")
   store_default <- function(prior.sampler=FALSE) name  # for direct use of create_TMVN_sampler
+
+  draw_unif <- rng[["draw_unif"]]
+  draw_normal <- rng[["draw_normal"]]
 
   if (!update.Q)
     Q <- economizeMatrix(Q, symmetric=TRUE, drop.zeros=TRUE, check=TRUE)
@@ -226,7 +230,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     if (all(method[["name"]] != c("softTMVN", "HMCZigZag"))) rm(Q)
 
     if (!is.null(Xy)) {
-      mu <- if (isTRUE(method[["use.cholV"]])) V %m*v% Xy else cholQ$solve(Xy)
+      mu <- if (isTRUE(method[["use.cholV"]])) m_op(V, Xy) else cholQ$solve(Xy)
     }
 
     if (ineq) {
@@ -301,7 +305,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     else {
       if (update.mu) {
         if (method[["use.cholV"]])
-          draw <- add(draw, bquote(x <- V %m*v% Xy + drawMVN_cholV(.(n), cholV, scale)))
+          draw <- add(draw, bquote(x <- m_op(V, Xy, drawMVN_cholV(.(n), cholV, scale), .(ADD))))
         else
           draw <- add(draw, quote(x <- drawMVN_cholQ(cholQ, Xy, sd=scale)))
       } else {
@@ -319,7 +323,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     if (ineq) {
       # transform to zero mean unit covariance matrix frame
       # inequalities U'v >= u
-      u <- if (zero.mu) s else if (is.null(s)) -crossprod_mv(S, mu) else s - crossprod_mv(S, mu)
+      u <- if (zero.mu) s else if (is.null(s)) -tm_op(S, mu) else s - tm_op(S, mu)
       # drop very small numbers in U as they give problems in the Gibbs sampler
       # and use transpose for faster col access in sparse case
       Ut <- economizeMatrix(
@@ -330,9 +334,9 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
 
       eps <- method[["eps"]]
       if (is.null(u))
-        draw <- add(draw, quote(ustar <- -(Ut %m*v% x)))
+        draw <- add(draw, quote(ustar <- -m_op(Ut, x)))
       else
-        draw <- add(draw, quote(ustar <- u - Ut %m*v% x))
+        draw <- add(draw, quote(ustar <- u - m_op(Ut, x)))
       # draw from truncated univariate normal full conditionals
       if (method[["slice"]]) {
         if (is.matrix(Ut))
@@ -346,7 +350,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
           draw <- add(draw, quote(x <- Crtmvn_Gibbs_sparse(x, Ut, ustar, eps)))
       }
     } else {
-      draw <- add(draw, bquote(x <- Crnorm(.(n.frame))))
+      draw <- add(draw, bquote(x <- draw_normal(.(n.frame))))
     }
   }  # END Gibbs
 
@@ -359,7 +363,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       rm(Q)
       V <- cholQ$inverse()
       # define Diagonal matrix template to hold omega.tilde for use in sparse matrix templated sum
-      D.omega.tilde.inv <- Cdiag(10*runif(ncS, 0.9, 1.1))  # choose large enough so that the matrix template below is pos-def
+      D.omega.tilde.inv <- Cdiag(10*draw_unif(ncS, 0.9, 1.1))  # choose large enough so that the matrix template below is pos-def
       matsum <- make_mat_sum(M0=economizeMatrix(crossprod_sym(S, V), symmetric=TRUE, drop.zeros=TRUE), M1=D.omega.tilde.inv)
       ch <- build_chol(matsum(D.omega.tilde.inv), control=chol.control)
       VS <- economizeMatrix(V %*% S, drop.zeros=TRUE)
@@ -374,12 +378,12 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       }
     } else {
       St <- t(S)  # for use in crossprod_sym
-      if (!zero.mu) Qmu <- Q %m*v% mu
+      if (!zero.mu) Qmu <- m_op(Q, mu)
       matsum <- make_mat_sum(
-        M0 = Q, M1 = crossprod_sym(St, runif(ncS, 0.9, 1.1)),
+        M0 = Q, M1 = crossprod_sym(St, draw_unif(ncS, 0.9, 1.1)),
         force.sparse = eq && inherits(R, "CsparseMatrix")
       )
-      ch <- build_chol(matsum(crossprod_sym(St, runif(ncS, 0.9, 1.1))), control=chol.control)
+      ch <- build_chol(matsum(crossprod_sym(St, draw_unif(ncS, 0.9, 1.1))), control=chol.control)
       if (eq && !reduce) {
         # conditioning by Kriging to deal with equality constraints R'x = r
         # update.Q, dense cholQ --> faster to have dense R (and S) as well
@@ -393,9 +397,9 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     sharpness_squared <- sharpness^2
     # 1. draw Polya-Gamma mixture precisions
     if (is.null(s))
-      draw <- add(draw, quote(discr <- crossprod_mv(S, x)))
+      draw <- add(draw, quote(discr <- tm_op(S, x)))
     else
-      draw <- add(draw, quote(discr <- crossprod_mv(S, x) - s))
+      draw <- add(draw, quote(discr <- tm_op(S, x) - s))
     draw <- draw |>
       add(quote(omega <- rPolyaGamma(1, sharpness * discr))) |>
       # 2. draw vector of coefficients
@@ -413,16 +417,16 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         draw <- add(draw, quote(y1 <- drawMVN_cholQ(cholQ)))
       else
         draw <- add(draw, quote(y1 <- mu + drawMVN_cholQ(cholQ)))
-      draw <- add(draw, bquote(y2 <- Crnorm(.(length(s))) * invsqrt(omega)))
+      draw <- add(draw, bquote(y2 <- draw_normal(.(length(s))) * sqrtC(omega, inv=TRUE)))
       sharpness_inv <- 1/sharpness
-      draw <- add(draw, quote(x <- y1 + VS %m*v% ch$solve(sharpness_inv * (alpha - y2) - crossprod_mv(S, y1))))
+      draw <- add(draw, quote(x <- y1 + m_op(VS, ch$solve(sharpness_inv * (alpha - y2) - tm_op(S, y1)))))
       if (eq && !reduce) {
         draw <- add(draw, quote(cholRVxR$update(matsum_RVxR(M1=crossprod_sym2(SVR, ch$solve(SVR)), w1=-1))))
         if (is.null(r))
-          draw <- add(draw, quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(crossprod_mv(R, x)))))
+          draw <- add(draw, quote(temp <- m_op(V, m_op(R, cholRVxR$solve(tm_op(R, x))))))
         else
-          draw <- add(draw, quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(crossprod_mv(R, x) - r))))
-        draw <- add(draw, quote(x <- x - temp + V %m*v% (S %m*v% ch$solve(crossprod_mv(S, temp)))))
+          draw <- add(draw, quote(temp <- m_op(V, m_op(R, cholRVxR$solve(tm_op(R, x) - r)))))
+        draw <- add(draw, quote(x <- m_op(V, m_op(S, ch$solve(tm_op(S, temp))), x - temp, ADD)))
       }
     } else {
       if (is.null(s))
@@ -430,9 +434,9 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       else
         draw <- add(draw, quote(alpha <- 0.5 * sharpness + s * omega.tilde))
       if (zero.mu)
-        draw <- add(draw, quote(Xy <- crossprod_mv(St, alpha)))
+        draw <- add(draw, quote(Xy <- tm_op(St, alpha)))
       else
-        draw <- add(draw, quote(Xy <- crossprod_mv(St, alpha) + Qmu))
+        draw <- add(draw, quote(Xy <- tm_op(St, alpha) + Qmu))
       if (is.null(method[["CG"]])) {
         # Cholesky
         draw <- draw |>
@@ -447,9 +451,9 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         }
       } else {
         # conjugate gradients
-        draw <- add(draw, bquote(u <- Xy + crossprod_mv(St, sqrt(omega.tilde) * Crnorm(.(ncS))) + cholQ$Ltimes(Crnorm(.(n)), transpose=FALSE)))
-        A_times <- function(x, omega.tilde) crossprod_mv(St, omega.tilde * (St %m*v% x)) + Q %m*v% x
-        dQinv <- invsqrt(diag(Q))  # seems better as a preconditioner than 1/diag(Q)
+        draw <- add(draw, bquote(u <- Xy + tm_op(St, sqrtC(omega.tilde) * draw_normal(.(ncS)), cholQ$Ltimes(draw_normal(.(n)), transpose=FALSE), .(ADD))))
+        A_times <- function(x, omega.tilde) tm_op(St, omega.tilde * m_op(St, x), m_op(Q, x), ADD)
+        dQinv <- sqrtC(diag(Q), inv=TRUE)  # seems better as a preconditioner than 1/diag(Q)
         M_solve <- function(x, omega.tilde) dQinv * x
         max.it <- method$CG[["max.it"]]
         stop.criterion <- method$CG[["stop.criterion"]]
@@ -491,9 +495,9 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       } else {
         refl.fac <- 2 / colSums(S * VS)  # 2 / vector of normal' Q normal for all inequalities
         if (is.null(s))
-          s.adj <- if (zero.mu) numeric(ncS) else -crossprod_mv(S, mu)
+          s.adj <- if (zero.mu) numeric(ncS) else -tm_op(S, mu)
         else
-          s.adj <- if (zero.mu) s else s - crossprod_mv(S, mu)  # if positive, mu violates inequalities
+          s.adj <- if (zero.mu) s else s - tm_op(S, mu)  # if positive, mu violates inequalities
         simplified <- !eq && identical(VS, S)  # simplified=TRUE is the case described in Pakman and Paninski: identity Q and no equality constraints
         if (simplified) VS <- NULL
       }
@@ -524,9 +528,9 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       if (eq)
         draw <- add(draw, quote(mu <- projector$project(mu, cholQ, r)))
       if (is.null(s))
-        draw <- add(draw, quote(s.adj <- -crossprod_mv(S, mu)))
+        draw <- add(draw, quote(s.adj <- -tm_op(S, mu)))
       else
-        draw <- add(draw, quote(s.adj <- s - crossprod_mv(S, mu)))  # if positive, mu violates inequalities
+        draw <- add(draw, quote(s.adj <- s - tm_op(S, mu)))  # if positive, mu violates inequalities
     }
 
     # 1. draw p from N(0, M^{-1}); instead draw v=dx/dt from N(0, M)
@@ -545,7 +549,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
     if (ineq) {
       if (diagnostic) {
         draw <- draw |>
-          add(bquote(viol <- crossprod_mv(S, x) < .(if (is.null(s)) 0 else quote(s)))) |>
+          add(bquote(viol <- tm_op(S, x) < .(if (is.null(s)) 0 else quote(s)))) |>
           add(quote(if (any(viol)) cat("\nviolated constraints:", names(bounces)[viol])))
       }
       # NB bounces is updated by reference
@@ -596,9 +600,9 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       # project mean mu on eq constraint surface
       VR <- cholQ$solve(R)
       if (!zero.mu)
-        mu <- mu + VR %m*v% build_chol(crossprod_sym2(R, VR))$solve(
-          if (is.null(r)) -crossprod_mv(R, mu) else r - crossprod_mv(R, mu)
-        )
+        mu <- mu + m_op(VR, build_chol(crossprod_sym2(R, VR))$solve(
+          if (is.null(r)) -tm_op(R, mu) else r - tm_op(R, mu)
+        ))
       if (is.null(method[["prec.eq"]]))
         prec.eq <- 100 * diag(solve(crossprod_sym2(R, VR)))
       else
@@ -632,7 +636,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
       add(quote(Tleft <- T0))
     if (diagnostic && ineq) {
       draw <- draw |>
-        add(bquote(viol <- crossprod_mv(S, x) < .(if (is.null(s)) 0 else quote(s)))) |>
+        add(bquote(viol <- tm_op(S, x) < .(if (is.null(s)) 0 else quote(s)))) |>
         add(quote(if (any(viol)) cat("\nviolated inequality constraints:", names(bounces)[viol])))  # print violated constraints
     }
     # draw pM from Laplace distribution, with parameters w; use pM for momentum to distinguish from state p
@@ -647,14 +651,14 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         add(quote(v <- rate * sign(pM)))
     }
     draw <- draw |>
-      add(bquote(Qx <- .(if (zero.mu) quote(Q %m*v% x) else quote(Q %m*v% (x - mu))))) |>
-      add(quote(Qv <- Q %m*v% v))
+      add(bquote(Qx <- .(if (zero.mu) quote(m_op(Q, x)) else quote(m_op(Q, x - mu))))) |>
+      add(quote(Qv <- m_op(Q, v)))
     if (eq && !reduce) {
       if (zero.mu)
-        draw <- add(draw, quote(Qx <- Qx + R %m*v% (prec.eq * crossprod_mv(R, x))))
+        draw <- add(draw, quote(Qx <- m_op(R, prec.eq * tm_op(R, x), Qx, ADD)))
       else
-        draw <- add(draw, quote(Qx <- Qx + R %m*v% (prec.eq * crossprod_mv(R, x - mu))))
-      draw <- add(draw, quote(Qv <- Qv + R %m*v% (prec.eq * crossprod_mv(R, v))))
+        draw <- add(draw, quote(Qx <- m_op(R, prec.eq * tm_op(R, x - mu), Qx, ADD)))
+      draw <- add(draw, quote(Qv <- m_op(R, prec.eq * tm_op(R, v), Qv, ADD)))
     }
 
     draw <- add(draw, quote(event <- 0L))
@@ -668,7 +672,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         dt.gr <- Inf
         gradient.event <- TRUE
         if (length(iposD)) {
-          sqrtD <- sqrt(discr[iposD])
+          sqrtD <- sqrtC(discr[iposD])
           t1 <- (-Qx[iposD] - sqrtD) / Qv[iposD]
           ind1 <- whichv(t1 > 0, TRUE)
           t2 <- (-Qx[iposD] + sqrtD) / Qv[iposD]
@@ -696,8 +700,8 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         if (ineq) {
           # boundary events
           # TODO can we update Sv and Sx more efficiently then simply recompute them?
-          Sv <- crossprod_mv(S, v)
-          dtS <- (s - crossprod_mv(S, x)) / Sv
+          Sv <- tm_op(S, v)
+          dtS <- (s - tm_op(S, x)) / Sv
 
           # ignore inequality boundaries at which the particle currently is (including previously hit walls) while moving to the interior
           # use negeps here, as small round-off like violations of inequalities are bound to occur
@@ -752,7 +756,7 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
           pM[ind] <- -pM[ind]
           v[ind] <- -v[ind]
           # update Qv
-          if (!eq || reduce) Qv <- crossprod_mv(Q, v)  # TODO update using only changed v components
+          if (!eq || reduce) Qv <- tm_op(Q, v)  # TODO update using only changed v components
           if (diagnostic) {
             bounces[jstar] <- bounces[jstar] + 1L
             flips[ind] <- flips[ind] + 1L
@@ -762,10 +766,10 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         if (eq && !reduce) {
           # recompute Qx and Qv
           if (zero.mu)
-            Qx <- Q %m*v% x + R %m*v% (prec.eq * crossprod_mv(R, x))
+            Qx <- m_op(Q, x, m_op(R, prec.eq * tm_op(R, x)), ADD)
           else
-            Qx <- Q %m*v% (x - mu) + R %m*v% (prec.eq * crossprod_mv(R, x - mu))
-          Qv <- Q %m*v% v + R %m*v% (prec.eq * crossprod_mv(R, v))
+            Qx <- m_op(Q, x - mu, m_op(R, prec.eq * tm_op(R, x - mu)), ADD)
+          Qv <- m_op(Q, v, m_op(R, prec.eq * tm_op(R, v)), ADD)
         }
 
         Tleft <- Tleft - dt.1st
@@ -823,16 +827,16 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
           col = temp@j,  # variable index
           coef = temp@x
         )
-        x0 <- Crnorm(n.frame, sd=scale)
+        x0 <- draw_normal(n.frame, sd=scale)
         for (i in 1:10) {  # at most 10 trials
           epsilon <- scale * rexp(ncS)
           res <- lintools::sparse_project(x=x0, A, b=-(u + epsilon), neq=0L, base=0L, sorted=FALSE)
           scale <- 0.3 * scale
           if (anyNA(res[["x"]])) {
-            x0 <- Crnorm(n.frame, sd=scale)
+            x0 <- draw_normal(n.frame, sd=scale)
           } else {
-            if (all(Ut %m*v% res[["x"]] >= u)) break
-            x0 <- res[["x"]] + Crnorm(n.frame, sd=scale)
+            if (all(m_op(Ut, res[["x"]]) >= u)) break
+            x0 <- res[["x"]] + draw_normal(n.frame, sd=scale)
           }
         }
         p[[name.tr]] <- res[["x"]]
@@ -881,10 +885,10 @@ create_TMVN_sampler <- function(Q, mu=NULL, Xy=NULL, update.Q=FALSE, update.mu=u
         if (useV) {
           start <- add(start, quote(cholRVxR$update(matsum_RVxR(M1=crossprod_sym2(SVR, ch$solve(SVR)), w1=-1))))
           if (is.null(r))
-            start <- add(quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(crossprod_mv(R, x)))))
+            start <- add(quote(temp <- m_op(V, m_op(R, cholRVxR$solve(tm_op(R, x))))))
           else
-            start <- add(quote(temp <- V %m*v% (R %m*v% cholRVxR$solve(crossprod_mv(R, x) - r))))
-          add(bquote(p[[.(name)]] <- x - temp + V %m*v% (S %m*v% ch$solve(crossprod_mv(S, temp)))))
+            start <- add(quote(temp <- m_op(V, m_op(R, cholRVxR$solve(tm_op(R, x) - r)))))
+          add(bquote(p[[.(name)]] <- m_op(V, m_op(S, ch$solve(tm_op(S, temp))), x - temp, ADD)))
         } else
           start <- add(start, bquote(p[[.(name)]] <- projector$project(x, ch, r)))
       } else {

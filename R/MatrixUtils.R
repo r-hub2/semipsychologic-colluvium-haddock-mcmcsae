@@ -89,11 +89,12 @@ upper_part <- function(M, diag=FALSE) M[upper.tri(M, diag=diag)]
 # another constant, a positive numeric tolerance used in many places
 .tol <- sqrt(.Machine[["double.eps"]])
 
-#' Fast matrix-vector multiplications
-#' 
+#' Fast matrix-vector multiplications and updates
+#'
 #' Functions for matrix-vector multiplies like \code{\%*\%} and \code{crossprod},
 #' but often faster for the matrix types supported. The return value is always a
-#' numeric vector.
+#' numeric vector. Note that the fast updating functions \code{upd_mv} and
+#' \code{upd_tmv} assume no aliasing between numeric vectors.
 #'
 #' @examples
 #' M <- matrix(rnorm(10*10), 10, 10)
@@ -105,55 +106,50 @@ upper_part <- function(M, diag=FALSE) M[upper.tri(M, diag=diag)]
 #' M %m*v% x
 #' crossprod_mv(M, x)
 #'
-#' @param M a matrix of class 'matrix', 'dgCMatrix', 'dsCMatrix', 'tabMatrix', or 'ddiMatrix'.
-#' @param v a numeric vector.
-#' @returns For \code{\%m*v\%} the vector \eqn{Mv} and for \code{crossprod_mv} the vector
-#'  \eqn{M'v} where \eqn{M'} denotes the transpose of \eqn{M}.
+#' @param M a matrix of class 'matrix', 'dgCMatrix', 'dsCMatrix', 'dtRMatrix',
+#'  'tabMatrix', or 'ddiMatrix'. A numeric vector is also allowed and interpreted
+#'  as a diagonal matrix. Moreover \code{M} can also be a list of any combination
+#'  of supported matrices interpreted as their column-wise concatenation (cbind).
+#' @param x a numeric vector, or dense matrix.
+#' @param y an optional numeric vector or dense matrix, updated in place by setting
+#'  it to the matrix-vector/dense matrix product, or by adding or subtracting the
+#'  latter.
+#' @param op an integer stating the way \code{y} is updated. Allowed op codes are
+#'  \code{0L} in case of no \code{y} provided or for setting \code{y}, \code{1L}
+#'  for adding to \code{y} and \code{2L} for subtracting from \code{y}.
+#' @returns For \code{\%m*v\%} the product \eqn{Mx} and for \code{crossprod_mv} the
+#'  transposed product \eqn{M'x}. Functions \code{apply_m} and \code{apply_tm} are
+#'  similar but can be easily used in conjunction with R's native pipe operator '|>'
+#'  for composite matrix multiplications. For in place setting and updating use the
+#'  more general \code{upd_m} and \code{upd_tm} functions.
 #' @name matrix-vector
 NULL
 
-#' @export
-#' @rdname matrix-vector
-`%m*v%` <- function(M, v) {
-  switch(class(M)[1L],
-    matrix = Cdense_numeric_prod(M, v),
-    ddiMatrix = if (length(M@x)) M@x * v else copy_obj(v),
-    tabMatrix = Ctab_numeric_prod(M, v),
-    dgCMatrix = Csparse_numeric_prod(M, v),
-    dsCMatrix = {
-      class(M) <- .dgC.class.attr
-      CsparseS_numeric_prod(M, v)
-    },
-    dtCMatrix = {  # possibly used by Ltimes method of cholesky object
-      class(M) <- .dgC.class.attr
-      Csparse_numeric_prod(M, v)
-    },
-    numeric = M * v,  # interpreted as diagonal M, including scalar (1 x 1) case
-    stop("unsupported class '", class(M)[1L], "'")
-  )
-}
+SET <- 0L; ADD <- 1L; SUB <- 2L; MUL <- 3L; DIV <- 4L
 
 #' @export
 #' @rdname matrix-vector
-crossprod_mv <- function(M, v) {
-  switch(class(M)[1L],
-    matrix = Cdense_numeric_crossprod(M, v),
-    ddiMatrix = if (length(M@x)) M@x * v else copy_obj(v),
-    tabMatrix = Ctab_numeric_crossprod(M, v),
-    dgCMatrix = Csparse_numeric_crossprod(M, v),
-    dsCMatrix = {
-      class(M) <- .dgC.class.attr
-      CsparseS_numeric_prod(M, v)
-    },
-    dtCMatrix = {  # possibly used by Ltimes method of cholesky object
-      class(M) <- .dgC.class.attr
-      Csparse_numeric_crossprod(M, v)
-    },
-    numeric = M * v,  # interpreted as diagonal M, including scalar (1 x 1) case
-    stop("unsupported class '", class(M)[1L], "'")
-  )
-}
+upd_m <- function(y, op, M, x) m_op(M, x, y, op)
 
+#' @export
+#' @rdname matrix-vector
+upd_tm <- function(y, op, M, x) tm_op(M, x, y, op)
+
+#' @export
+#' @rdname matrix-vector
+apply_m <- function(x, M) m_op(M, x)
+
+#' @export
+#' @rdname matrix-vector
+apply_tm <- function(x, M) tm_op(M, x)
+
+#' @export
+#' @rdname matrix-vector
+`%m*v%` <- function(M, x) m_op(M, x)
+
+#' @export
+#' @rdname matrix-vector
+crossprod_mv <- function(M, x) tm_op(M, x)
 
 # compute D %*% Q %*% D, where D=Diagonal(x=scale)
 # if scale has length 1, it is computed as scale^2 * Q
@@ -197,62 +193,27 @@ scale_mat <- function(Q, scale) {
 }
 
 # product of two matrices, at least one of which is a dense matrix
-# assume that either M1 or M2 is matrix
 # numeric vector input represents diagonal matrix
 # length 1 numeric vector is allowed: scalar multiplication
 `%m*m%` <- function(M1, M2) {
-  switch(class(M1)[1L],
-    matrix =
-      switch(class(M2)[1L],
-        matrix = Cdense_dense_prod(M1, M2),
-        dgCMatrix = Cdense_sparse_prod(M1, M2),
-        dsCMatrix = {
-          class(M2) <- .dgC.class.attr
-          Cdense_sparseS_prod(M1, M2)
-        },
-        numeric =
-          if (length(M2) == 1L)
-            if (M2 == 1) M1 else M2 * M1
-          else
-            Cdense_diag_prod(M1, M2),
-        ddiMatrix =
-          if (length(M2@x))
-            Cdense_diag_prod(M1, M2@x)
-          else
-            M1,
-        stop("unsupported matrix product")
-      ),
-    dgCMatrix = Csparse_dense_prod(M1, M2),
+  switch(class(M2)[1L],
+    matrix = m_op(M1, M2),
+    dgCMatrix = Cdense_sparse_prod(M1, M2),
     dsCMatrix = {
-      class(M1) <- .dgC.class.attr
-      CsparseS_dense_prod(M1, M2)
+      class(M2) <- .dgC.class.attr
+      Cdense_sparseS_prod(M1, M2)
     },
-    tabMatrix = Ctab_dense_prod(M1, M2),
-    ddiMatrix = if (length(M1@x)) M1@x * M2 else M2,
+    numeric =
+      if (length(M2) == 1L)
+        if (M2 == 1) M1 else M2 * M1
+      else
+        Cdense_diag_prod(M1, M2),
+    ddiMatrix =
+      if (length(M2@x))
+        Cdense_diag_prod(M1, M2@x)
+      else
+        M1,
     stop("unsupported matrix product")
-  )
-}
-
-# crossprod of two matrices, at least one of which is a dense matrix
-# numeric vector input represents diagonal matrix
-# length 1 numeric vector is allowed: scalar multiplication
-crossprod_mm <- function(M1, M2) {
-  switch(class(M1)[1L],
-    matrix =
-      switch(class(M2)[1L],
-        matrix = Cdense_dense_crossprod(M1, M2),
-        dgCMatrix = Cdense_sparse_crossprod(M1, M2),
-        ddiMatrix =
-          if (length(M2@x))
-            Cdense_diag_crossprod(M1, M2@x)
-              else
-            t.default(M1),
-        stop("unsupported matrix crossproduct")
-      ),
-    dgCMatrix = Csparse_dense_crossprod(M1, M2),
-    tabMatrix = Ctab_dense_crossprod(M1, M2),
-    ddiMatrix = if (length(M1@x)) M1@x * M2 else M2,
-    stop("unsupported matrix crossproduct")
   )
 }
 
@@ -265,11 +226,11 @@ crossprod_sym <- function(M, Q) {
   switch(class(M)[1L],
     matrix =
       switch(classQ,
-        matrix = Cdense_dense_crossprod(M, Cdense_dense_prod(Q, M)),
-        dsCMatrix = Cdense_dense_crossprod(M, Q %m*m% M),
+        matrix = m_op(tm_op(M, Q), M),
+        dsCMatrix = tm_op(M, m_op(Q, M)),
         ddiMatrix =
           if (Q@diag == "U")
-            Cdense_crossprod_sym0(M)
+            tm_op(M, M)
           else
             Cdense_crossprod_sym(M, Q@x),
         numeric = Cdense_crossprod_sym(M, Q)
@@ -314,11 +275,11 @@ crossprod_sym <- function(M, Q) {
             Q <- if (Q@diag == "N") Q@x * M@x else M@x
           else
             Q <- if (Q@diag == "N") Q@x else rep.int(1, Q@Dim[1L])
-          Cdiag(Ctab_numeric_crossprod(M, Q))
+          Cdiag(tm_op(M, Q))
         },
         numeric = {
           if (M@num) Q <- Q * M@x
-          Cdiag(Ctab_numeric_crossprod(M, Q))
+          Cdiag(tm_op(M, Q))
         }
       ),
     dgCMatrix =
@@ -367,7 +328,7 @@ sparse_crossprod_sym_template <- function(X, max.size.cps.template=100) {
   rm(X)
   function(Q) {
     out <- XtQX
-    attr(out, "x") <- Csparse_numeric_crossprod(spX, Q)
+    attr(out, "x") <- tm_op(spX, Q)
     out
   }
 }
@@ -375,7 +336,7 @@ sparse_crossprod_sym_template <- function(X, max.size.cps.template=100) {
 # symmetric crossprod: compute M1'M2, known to be symmetric because M2 = Q M1 with Q symmetric
 crossprod_sym2 <- function(M1, M2=M1) {
   switch(class(M2)[1L],
-    matrix = Cdense_dense_crossprod(M1, M2),  # assume that M1 is matrix as well! exploits symmetry of the resulting matrix
+    matrix = tm_op(M1, M2),  # assume that M1 is matrix as well! exploits symmetry of the resulting matrix
     dgCMatrix = {
       # assume that M1 is dgC as well!
       out <- Csparse_crossprod_sym2(M1, M2)  # dgCMatrix with only upper elements stored
@@ -421,19 +382,18 @@ setMethod("%*%", signature("ddiMatrix", "matrix"), \(x, y) {
 # NB the RcppEigen version is faster (especially for small x)
 #' @rdname Matrix-methods
 setMethod("%*%", signature("dgCMatrix", "matrix"),
-  \(x, y) Csparse_dense_prod(x, y)
+  \(x, y) m_op(x, y)
 )
 
 #' @rdname Matrix-methods
 setMethod("%*%", signature("dsCMatrix", "matrix"), \(x, y) {
   if (x@uplo != "U") stop("uplo must be 'U'")
-  class(x) <- .dgC.class.attr
-  CsparseS_dense_prod(x, y)
+  m_op(x, y)
 })
 
 #' @rdname Matrix-methods
 setMethod("%*%", signature("tabMatrix", "matrix"),
-  \(x, y) Ctab_dense_prod(x, y)
+  \(x, y) m_op(x, y)
 )
 
 #' @rdname Matrix-methods
@@ -443,7 +403,7 @@ setMethod("%*%", signature("matrix", "tabMatrix"),
 
 #' @rdname Matrix-methods
 setMethod("%*%", signature("tabMatrix", "numLike"),
-  \(x, y) Ctab_dense_prod(x, matrix(y, ncol=1L))
+  \(x, y) m_op(x, matrix(y, ncol=1L))
 )
 
 #' @rdname Matrix-methods
@@ -505,7 +465,7 @@ setMethod("crossprod", signature=c("tabMatrix", "missing"),
 
 #' @rdname Matrix-methods
 setMethod("crossprod", signature("tabMatrix", "matrix"),
-  \(x, y) Ctab_dense_crossprod(x, y)
+  \(x, y) tm_op(x, y)
 )
 
 #' @rdname Matrix-methods
@@ -521,7 +481,7 @@ setMethod("crossprod", signature("tabMatrix", "tabMatrix"),
 # used in fast GMRF prior sampler
 #' @rdname Matrix-methods
 setMethod("crossprod", signature=c("dgCMatrix", "matrix"),
-  \(x, y) Csparse_dense_crossprod(x, y)
+  \(x, y) tm_op(x, y)
 )
 
 

@@ -110,8 +110,9 @@
 #'  of workers in that cluster.
 #' @param cl an existing cluster can be passed for parallel computation. If \code{NULL} and
 #'  \code{n.cores > 1}, a new cluster is created.
-#' @param seed a random seed (integer). For parallel computation it is used to independently
-#'  seed RNG streams for all workers.
+#' @param seed no longer supported. Use \code{\link{set_rng}} instead to set
+#'  random number generator options including a seed through \code{\link{create_sampler}}'s
+#'  \code{control} argument.
 #' @param export a character vector with names of objects to export to the workers. This may
 #'  be needed for parallel execution if expressions in \code{pred} depend on global variables.
 #' @returns An object of class \code{mcdraws} containing posterior draws as well as some meta information.
@@ -141,6 +142,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
   if (n.chain < 1L) stop("'n.chain' must be at least 1")
   chains <- seq_len(n.chain)
 
+  if (!is.null(seed)) stop("please set a random seed using set_rng in create_sampler, create_TMVN_sampler, or generate_data")
   if (is.null(cl))
     n.cores <- min(as.integer(n.cores)[1L], n.chain)
   else
@@ -148,14 +150,12 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
   if (n.cores > 1L) {
     if (n.cores > parallel::detectCores()) stop("too many cores")
     if (is.null(cl)) {
-      cl <- setup_cluster(n.cores, seed)
+      cl <- setup_cluster(n.cores)
     } else {
-      if (!is.null(seed)) parallel::clusterSetRNGStream(cl, seed)
+      parallel::clusterSetRNGStream(cl)
     }
     if (!is.null(export)) parallel::clusterExport(cl, export, parent.frame())
     chains.per.worker <- rep(n.chain %/% n.cores, n.cores) + rep(1:0, c(n.chain %% n.cores, n.cores - n.chain %% n.cores))
-    distr.list <- vector("list", n.cores)
-    for (i in seq_len(n.cores)) distr.list[[i]]$n.chain <- chains.per.worker[i]
     if (is.null(start) || is.function(start)) {
       start.list <- rep(list(start), n.cores)
     } else {
@@ -163,7 +163,12 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
         stop("start has wrong format; see the help for possible ways to specify initial values")
       start.list <- split(start, rep(seq_len(n.cores), chains.per.worker))
     }
-    for (i in seq_len(n.cores)) distr.list[[i]]$start <- start.list[[i]]
+    distr.list <- vector("list", n.cores)
+    for (i in seq_len(n.cores)) {
+      distr.list[[i]]$worker.id <- i
+      distr.list[[i]]$n.chain <- chains.per.worker[i]
+      distr.list[[i]]$start <- start.list[[i]]
+    }
     message("distribution of chains over workers: ", paste0(chains.per.worker, collapse=", "))
     parallel::clusterExport(cl, "sampler", envir=environment())
     mc <- match.call()
@@ -173,7 +178,13 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
     mc$verbose <- FALSE
     mc$n.cores <- 1L
     mc$cl <- mc$seed <- mc$export <- NULL
-    run_chains <- function(worker, ...) eval(mc)
+    run_chains <- function(worker, ...) {
+      if (isTRUE(sampler$control$rng[["use.randompack"]])) {
+        # resurrect the rng engine on the worker
+        init_engine(sampler$control[["rng"]], worker_id = worker[["worker.id"]])
+      }
+      eval(mc)
+    }
     message("running the simulation")
     # TODO allow to write to file using separate files per worker, to combine afterwards
     out <- do.call(combine_chains, parallel::parLapply(cl, distr.list, run_chains))
@@ -183,8 +194,6 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
       print(proc.time() - started)
     }
     return(out)
-  } else {
-    if (!is.null(seed)) set.seed(seed)
   }
 
   # derived quantities
@@ -437,9 +446,9 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
       for (ch in chains) {
         for (v in store) out[[v]][[ch]][index, ] <- p[[ch]][[v]]
         for (v in store.mean) {
-          v_update(out[["_means"]][[v]][[ch]], plus=TRUE, p[[ch]][[v]])
+          v_op(out[["_means"]][[v]][[ch]], ADD, p[[ch]][[v]])
           if (store.sds)
-            v_update(out[["_sds"]][[v]][[ch]], plus=TRUE, p[[ch]][[v]]^2)
+            v_op(out[["_sds"]][[v]][[ch]], ADD, p[[ch]][[v]]^2)
         }
       }
       if (write.to.file)
@@ -521,7 +530,7 @@ MCMCsim <- function(sampler, from.prior=FALSE, n.iter=1000L, n.chain=3L, thin=1L
         out[["_sds"]] <- lapply(out[["_sds"]], \(x) lapply(x, \(y) y / n.draw))
         for (v in store.mean) {
           for (ch in seq_along(out[["_sds"]][[v]]))
-            out[["_sds"]][[v]][[ch]] <- sqrt(out[["_sds"]][[v]][[ch]] - out[["_means"]][[v]][[ch]]^2)
+            out[["_sds"]][[v]][[ch]] <- sqrtC(out[["_sds"]][[v]][[ch]] - out[["_means"]][[v]][[ch]]^2)
         }
       }
     }
@@ -747,30 +756,22 @@ read_draws <- function(name, filename=paste0("MCdraws_", name, ".dat")) {
 #' @param vars an integer vector indicating which parameters to select.
 #' @param chains an integer vector indicating which chains to select.
 #' @param draws an integer vector indicating which samples to select.
-#' @returns The selected part of the draws component. The output object's class is \code{dc}.
+#' @returns The selected part of the draws component. Note that the class
+#'  attribute is dropped.
 # for internal use; see below subset.dc for external use
-get_from <- function(dc, vars=NULL, chains=NULL, draws=NULL) {
-  if (is.null(draws) && is.null(vars)) {
-    if (is.null(chains))
-      dc
-    else
-      dc[chains]
-  } else if (is.null(vars)) {
-    if (is.null(chains))
-      lapply(dc, \(x) x[draws, , drop=FALSE])
-    else
-      lapply(dc[chains], \(x) x[draws, , drop=FALSE])
-  } else if (is.null(draws)) {
-    if (is.null(chains))
-      lapply(dc, \(x) x[, vars, drop=FALSE])
-    else
-      lapply(dc[chains], \(x) x[, vars, drop=FALSE])
-  } else {
-    if (is.null(chains))
-      lapply(dc, \(x) x[draws, vars, drop=FALSE])
-    else
-      lapply(dc[chains], \(x) x[draws, vars, drop=FALSE])
+get_from <- function(dc, vars = NULL, chains = NULL, draws = NULL) {
+  if (!is.null(chains)) dc <- .subset(dc, chains)
+  if (!is.null(draws) || !is.null(vars)) {
+    dc <- unclass(dc)
+    if (is.null(vars)) {
+      dc <- lapply(dc, \(x) x[draws, , drop = FALSE])
+    } else if (is.null(draws)) {
+      dc <- lapply(dc, \(x) x[, vars, drop = FALSE])
+    } else {
+      dc <- lapply(dc, \(x) x[draws, vars, drop = FALSE])
+    }
   }
+  dc
 }
 
 #' Select a subset of chains, samples and parameters from a draws component (dc) object
@@ -870,7 +871,7 @@ summary.dc <- function(object, probs=c(0.05, 0.5, 0.95), na.rm=FALSE, time=NULL,
     out[ind, paste0("q", probs)] <- t.default(dapply(sim, fquantile, probs=probs, na.rm=na.rm))
   }
   out[, "t-value"] <- out[, "Mean"] / out[, "SD"]
-  out[, "MCSE"] <- out[, "SD"] / sqrt(out[, "n_eff"])
+  out[, "MCSE"] <- out[, "SD"] * sqrtC(out[, "n_eff"], inv=TRUE)
   if (!is.null(time)) out[, "efficiency"] <- out[, "n_eff"] / time
   class(out) <- "dc_summary"
   out
@@ -1187,7 +1188,7 @@ R_hat <- function(dc) {
   }
   var.between <- fvar.matrix(chain.means, na.rm=FALSE)
   var.within <- fmean.matrix(chain.vars, na.rm=FALSE)
-  setNames(sqrt(var.between/var.within + if (n.draw < 4L) (n.draw-1)/n.draw else (split-1)/split), labels.dc(dc))
+  setNames(sqrtC(var.between/var.within + if (n.draw < 4L) (n.draw-1)/n.draw else (split-1)/split), labels.dc(dc))
 }
 
 #' @export
@@ -1246,14 +1247,14 @@ n_eff <- function(dc, useFFT=TRUE, lag.max, cl=NULL) {
 #' Compute autocovariance or autocorrelation function via Wiener-Khinchin theorem
 #'   using Fast Fourier Transform
 #'
-#' @keywords internal
+#' @noRd
 #' @param x matrix with time (iteration number) along the rows and variables along the columns.
 #' @param demean whether to subtract from each column its mean.
 #' @returns A matrix of the same size as x with autocovariances at all lags from 1 to the number of rows.
 ac_fft <- function(x, demean = TRUE) {
   nr <- nrow(x)
   if (demean) x <- fmean.matrix(x, TRA="-", na.rm=FALSE)
-  n.pad <- nextn(2 * nr)
+  n.pad <- nextn(2L * nr)
   x.pad <- matrix(0, n.pad, ncol(x))
   x.pad[seq_len(nr), ] <- x
   Fx <- mvfft(x.pad)
@@ -1338,7 +1339,7 @@ get_sds <- function(obj, vnames=NULL) {
     ni <- n_draws(obj)
     # include between-chain component
     for (v in names(out))
-      out[[v]] <- sqrt((1/(nc*ni - 1L))*((ni - 1L)*rowSums(do.call(cbind, out[[v]])^2) + ni*(nc - 1L)*apply(do.call(cbind, obj[["_means"]][[v]]), 1L, var)))
+      out[[v]] <- sqrtC((1/(nc*ni - 1L))*((ni - 1L)*rowSums(do.call(cbind, out[[v]])^2) + ni*(nc - 1L)*apply(do.call(cbind, obj[["_means"]][[v]]), 1L, var)))
   }
   # append posterior sds of draws components
   if (is.null(vnames)) vnames <- par_names(obj)
@@ -1365,13 +1366,15 @@ get_draw <- function(obj, iter, chain) {
   info <- .subset2(obj, "_info")
   parnames <- .subset2(info, "parnames")
   list.pars <- .subset2(info, "list.pars")
-  p <- list()
-  for (v in parnames)
-    p[[v]] <- .subset2(.subset2(obj, v), chain)[iter, ]
-  if (!is.null(list.pars)) for (v in list.pars)
-    p[[v]] <- .subset2(.subset2(.subset2(obj, v), chain), iter)
+  names(parnames) <- parnames
+  p <- lapply(parnames, \(v) .subset2(.subset2(obj, v), chain)[iter, ])
+  if (!is.null(list.pars)) {
+    names(list.pars) <- list.pars
+    p <- c(p, lapply(list.pars, \(v) .subset2(.subset2(.subset2(obj, v), chain), iter)))
+  }
   p
 }
+
 
 #' Transform one or more draws component objects into a new one by applying a function
 #'

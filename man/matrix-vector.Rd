@@ -2,27 +2,54 @@
 % Please edit documentation in R/MatrixUtils.R
 \name{matrix-vector}
 \alias{matrix-vector}
+\alias{upd_m}
+\alias{upd_tm}
+\alias{apply_m}
+\alias{apply_tm}
 \alias{\%m*v\%}
 \alias{crossprod_mv}
-\title{Fast matrix-vector multiplications}
+\title{Fast matrix-vector multiplications and updates}
 \usage{
-M \%m*v\% v
+upd_m(y, op, M, x)
 
-crossprod_mv(M, v)
+upd_tm(y, op, M, x)
+
+apply_m(x, M)
+
+apply_tm(x, M)
+
+M \%m*v\% x
+
+crossprod_mv(M, x)
 }
 \arguments{
-\item{M}{a matrix of class 'matrix', 'dgCMatrix', 'dsCMatrix', 'tabMatrix', or 'ddiMatrix'.}
+\item{y}{an optional numeric vector or dense matrix, updated in place by setting
+it to the matrix-vector/dense matrix product, or by adding or subtracting the
+latter.}
 
-\item{v}{a numeric vector.}
+\item{op}{an integer stating the way \code{y} is updated. Allowed op codes are
+\code{0L} in case of no \code{y} provided or for setting \code{y}, \code{1L}
+for adding to \code{y} and \code{2L} for subtracting from \code{y}.}
+
+\item{M}{a matrix of class 'matrix', 'dgCMatrix', 'dsCMatrix', 'dtRMatrix',
+'tabMatrix', or 'ddiMatrix'. A numeric vector is also allowed and interpreted
+as a diagonal matrix. Moreover \code{M} can also be a list of any combination
+of supported matrices interpreted as their column-wise concatenation (cbind).}
+
+\item{x}{a numeric vector, or dense matrix.}
 }
 \value{
-For \code{\%m*v\%} the vector \eqn{Mv} and for \code{crossprod_mv} the vector
- \eqn{M'v} where \eqn{M'} denotes the transpose of \eqn{M}.
+For \code{\%m*v\%} the product \eqn{Mx} and for \code{crossprod_mv} the
+ transposed product \eqn{M'x}. Functions \code{apply_m} and \code{apply_tm} are
+ similar but can be easily used in conjunction with R's native pipe operator '|>'
+ for composite matrix multiplications. For in place setting and updating use the
+ more general \code{upd_m} and \code{upd_tm} functions.
 }
 \description{
 Functions for matrix-vector multiplies like \code{\%*\%} and \code{crossprod},
 but often faster for the matrix types supported. The return value is always a
-numeric vector.
+numeric vector. Note that the fast updating functions \code{upd_mv} and
+\code{upd_tmv} assume no aliasing between numeric vectors.
 }
 \examples{
 M <- matrix(rnorm(10*10), 10, 10)

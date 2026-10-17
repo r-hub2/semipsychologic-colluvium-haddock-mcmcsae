@@ -8,7 +8,7 @@ f_gamma(
   link = "log",
   shape.vec = ~1,
   shape.prior = pr_gamma(0.1, 0.1),
-  control = set_MH(type = "RWLN", scale = 0.2, adaptive = TRUE)
+  control = gamma_control()
 )
 }
 \arguments{
@@ -21,14 +21,8 @@ for the gamma distribution is \code{"log"}.}
 \code{\link{pr_fixed}} with a default value of 1, \code{\link{pr_exp}} and
 \code{\link{pr_gamma}}. The current default is \code{pr_gamma(shape=0.1, rate=0.1)}.}
 
-\item{control}{options for the Metropolis-Hastings algorithm employed
-in case the shape parameter is to be inferred. Function \code{\link{set_MH}}
-can be used to change the default options. The two choices of proposal
-distribution type supported are "RWLN" for a random walk proposal on the
-log-shape scale, and "gamma" for an approximating gamma proposal, found using
-an iterative algorithm. In the latter case, a Metropolis-Hastings accept-reject
-step is currently omitted, so the sampling algorithm is an approximate one,
-though often quite accurate and efficient.}
+\item{control}{a list with computational options. These options can
+be specified using function \code{\link{poisson_control}}.}
 }
 \value{
 A family object.
@@ -36,6 +30,7 @@ A family object.
 \description{
 This function can be used in the \code{family} argument of \code{\link{create_sampler}}
 or \code{\link{generate_data}} to specify a Gamma sampling distribution.
+Note that the sampling schemes currently implemented are only approximate.
 }
 \examples{
 \dontrun{

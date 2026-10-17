@@ -33,7 +33,7 @@ vfac <- function(factor="local_",
 mc_vfac <- function(factor="local_",
                     prior=pr_invchisq(df=1, scale=1),
                     name="", debug=FALSE,
-                    sc,  # unused
+                    sc,
                     fam,
                     in.block,  # unused
                     prior.only, data) {
@@ -64,7 +64,7 @@ mc_vfac <- function(factor="local_",
 
   if (fam[["Q0.type"]] == "symm") {
     # check that scale factor is compatible with block-diagonal structure of Q0
-    if (sum(abs(commutator(fam[["Q0"]], Cdiag(X %m*v% sin(1.23*seq_len(q)))))) > .tol) stop("vfac variance component incompatible with the specified non-diagonal gaussian covariance")
+    if (sum(abs(commutator(fam[["Q0"]], Cdiag(m_op(X, sin(1.23*seq_len(q))))))) > .tol) stop("vfac variance component incompatible with the specified non-diagonal gaussian covariance")
   }
 
   switch(prior[["type"]],
@@ -73,14 +73,14 @@ mc_vfac <- function(factor="local_",
       if (any(prior[["value"]] <= 0)) stop("prior variances must be strictly positive")
     },
     invchisq = {
-      prior$init(q)
+      prior$init(q, sc[["rng"]])
       if (!prior.only) prior$make_draw()
     },
     exp = prior$init(q),
     stop("'vfac' priors must be specified using one of pr_invchisq, pr_exp and pr_fixed functions")
   )
 
-  compute_Qfactor <- function(p) X %m*v% (1 / p[[name]])
+  compute_Qfactor <- function(p) m_op(X, 1 / p[[name]])
 
   # function that creates an oos prediction function (closure) based on new data
   make_predict_Vfactor <- function(newdata) {
@@ -113,15 +113,21 @@ mc_vfac <- function(factor="local_",
               pred <- add(pred, bquote(draw_betaprime(.(qnew), 0.5*prior$scale[["df"]], 0.5*df, df/prior[["psi0"]])))
             }
           } else {
-            pred <- add(pred, bquote(1 / rchisq_scaled(.(qnew), df, prior[["scale"]])))
+            # for scalar df support randompack fast rng
+            if (is.list(prior[["df"]]) || length(prior[["df"]] == 1L))
+              draw_chisq <- sc$rng[["draw_chisq"]]
+            else
+              draw_chisq <- rchisq
+            pred <- add(pred, bquote(df * prior[["scale"]] / draw_chisq(.(qnew), df)))
           }
         },
         exp = {  # Laplace marginal sampling distribution
+          draw_exp <- sc$rng[["draw_exp"]]
           pred <- add(pred, bquote(rexp(.(qnew))))
         }
       )
     } else {
-      pred <- add(pred, bquote(Xnew %m*v% p[[.(name)]]))
+      pred <- add(pred, bquote(m_op(Xnew, p[[.(name)]])))
     }
     pred
   }
@@ -160,15 +166,15 @@ mc_vfac <- function(factor="local_",
     switch(fam[["Q0.type"]],
       unit = {
         if (fam[["sigma.fixed"]])
-          get_partial_factor <- function(p) crossprod_mv(X, p[["e_"]]^2)
+          get_partial_factor <- function(p) tm_op(X, p[["e_"]]^2)
         else
-          get_partial_factor <- function(p) crossprod_mv(X, p[["e_"]]^2) * (1 / p[[sd.name]]^2)
+          get_partial_factor <- function(p) tm_op(X, p[["e_"]]^2) * (1 / p[[sd.name]]^2)
       },
       diag = {
         if (fam[["sigma.fixed"]])
-          get_partial_factor <- function(p) crossprod_mv(X, fam[["Q0"]]@x * p[["e_"]]^2)
+          get_partial_factor <- function(p) tm_op(X, fam[["Q0"]]@x * p[["e_"]]^2)
         else
-          get_partial_factor <- function(p) crossprod_mv(X, fam[["Q0"]]@x * p[["e_"]]^2) * (1 / p[[sd.name]]^2)
+          get_partial_factor <- function(p) tm_op(X, fam[["Q0"]]@x * p[["e_"]]^2) * (1 / p[[sd.name]]^2)
       },
       symm = {
         # create list with blocks of Q0 corresponding to the subdivision by factor
@@ -182,7 +188,7 @@ mc_vfac <- function(factor="local_",
         get_partial_factor <- function(p) {
           for (i in seq_along(Q0.list)) {
             res <- p[["e_"]][X.ind[[i]]]
-            fac[i] <- dotprodC(res, Q0.list[[i]] %m*v% res)
+            fac[i] <- dotprodC(res, m_op(Q0.list[[i]], res))
           }
         }
         get_partial_factor <- add(get_partial_factor, bquote(.(if (fam[["sigma.fixed"]]) quote(fac) else bquote(fac * (1 / p[[.(sd.name)]]^2)))))
@@ -192,9 +198,9 @@ mc_vfac <- function(factor="local_",
     switch(fam[["Q0.type"]],
       unit=, diag = {
         if (fam[["sigma.fixed"]])
-          get_partial_factor <- function(p) crossprod_mv(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]]
+          get_partial_factor <- function(p) tm_op(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]]
         else
-          get_partial_factor <- function(p) crossprod_mv(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]] * (1 / p[[sd.name]]^2)
+          get_partial_factor <- function(p) tm_op(X, p[["Q_"]] * p[["e_"]]^2) * p[[name]] * (1 / p[[sd.name]]^2)
       },
       stop("TBI: 'vfac' term in multi-component variance model in combination with non-diagonal covariance matrix")
     )
@@ -226,22 +232,22 @@ mc_vfac <- function(factor="local_",
   if (fam[["single.V.block"]]) {
     switch(fam[["Q0.type"]],
       unit = {
-        draw <- add(draw, quote(p$Q_ <- X %m*v% (1 / lambda)))
+        draw <- add(draw, quote(p$Q_ <- m_op(X, 1 / lambda)))
       },
       diag = {
         Q0x <- fam[["Q0"]]@x
-        draw <- add(draw, quote(p$Q_ <- Q0x * (X %m*v% (1 / lambda))))
+        draw <- add(draw, quote(p$Q_ <- Q0x * m_op(X, 1 / lambda)))
       },
       symm = {
         Q0 <- fam[["Q0"]]
         draw <- draw |>
-          add(quote(p$Q_ <- X %m*v% (1 / lambda))) |>
+          add(quote(p$Q_ <- m_op(X, 1 / lambda))) |>
           add(quote(p$QM_ <- block_scale_dsCMatrix(Q0, p[["Q_"]])))
       }
     )
   } else {
     # TODO Q0.type = "symm" case
-    draw <- add(draw, bquote(p$Q_ <- p[["Q_"]] * (X %m*v% (p[[.(name)]] / lambda))))
+    draw <- add(draw, bquote(p$Q_ <- p[["Q_"]] * m_op(X, p[[.(name)]] / lambda)))
   }
 
   draw <- draw |>

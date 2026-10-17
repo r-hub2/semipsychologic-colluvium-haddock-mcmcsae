@@ -110,7 +110,7 @@ f_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
     exp=, gig = {},
     stop("unsupported prior")
   )
-  var.prior$init(n=1L)
+  var.prior$init(1L)
   if (!is.null(prec.mat)) {
     if (!is_a_matrix(prec.mat)) stop("'prec.mat' must be a matrix object")
     var.vec <- ~ 1  # ignored in this case
@@ -145,6 +145,7 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
     SSR.name <- "SSR_"
   }
   sc <- sm[["control"]]
+  draw_normal <- sc[["rng"]]$draw_normal
   store_default <- function() {
     #out <- if (var.prior[["type"]] == "fixed") NULL else sd.name
     out <- sd.name
@@ -190,7 +191,7 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
   if (prior.only) {
     scale.e <- 1
   } else {
-    scale.e <- 0.5 * sd(y)
+    scale.e <- 0.5 * fsd.default(y)
     if (scale.e == 0 || !is.finite(scale.e)) scale.e <- 1
     # Q_e computes Q times the partial residual for a model component
     if (modeled.Q) {
@@ -199,13 +200,13 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
         if (sc[["single.block"]])
           Q_e <- switch(Q0.type,
             unit=, diag = function(p) p[["Q_"]][sub] * y,
-            symm = function(p) p[["QM_"]][sub, sub] %m*v% y
+            symm = function(p) m_op(p[["QM_"]][sub, sub], y)
           )
         else
           Q_e <- switch(Q0.type,
             unit=, diag = function(p) p[["Q_"]][sub] * (y - p[["e_"]][sub]),
             # in case of non-diagonal Q0, full precision matrix stored as p[["QM_"]]
-            symm = function(p) p[["QM_"]][sub, sub] %m*v% (y - p[["e_"]][sub])
+            symm = function(p) m_op(p[["QM_"]][sub, sub], y - p[["e_"]][sub])
           )
         compute_SSR <- switch(Q0.type,
           unit=, diag = function(p) {
@@ -214,7 +215,7 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
           },
           symm = function(p) {
             res <- y - p[["e_"]][sub]
-            dotprodC(res, p[["QM_"]][sub, sub] %m*v% res)
+            dotprodC(res, m_op(p[["QM_"]][sub, sub], res))
           }
         )
       } else {
@@ -222,7 +223,7 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
         Q_e <- switch(Q0.type,
           unit=, diag = function(p) p[["Q_"]] * p[["e_"]],
           # in case of non-diagonal Q0, full precision matrix stored as p[["QM_"]]
-          symm = function(p) p[["QM_"]] %m*v% p[["e_"]]
+          symm = function(p) m_op(p[["QM_"]], p[["e_"]])
         )
         compute_SSR <- function(p) dotprodC(p[["e_"]], Q_e(p))
       }
@@ -233,13 +234,13 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
             Q_e <- switch(Q0.type,
               unit = function(p) y,
               diag = function(p) Q0@x * y,
-              symm = function(p) Q0 %m*v% y
+              symm = function(p) m_op(Q0, y)
             )
           } else {
             Q_e <- switch(Q0.type,
               unit = function(p) (1/p[[sd.name]]^2) * y,
               diag = function(p) (1/p[[sd.name]]^2) * Q0@x * y,
-              symm = function(p) (1/p[[sd.name]]^2) * (Q0 %m*v% y)
+              symm = function(p) (1/p[[sd.name]]^2) * m_op(Q0, y)
             )
           }
         } else {
@@ -247,13 +248,13 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
             Q_e <- switch(Q0.type,
               unit = function(p) y - p[["e_"]][sub],
               diag = function(p) Q0@x * (y - p[["e_"]][sub]),
-              symm = function(p) Q0 %m*v% (y - p[["e_"]][sub])
+              symm = function(p) m_op(Q0, y - p[["e_"]][sub])
             )
           } else {
             Q_e <- switch(Q0.type,
               unit = function(p) (1/p[[sd.name]]^2) * (y - p[["e_"]][sub]),
               diag = function(p) (1/p[[sd.name]]^2) * Q0@x * (y - p[["e_"]][sub]),
-              symm = function(p) (1/p[[sd.name]]^2) * (Q0 %m*v% (y - p[["e_"]][sub]))
+              symm = function(p) (1/p[[sd.name]]^2) * m_op(Q0, y - p[["e_"]][sub])
             )
           }
         }
@@ -270,21 +271,21 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
           },
           symm = function(p) {
             res <- y - p[["e_"]][sub]
-            dotprodC(res, Q0 %m*v% res)
+            dotprodC(res, m_op(Q0, res))
           }
         )
       } else {
         Q_e <- switch(Q0.type,
           unit = function(p) p[["e_"]],
           diag = function(p) Q0@x * p[["e_"]],
-          symm = function(p) Q0 %m*v% p[["e_"]]
+          symm = function(p) m_op(Q0, p[["e_"]])
         )
         compute_SSR <- function(p) dotprodC(p[["e_"]], Q_e(p))
       }
     }
   }
   # scale.e used to generate default starting values for residuals (or fitted values for non-gaussian models)
-  scale.sigma <- scale.e * fmean.default(sqrt(diag(Q0)), na.rm=FALSE)
+  scale.sigma <- scale.e * fmean.default(sqrtC(diag(Q0)), na.rm=FALSE)
 
   if (!prior.only) {
     draw <- function(p) {}
@@ -513,10 +514,10 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
           cholQ$update(p[["QM_"]])
         else
           cholQ$update(p[["Q_"]])
-        cholQ$Ltimes(Crnorm(n), transpose=FALSE)
+        cholQ$Ltimes(draw_normal(n), transpose=FALSE)
       }
     } else {
-      drawMVNvarQ <- function(p) cholQ$Ltimes(Crnorm(n), transpose=FALSE)
+      drawMVNvarQ <- function(p) cholQ$Ltimes(draw_normal(n), transpose=FALSE)
     }
   }
   pred_pars <- function() {
@@ -537,14 +538,14 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
     if (modeled.Q) {
       if (multifam) {
         if (sigma.fixed)
-          llh <- function(p) llh0 + 0.5 * sum(log(p[["Q_"]][sub])) - 0.5 * p[[SSR.name]]
+          llh <- function(p) llh0 + 0.5 * sum(logC(p[["Q_"]][sub])) - 0.5 * p[[SSR.name]]
         else
-          llh <- function(p) llh0 + 0.5 * sum(log(p[["Q_"]][sub])) - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
+          llh <- function(p) llh0 + 0.5 * sum(logC(p[["Q_"]][sub])) - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
       } else {
         if (sigma.fixed)
-          llh <- function(p) llh0 + 0.5 * sum(log(p[["Q_"]])) - 0.5 * p[[SSR.name]]
+          llh <- function(p) llh0 + 0.5 * sum(logC(p[["Q_"]])) - 0.5 * p[[SSR.name]]
         else
-          llh <- function(p) llh0 + 0.5 * sum(log(p[["Q_"]])) - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
+          llh <- function(p) llh0 + 0.5 * sum(logC(p[["Q_"]])) - n * log(p[[sd.name]]) - 0.5 * p[[SSR.name]] / p[[sd.name]]^2
       }
     } else {
       if (sigma.fixed)
@@ -570,7 +571,7 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
           if (mc[["type"]] == "vfac")
             q <- q * tcrossprod(1 / as.matrix.dc(draws[[mc[["name"]]]], colnames=FALSE), Xi)
           else
-            q <- q * exp(-tcrossprod(as.matrix.dc(draws[[mc[["name"]]]], colnames=FALSE), Xi))
+            q <- q * expC(tcrossprod(as.matrix.dc(draws[[mc[["name"]]]], colnames=FALSE), Xi), neg=TRUE)
         }
       }
       switch(Q0.type,
@@ -597,10 +598,10 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
     if (intercept_only(var.vec)) {
       sds0 <- 1
     } else {
-      sds0 <- get_var_from_formula(var.vec, newdata)
+      sds0 <- as.numeric(get_var_from_formula(var.vec, newdata))
       if (any(sds0 < 0)) stop("negative variance(s) in 'var.vec' for prediction")
       if (all(length(sds0) != c(1L, nrow(newdata)))) stop("wrong length for prediction variance vector")
-      sds0 <- sqrt(sds0)
+      sds0 <- sqrtC(sds0)
     }
     if (modeled.Q) {
       V <- list()
@@ -616,9 +617,9 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
           if (any(Vmc[["type"]] == c("vfac", "vreg")))
             var <- var * V[[Vmc[["name"]]]](p)
           else
-            var <- var * exp(V[[Vmc[["name"]]]](p))
+            var <- var * expC(V[[Vmc[["name"]]]](p))
         }
-        sds0 * sqrt(var)
+        sds0 * sqrtC(var)
       }
     } else {
       function(p) sds0
@@ -663,7 +664,7 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
         if (is.null(weights))
           lp + drawMVN_cholQ(cholQ, sd=sigma)
         else
-          weights * lp + sqrt(weights) * drawMVN_cholQ(cholQ, sd=sigma)
+          weights * lp + sqrtC(weights) * drawMVN_cholQ(cholQ, sd=sigma)
       }
     } else {
       nn <- nrow(newdata)
@@ -671,14 +672,15 @@ ff_gaussian <- function(link="identity", var.prior = pr_invchisq(df=0, scale=1),
       # here we assume that Q0 is diagonal
       if (is.null(weights)) {
         if (sigma.fixed)
-          function(p, lp) lp + get_sds(p) * Crnorm(nn)
+          function(p, lp) lp + get_sds(p) * draw_normal(nn)
         else
-          function(p, lp) lp + p[[sd.name]] * get_sds(p) * Crnorm(nn)
+          function(p, lp) lp + p[[sd.name]] * get_sds(p) * draw_normal(nn)
       } else {
+        sqrt.weights <- sqrtC(weights)
         if (sigma.fixed)
-          function(p, lp) weights * lp + sqrt(weights) * get_sds(p) * Crnorm(nn)
+          function(p, lp) weights * lp + sqrt.weights * get_sds(p) * draw_normal(nn)
         else
-          function(p, lp) weights * lp + p[[sd.name]] * sqrt(weights) * get_sds(p) * Crnorm(nn)
+          function(p, lp) weights * lp + p[[sd.name]] * sqrt.weights * get_sds(p) * draw_normal(nn)
       }
     }
   }

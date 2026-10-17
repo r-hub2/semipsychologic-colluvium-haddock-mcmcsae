@@ -12,8 +12,6 @@ reg(
   prior = NULL,
   scale.prior = NULL,
   constraints = NULL,
-  Q0 = NULL,
-  b0 = NULL,
   name = "",
   debug = FALSE
 )
@@ -51,17 +49,6 @@ with non-fixed scale parameter, and to \code{FALSE} otherwise.}
 imposed on the vector of regression coefficients. Use function
 \code{\link{set_constraints}} to specify the constraint matrices and
 right-hand sides.}
-
-\item{Q0}{prior precision matrix for the regression effects. The default is a
-zero matrix corresponding to a noninformative improper prior.
-It can be specified as a scalar value, as a numeric vector of appropriate
-length, or as a matrix object. DEPRECATED, please use argument \code{prior}
-instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
-
-\item{b0}{prior mean for the regression effect. Defaults to a zero vector.
-It can be specified as a scalar value or as a numeric vector of
-appropriate length. DEPRECATED, please use argument \code{prior}
-instead, i.e. \code{prior = pr_normal(mean = b0.value, precision = Q0.value)}.}
 
 \item{name}{the name of the model component. This name is used in the output of the
 MCMC simulation function \code{\link{MCMCsim}}. By default the name will be 'reg'
